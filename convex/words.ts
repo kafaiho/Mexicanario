@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getOrderedLevels, completedWordIds } from "./levelOrdering";
 
 // Get all words
 export const getAllWords = query({
@@ -16,23 +17,16 @@ export const getWordsWithProgress = query({
     const user = await ctx.db.get(args.userId);
     const currentLevel = user?.currentLevel ?? 1;
 
-    // Get all levels to know which words are unlocked
-    const levels = await ctx.db.query("levels").collect();
+    const allLevels = await ctx.db.query("levels").collect();
+    const allWords  = await ctx.db.query("words").collect();
 
-    // Build a set of unlocked wordIds (levels completed = levelNumber < currentLevel)
-    const unlockedWordIds = new Set<string>();
-    for (const lvl of levels) {
-      if (lvl.levelNumber < currentLevel) {
-        unlockedWordIds.add(lvl.wordId);
-      }
-    }
-
-    // Get all words
-    const allWords = await ctx.db.query("words").collect();
+    // Use the same ordering as gameplay for accurate unlock status
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const done    = completedWordIds(ordered, currentLevel);
 
     return allWords.map((w) => ({
       ...w,
-      unlocked: unlockedWordIds.has(w._id),
+      unlocked: done.has(w._id.toString()),
     }));
   },
 });

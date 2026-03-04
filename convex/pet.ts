@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { mutation, query } from "./_generated/server";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const HUNGER_DECAY_PER_HOUR = 8;      // points per hour
@@ -53,9 +53,11 @@ export const getPetState = query({
         if (!user) return null;
 
         // No pet chosen yet
-        if (!user.petType || !user.petName) return { hasPet: false };
-
         const now = Date.now();
+        if (!user.petType || !user.petName) return {
+            hasPet: false,
+            mexPlusActive: !!(user.mexPlusExpiresAt && user.mexPlusExpiresAt > now),
+        };
         const hunger = computeHunger(
             user.petHungerBase ?? 100,
             user.petLastFed ?? now,
@@ -84,6 +86,7 @@ export const getPetState = query({
             bornAt: user.petBornAt ?? now,
             canPlay,
             coins: user.coins,
+            mexPlusActive: !!(user.mexPlusExpiresAt && user.mexPlusExpiresAt > now),
         };
     },
 });
@@ -204,6 +207,55 @@ export const resetPet = mutation({
     },
 });
 
+// ─── Compras con Diamantes ──────────────────────────────────────────────────
+
+/**
+ * Buy premium food with diamonds. Instantly increases the invisible bond (vínculo).
+ * Food types: taco (cost 10, bond +5), tamal (cost 25, bond +15), pan_muerto (cost 50, bond +35)
+ */
+export const buyPetFood = mutation({
+    args: { userId: v.string(), foodType: v.string() },
+    handler: async (ctx, args) => {
+        const user = await ctx.db.get(args.userId as Id<"users">);
+        if (!user) return { success: false, error: "Usuario no encontrado" };
+        if (!user.petType) return { success: false, error: "Sin mascota" };
+
+        let cost = 0;
+        let bondIncrease = 0;
+
+        switch (args.foodType) {
+            case "taco":
+                cost = 10;
+                bondIncrease = 5;
+                break;
+            case "tamal":
+                cost = 25;
+                bondIncrease = 15;
+                break;
+            case "pan_muerto":
+                cost = 50;
+                bondIncrease = 35;
+                break;
+            default:
+                return { success: false, error: "Comida no válida" };
+        }
+
+        if ((user.diamonds ?? 0) < cost) {
+            return { success: false, error: "Diamantes insuficientes" };
+        }
+
+        const currentVinculo = user.petVinculo ?? 0;
+        const newVinculo = Math.min(2000, currentVinculo + bondIncrease);
+
+        await ctx.db.patch(user._id, {
+            diamonds: (user.diamonds ?? 0) - cost,
+            petVinculo: newVinculo,
+        } as any);
+
+        return { success: true, newVinculo };
+    },
+});
+
 // ─── Vínculo invisible ────────────────────────────────────────────────────────
 
 /**
@@ -254,5 +306,108 @@ export const gainPetXp = mutation({
             petStage: newStage,
         });
         return { success: true, newXp, newStage, evolved };
+    },
+});
+
+// ─── Multi-mascota system ──────────────────────────────────────────────────────
+
+const DEFAULT_PET_NAMES: Record<string, string> = {
+    ajolote: "Ajolote",
+    xolo: "Xolo",
+    alebrije: "Alebrije",
+};
+
+/**
+ * Returns the saved slot data for all 3 pet types, including the current active pet.
+ * Used to render the pet-switcher UI.
+ */
+export const getPetSlots = query({
+    args: { userId: v.string() },
+    handler: async (ctx, args) => {
+        const user = await ctx.db.get(args.userId as Id<"users">);
+        if (!user) return null;
+
+        const slots: Record<string, any> = JSON.parse((user as any).petSlots || "{}");
+
+        // Always reflect the live active pet data in its slot
+        if (user.petType) {
+            slots[user.petType] = {
+                name: user.petName ?? DEFAULT_PET_NAMES[user.petType] ?? user.petType,
+                xp: user.petXp ?? 0,
+                stage: user.petStage ?? 1,
+                hungerBase: user.petHungerBase ?? 100,
+                lastFed: user.petLastFed ?? Date.now(),
+                happinessBase: user.petHappinessBase ?? 100,
+                lastPlayed: user.petLastPlayed ?? Date.now(),
+                bornAt: user.petBornAt ?? Date.now(),
+                vinculo: user.petVinculo ?? 0,
+            };
+        }
+
+        return { activePetType: user.petType ?? null, slots };
+    },
+});
+
+/**
+ * Switch to a different pet type, preserving each pet's individual progress.
+ * Saves the current pet's stats (including local vinculo) then restores the new pet's stats.
+ */
+export const switchActivePet = mutation({
+    args: {
+        userId: v.string(),
+        newPetType: v.string(),   // "ajolote" | "xolo" | "alebrije"
+        currentVinculo: v.number(),   // latest vinculo from client Zustand store
+    },
+    handler: async (ctx, args) => {
+        const user = await ctx.db.get(args.userId as Id<"users">);
+        if (!user) return { success: false, error: "Usuario no encontrado" };
+
+        // Already on this pet
+        if (user.petType === args.newPetType) {
+            return { success: true, alreadyActive: true, vinculo: args.currentVinculo };
+        }
+
+        const now = Date.now();
+        const currentType = user.petType ?? "ajolote";
+
+        // Parse saved slots
+        const slots: Record<string, any> = JSON.parse((user as any).petSlots || "{}");
+
+        // Save current active pet's data into its slot
+        if (currentType) {
+            slots[currentType] = {
+                name: user.petName ?? DEFAULT_PET_NAMES[currentType],
+                xp: user.petXp ?? 0,
+                stage: user.petStage ?? 1,
+                hungerBase: user.petHungerBase ?? 100,
+                lastFed: user.petLastFed ?? now,
+                happinessBase: user.petHappinessBase ?? 100,
+                lastPlayed: user.petLastPlayed ?? now,
+                bornAt: user.petBornAt ?? now,
+                vinculo: args.currentVinculo,
+            };
+        }
+
+        // Restore (or initialize) the new pet's data
+        const saved = slots[args.newPetType];
+        const newName = saved?.name ?? DEFAULT_PET_NAMES[args.newPetType] ?? args.newPetType;
+        const newVinculo = saved?.vinculo ?? 0;
+
+        const patch: Record<string, any> = {
+            petType: args.newPetType,
+            petName: newName,
+            petXp: saved?.xp ?? 0,
+            petStage: saved?.stage ?? 1,
+            petHungerBase: saved?.hungerBase ?? 100,
+            petLastFed: saved?.lastFed ?? now,
+            petHappinessBase: saved?.happinessBase ?? 100,
+            petLastPlayed: saved?.lastPlayed ?? now,
+            petBornAt: saved?.bornAt ?? now,
+            petVinculo: newVinculo,
+            petSlots: JSON.stringify(slots),
+        };
+
+        await ctx.db.patch(user._id, patch as any);
+        return { success: true, vinculo: newVinculo, petName: newName };
     },
 });

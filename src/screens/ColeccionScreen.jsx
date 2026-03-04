@@ -1,10 +1,11 @@
 import { useQuery } from "convex/react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   FlatList,
   ImageBackground,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,9 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import TopBar from "../components/TopBar";
+import AdBanner from "../components/AdBanner";
 import { FONTS } from "../theme/designTokens";
+import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 
 const BROWN = "#8B4513";
 const AMBER = "#D2691E";
@@ -23,8 +26,20 @@ const WHEAT = "#FFE4B5";
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
-const COL    = 3;
-const CARD_W = (width - 32 - 8 * (COL - 1)) / COL;
+
+// Compute TopBar clearance accurately (mirrors TopBar.jsx sizing formula)
+const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 48 : 14));
+
+// On tablet use more columns and real screen width so cards fill the screen evenly
+const COL       = TABLET_MODE ? (REAL_WIDTH > 900 ? 5 : 4) : 3;
+const SCREEN_W  = TABLET_MODE ? REAL_WIDTH : width;
+const GRID_PAD  = TABLET_MODE ? 16 : 12;
+const CARD_GAP  = TABLET_MODE ? 12 : 8;
+const CARD_W    = (SCREEN_W - GRID_PAD * 2 - CARD_GAP * (COL - 1)) / COL;
+// Cap emoji size so large CARD_W (wide tablets/phones) doesn't produce huge icons
+const EMOJI_SIZE = Math.min(CARD_W * 0.38, 52);
 
 // ─── 15 categorías canónicas (emoji + dificultad) ────────────────────────────
 // Tier 1 — Fácil (verde): Comida, Bebida, Juegos, Modismos, Refranes
@@ -62,20 +77,48 @@ const DIFF_LABEL = { 1: "Fácil",    2: "Medio",    3: "Difícil"  };
 export default function ColeccionScreen() {
   const { userId } = useAuth();
   const [selected, setSelected] = useState(null);
+  const [tab, setTab] = useState('cat'); // 'cat' | 'region'
+
+  const [dims, setDims] = React.useState(() => Dimensions.get('window'));
+  React.useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => setDims(window));
+    return () => sub?.remove();
+  }, []);
+
+  const dynW = dims.width;
+  const dynH = dims.height;
+  const dynScreenW = TABLET_MODE ? REAL_WIDTH : dynW;
+  const dynCol = TABLET_MODE ? (dynScreenW > 900 ? 5 : 4) : 3;
+  const dynCardGap = TABLET_MODE ? 12 : 8;
+  const dynGridPad = TABLET_MODE ? 16 : 12;
+  const dynCardW = (dynScreenW - dynGridPad * 2 - dynCardGap * (dynCol - 1)) / dynCol;
+  const dynCardH = Math.min(dynCardW * 1.25, 160);
+  const dynEmojiSize = Math.min(dynCardW * 0.38, 48);
+
+  // Dynamic TopBar clearance
+  const dynTopSafe = Platform.OS === 'ios' ? Math.max(32, dynH * 0.058) : Math.max(20, dynH * 0.04);
+  const dynTopBarH = dynTopSafe + dynW * 0.025 + dynW * 0.075 + dynW * 0.025;
+  const dynHeaderTop = Math.round(dynTopBarH + (TABLET_MODE ? 32 : 14));
 
   const categories = useQuery(
     api.collectionsQuery.getCollectionsWithProgress,
     { userId: userId ?? undefined }
   );
 
-  const isLoading = categories === undefined;
+  const regions = useQuery(
+    api.collectionsQuery.getRegionsWithProgress,
+    { userId: userId ?? undefined }
+  );
 
-  // Pad rows to multiples of 3
-  const paddedData = categories
+  const activeData = tab === 'cat' ? categories : regions;
+  const isLoading  = activeData === undefined;
+
+  // Pad rows to multiples of dynCol so the last row aligns left
+  const paddedData = activeData
     ? [
-        ...categories,
-        ...(categories.length % 3 !== 0
-          ? Array(3 - (categories.length % 3)).fill({ _pad: true })
+        ...activeData,
+        ...(activeData.length % dynCol !== 0
+          ? Array(dynCol - (activeData.length % dynCol)).fill({ _pad: true })
           : []),
       ]
     : [];
@@ -88,52 +131,89 @@ export default function ColeccionScreen() {
     >
       <TopBar />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header + tab bar */}
+      <View style={[styles.header, { marginTop: dynHeaderTop, marginHorizontal: dynScreenW * 0.04 }]}>
         <Text style={styles.headerTitle}>Colección</Text>
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'cat' && styles.tabBtnActive]}
+            onPress={() => { setSelected(null); setTab('cat'); }}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.tabTxt, tab === 'cat' && styles.tabTxtActive]}>Categoría</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'region' && styles.tabBtnActive]}
+            onPress={() => { setSelected(null); setTab('region'); }}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.tabTxt, tab === 'region' && styles.tabTxtActive]}>Por Región</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isLoading ? (
         <View style={styles.centered}>
           <Text style={styles.infoText}>Cargando colecciones…</Text>
         </View>
-      ) : !categories || categories.length === 0 ? (
+      ) : !activeData || activeData.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.infoText}>Sin colecciones disponibles</Text>
         </View>
       ) : (
         <FlatList
           data={paddedData}
-          numColumns={3}
-          keyExtractor={(item, i) => item._pad ? `pad_${i}` : item.name}
-          contentContainerStyle={styles.grid}
+          numColumns={dynCol}
+          key={dynCol}
+          keyExtractor={(item, i) => item._pad ? `pad_${i}` : (item.key ?? item.name)}
+          contentContainerStyle={[styles.grid, { paddingHorizontal: dynGridPad }]}
           showsVerticalScrollIndicator={false}
-          columnWrapperStyle={styles.row}
+          columnWrapperStyle={[styles.row, { gap: dynCardGap }]}
           renderItem={({ item }) => {
             if (item._pad) {
-              return <View style={[styles.colCard, styles.padCard]} />;
+              return <View style={[styles.colCard, styles.padCard, { width: dynCardW, height: dynCardH }]} />;
             }
-            const meta = getCatMeta(item.name);
-            const diff = meta.diff;
-            const pct  = item.total > 0 ? (item.completed / item.total) * 100 : 0;
+
+            // ── Region card ──
+            if (tab === 'region') {
+              const pct = item.total > 0 ? (item.completed / item.total) * 100 : 0;
+              return (
+                <TouchableOpacity
+                  style={[styles.colCard, { width: dynCardW, height: dynCardH }]}
+                  activeOpacity={0.75}
+                  onPress={() => setSelected(item)}
+                >
+                  <Text style={[styles.colEmoji, { fontSize: dynEmojiSize }]}>{item.emoji}</Text>
+                  <Text style={styles.colName} numberOfLines={1}>{item.demonym}</Text>
+                  <Text style={styles.colCount}>{item.completed}/{item.total}</Text>
+                  <View style={styles.miniBar}>
+                    <View style={[styles.miniFill, { width: `${pct}%`, backgroundColor: item.color }]} />
+                  </View>
+                  <View style={[styles.diffDot, { backgroundColor: item.color }]}>
+                    <Text style={styles.diffDotText}>{Math.round(pct)}%</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+
+            // ── Category card ──
+            const meta   = getCatMeta(item.name);
+            const diff   = meta.diff;
+            const diffBg = DIFF_COLOR[diff];
+            const pct    = item.total > 0 ? (item.completed / item.total) * 100 : 0;
             return (
               <TouchableOpacity
-                style={styles.colCard}
+                style={[styles.colCard, { width: dynCardW, height: dynCardH }]}
                 activeOpacity={0.75}
                 onPress={() => setSelected(item)}
               >
-                <Text style={styles.colEmoji}>{meta.emoji}</Text>
+                <Text style={[styles.colEmoji, { fontSize: dynEmojiSize }]}>{meta.emoji}</Text>
                 <Text style={styles.colName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.colCount}>{item.completed}/{item.total}</Text>
                 <View style={styles.miniBar}>
-                  <View
-                    style={[
-                      styles.miniFill,
-                      { width: `${pct}%`, backgroundColor: DIFF_COLOR[diff] },
-                    ]}
-                  />
+                  <View style={[styles.miniFill, { width: `${pct}%`, backgroundColor: diffBg }]} />
                 </View>
-                <View style={[styles.diffDot, { backgroundColor: DIFF_COLOR[diff] }]}>
+                <View style={[styles.diffDot, { backgroundColor: diffBg }]}>
                   <Text style={styles.diffDotText}>{DIFF_LABEL[diff]}</Text>
                 </View>
               </TouchableOpacity>
@@ -141,6 +221,8 @@ export default function ColeccionScreen() {
           }}
         />
       )}
+
+      <AdBanner style={{ marginVertical: 4 }} />
 
       {/* ── Detail Modal ── */}
       <Modal
@@ -150,36 +232,41 @@ export default function ColeccionScreen() {
         onRequestClose={() => setSelected(null)}
       >
         {selected && (
-          <CategoryModal cat={selected} onClose={() => setSelected(null)} />
+          <CategoryModal cat={selected} isRegion={tab === 'region'} onClose={() => setSelected(null)} />
         )}
       </Modal>
     </ImageBackground>
   );
 }
 
-// ─── Category detail modal ────────────────────────────────────────────────────
-function CategoryModal({ cat, onClose }) {
-  const meta  = getCatMeta(cat.name);
-  const diff  = meta.diff;
-  const pct   = cat.total > 0 ? (cat.completed / cat.total) * 100 : 0;
-  const words = cat.words ?? [];
+// ─── Category / Region detail modal ──────────────────────────────────────────
+function CategoryModal({ cat, isRegion, onClose }) {
+  // Support both category (name/meta) and region (demonym/emoji/color) shapes
+  const meta      = isRegion ? null : getCatMeta(cat.name);
+  const diff      = meta?.diff ?? 0;
+  const emoji     = isRegion ? cat.emoji : meta.emoji;
+  const title     = isRegion ? cat.demonym : cat.name;
+  const barColor  = isRegion ? cat.color : DIFF_COLOR[diff];
+  const diffLabel = isRegion ? null : DIFF_LABEL[diff];
+  const pct       = cat.total > 0 ? (cat.completed / cat.total) * 100 : 0;
+  const words     = cat.words ?? [];
 
   return (
     <View style={styles.modalOverlay}>
       <View style={styles.modalBox}>
         {/* Modal header */}
         <View style={styles.modalHeader}>
-          <Text style={styles.modalEmoji}>{meta.emoji}</Text>
+          <Text style={styles.modalEmoji}>{emoji}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.modalTitle}>{cat.name}</Text>
+            <Text style={styles.modalTitle}>{title}</Text>
             <Text style={styles.modalSub}>
-              {cat.completed}/{cat.total} palabras · {DIFF_LABEL[diff]}
+              {cat.completed}/{cat.total} palabras{diffLabel ? ` · ${diffLabel}` : ` · ${Math.round(pct)}%`}
             </Text>
             <View style={styles.modalBar}>
               <View
                 style={[
                   styles.modalBarFill,
-                  { width: `${pct}%`, backgroundColor: DIFF_COLOR[diff] },
+                  { width: `${pct}%`, backgroundColor: barColor },
                 ]}
               />
             </View>
@@ -205,7 +292,7 @@ function CategoryModal({ cat, onClose }) {
               {w.isCompleted ? (
                 <>
                   <View style={styles.cardEmojiWrap}>
-                    <Text style={styles.cardEmoji}>{meta.emoji}</Text>
+                    <Text style={styles.cardEmoji}>{emoji}</Text>
                   </View>
                   <View style={styles.cardTextWrap}>
                     <Text style={styles.cardName} numberOfLines={2}>{w.word}</Text>
@@ -232,19 +319,45 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: "center",
-    marginTop: height * 0.12,
+    marginTop: HEADER_TOP,
     marginBottom: height * 0.015,
     backgroundColor: WHEAT,
-    marginHorizontal: width * 0.04,
+    marginHorizontal: SCREEN_W * 0.04,
     borderRadius: 25,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
     borderWidth: 2,
     borderColor: "rgba(139,69,19,0.35)",
   },
   headerTitle: {
     fontFamily: FONTS.display,
-    fontSize: width * 0.065,
+    fontSize: Math.min(width * 0.065, 26),
     color: BROWN,
+    marginBottom: 8,
+  },
+  tabRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  tabBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "rgba(139,69,19,0.35)",
+    backgroundColor: "rgba(210,105,30,0.08)",
+  },
+  tabBtnActive: {
+    backgroundColor: BROWN,
+    borderColor: BROWN,
+  },
+  tabTxt: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: Math.min(width * 0.033, 14),
+    color: BROWN,
+  },
+  tabTxtActive: {
+    color: WHEAT,
   },
 
   centered:  { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -257,29 +370,31 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
 
-  // Grid
-  grid: { paddingHorizontal: 12, paddingBottom: 20 },
-  row:  { justifyContent: "space-between", marginBottom: 10 },
+  // Grid — use real screen padding so rows fill the actual width
+  grid: { paddingHorizontal: GRID_PAD, paddingBottom: 20 },
+  row:  { gap: CARD_GAP, marginBottom: TABLET_MODE ? 12 : 10, alignItems: "flex-start" },
 
   colCard: {
-    width: CARD_W,
     backgroundColor: WHEAT,
     borderRadius: 16,
     padding: 10,
     alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 12,
+    alignSelf: "flex-start",
     borderWidth: 1.5,
     borderColor: "rgba(139,69,19,0.35)",
-    minHeight: CARD_W * 1.3,
-    justifyContent: "center",
   },
   padCard:     { backgroundColor: "transparent", borderColor: "transparent" },
-  colEmoji:    { fontSize: CARD_W * 0.38, marginBottom: 4 },
-  colName:     { fontFamily: FONTS.bodyBold, fontSize: CARD_W * 0.135, color: BROWN, textAlign: "center", marginBottom: 2 },
-  colCount:    { fontFamily: FONTS.body, fontSize: CARD_W * 0.115, color: "#A0714F", marginBottom: 4 },
+
+  // Vertical card layout (same on all device sizes)
+  colEmoji:    { fontSize: EMOJI_SIZE, marginBottom: 4 },
+  colName:     { fontFamily: FONTS.bodyBold, fontSize: Math.min(CARD_W * 0.135, 16), color: BROWN, textAlign: "center", marginBottom: 2 },
+  colCount:    { fontFamily: FONTS.body, fontSize: Math.min(CARD_W * 0.115, 14), color: "#A0714F", marginBottom: 4 },
   miniBar:     { width: "85%", height: 4, backgroundColor: "rgba(139,69,19,0.18)", borderRadius: 2, overflow: "hidden", marginBottom: 6 },
   miniFill:    { height: "100%", borderRadius: 2 },
   diffDot:     { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  diffDotText: { fontFamily: FONTS.bodyBold, color: "white", fontSize: CARD_W * 0.1 },
+  diffDotText: { fontFamily: FONTS.bodyBold, color: "white", fontSize: Math.min(CARD_W * 0.1, 12) },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },

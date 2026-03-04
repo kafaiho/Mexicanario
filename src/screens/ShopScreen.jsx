@@ -1,6 +1,6 @@
+import { useNavigation } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import React, { useEffect, useState } from "react";
-import { notifySuccess } from "../services/haptics";
 import {
   ActivityIndicator,
   Alert,
@@ -15,53 +15,98 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import CoinFlyOverlay from "../components/CoinFlyOverlay";
-import useCoinFly from "../hooks/useCoinFly";
 import { api } from "../../convex/_generated/api";
+import CoinFlyOverlay from "../components/CoinFlyOverlay";
+import CuatesModal from "../components/CuatesModal";
+import DiamondFlyOverlay from "../components/DiamondFlyOverlay";
+import DynamicBundleCard from "../components/DynamicBundleCard";
 import MiniMascot from "../components/MiniMascot";
+import PurchaseSuccessModal from "../components/PurchaseSuccessModal";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
+import useCoinFly from "../hooks/useCoinFly";
+import useDiamondFly from "../hooks/useDiamondFly";
+import { useRewardedAd } from "../hooks/useRewardedAd";
+import { notifySuccess } from "../services/haptics";
+import {
+  PAYWALL_RESULT,
+  presentCustomerCenter,
+  presentMexicanarioPlusPaywall,
+  purchaseProduct,
+  restorePurchases,
+} from "../services/RevenueCatService";
 import { FONTS } from "../theme/designTokens";
+import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
 
+
 const getCoinPillFallback = () => {
   const topPad = Platform.OS === "ios" ? height * 0.058 : height * 0.04;
-  const pillH  = width * 0.075;
-  const pillW  = width * 0.22;
-  const pillX  = width - width * 0.03 - pillW;
+  const pillH = 36;
+  const pillW = 110;
+  const pillX = REAL_WIDTH - 16 - pillW;
   return { x: pillX, y: topPad, w: pillW, h: pillH };
+};
+
+const getDiamondPillFallback = () => {
+  const coin = getCoinPillFallback();
+  return { x: coin.x - coin.w - 8, y: coin.y, w: coin.w, h: coin.h };
 };
 const BROWN = "#8B4513";
 const AMBER = "#D2691E";
-const GOLD  = "#F8BE17";
+const GOLD = "#F8BE17";
 const WHEAT = "#FFE4B5";
 const WHEAT2 = "#F5DEB3";
 
 // ─── Catálogo mexicano ────────────────────────────────────────────────────────
 
-// "Trucos" = power-ups
-const TRUCOS = [
-  { id: "hint_x5", qty: 10, label: "trucos", icon: "💡", price: 100, currency: "coins" },
-  { id: "reveal_x3", qty: 25, label: "trucos", icon: "🔓", price: 200, currency: "coins" },
-  { id: "complete_x1", qty: 50, label: "trucos", icon: "⭐", price: 400, currency: "coins" },
+// "Diamantes" = packs de diamantes (dinero real) — IDs deben coincidir con IAP_ITEMS en convex/shop.ts
+const DIAMANTES = [
+  { id: "diamonds_100", qty: 100, label: "diamantes", icon: "💎", price: "$ 4.900", currency: "real" },
+  { id: "diamonds_300", qty: 300, label: "diamantes", icon: "💎", price: "$ 11.900", currency: "real", badge: "POPULAR" },
+  { id: "diamonds_800", qty: 800, label: "diamantes", icon: "💎", price: "$ 24.900", currency: "real", badge: "MEJOR VALOR" },
 ];
 
 // "Varos" = packs de monedas (dinero real)
 const VAROS = [
-  { id: "coins_500", qty: 500, label: "varos", icon: "🪙", price: "$ 4.900", currency: "real" },
-  { id: "coins_1200", qty: 1500, label: "varos", icon: "🪙", price: "$ 9.900", currency: "real", badge: "POPULAR" },
-  { id: "coins_2000", qty: 4000, label: "varos", icon: "🪙", price: "$ 24.900", currency: "real" },
-  { id: "diamonds_100", qty: 9000, label: "varos", icon: "🪙", price: "$ 49.900", currency: "real" },
-  { id: "diamonds_300", qty: 20000, label: "varos", icon: "🪙", price: "$ 99.900", currency: "real" },
-  { id: "diamonds_800", qty: 60000, label: "varos", icon: "🪙", price: "$ 229.900", currency: "real", badge: "MEJOR VALOR" },
+  { id: "coins_500", qty: 500, label: "varos", icon: "🪙", price: "$ 0.99 USD", currency: "real" },
+  { id: "coins_1200", qty: 1500, label: "varos", icon: "🪙", price: "$ 1.99 USD", currency: "real", badge: "POPULAR" },
+  { id: "coins_2000", qty: 4000, label: "varos", icon: "🪙", price: "$ 4.99 USD", currency: "real" },
+  { id: "coins_9000", qty: 9000, label: "varos", icon: "🪙", price: "$ 9.99 USD", currency: "real" },
+  { id: "coins_20000", qty: 20000, label: "varos", icon: "🪙", price: "$ 19.99 USD", currency: "real" },
+  { id: "coins_60000", qty: 60000, label: "varos", icon: "🪙", price: "$ 49.99 USD", currency: "real", badge: "MEJOR VALOR" },
 ];
 
-// "Fichas" = artículos especiales
-const FICHAS = [
-  { id: "pet_food_x5", qty: 2, label: "fichas", icon: "🟢", price: 350, currency: "coins" },
-  { id: "pet_toy", qty: 4, label: "fichas", icon: "🔵", price: 500, currency: "coins" },
-  { id: "pet_candy", qty: 6, label: "fichas", icon: "🟡", price: 750, currency: "coins" },
+// ─── Artículos en monedas (tienda interna) ────────────────────────────────────
+
+// Protección de racha
+const PROTECTORES = [
+  {
+    id: "streak_freeze_coins", qty: 1, label: "Escudo de Racha", icon: "🛡️", price: "400", currency: "coins",
+    badge: "ACUMULABLE", desc: "Protege tu racha si pierdes un día · Se pueden apilar"
+  },
+];
+
+// Skins premium de mascota
+const SKINS_PREMIUM = [
+  { id: "skin_mariachi", qty: 1, label: "Traje de Mariachi", icon: "🎺", price: "1,500", currency: "coins" },
+  { id: "skin_charro", qty: 1, label: "Charro de Jalisco", icon: "🤠", price: "2,000", currency: "coins", badge: "POPULAR" },
+  { id: "skin_lucha", qty: 1, label: "Luchador Enmascarado", icon: "🤼", price: "2,500", currency: "coins" },
+  { id: "skin_catrina", qty: 1, label: "La Catrina", icon: "💀", price: "3,500", currency: "coins", badge: "EXCLUSIVO" },
+  { id: "skin_azteca", qty: 1, label: "Guerrero Azteca", icon: "🦅", price: "5,000", currency: "coins", badge: "MEJOR VALOR" },
+];
+
+// Contenido +18
+const CONTENIDO_ADULTO = [
+  {
+    id: "content_insultos", qty: 1, label: "Insultos Finos", icon: "🌶️", price: "1,000", currency: "coins",
+    desc: "Léxico picante de alto nivel cultural 😏"
+  },
+  {
+    id: "content_suegra", qty: 1, label: "Diccionario de la Suegra", icon: "👵", price: "1,000", currency: "coins",
+    desc: "El vocabulario más temido de México 😅"
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -97,58 +142,10 @@ function SectionBanner({ title }) {
   );
 }
 
-// ─── Bundle / "¡Con todo y chile!" card ──────────────────────────────────────
-function BundleCard({ activePass, onBuy }) {
-  const [, tick] = useState(0);
-  const isActive = activePass && activePass.expiresAt > Date.now();
-  const remaining = activePass ? formatPassCountdown(activePass.expiresAt) : "1d 2h 56m";
-
-  useEffect(() => {
-    const id = setInterval(() => tick((n) => n + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <View style={s.bundleCard}>
-      <View style={s.bundleTimerRow}>
-        <Text style={s.bundleTimerIcon}>ⓘ</Text>
-        <Text style={s.bundleTimer}>{isActive ? remaining : "1d 2h 56m"}</Text>
-        {!isActive && <View style={s.bundleBadge}><Text style={s.bundleBadgeText}>TIEMPO{"\n"}LIMITADO</Text></View>}
-      </View>
-
-      <View style={s.bundleContent}>
-        <View style={s.bundleRewards}>
-          <View style={s.bundleRewardRow}>
-            <Image source={require("../../assets/icons/coin.png")} style={s.bundleRewardIcon} />
-            <Text style={s.bundleRewardText}>4000</Text>
-          </View>
-          <View style={s.bundleRewardRow}>
-            <Text style={s.bundleRewardEmoji}>💡</Text>
-            <Text style={s.bundleRewardText}>45</Text>
-          </View>
-          <View style={s.bundleRewardRow}>
-            <Text style={s.bundleRewardEmoji}>🃏</Text>
-            <Text style={s.bundleRewardText}>2</Text>
-          </View>
-        </View>
-        <Text style={s.bundleChest}>🎁</Text>
-      </View>
-
-      {isActive ? (
-        <View style={[s.bundleBuyBtn, { backgroundColor: "#27ae60" }]}>
-          <Text style={s.bundleBuyText}>✓ ACTIVO</Text>
-        </View>
-      ) : (
-        <TouchableOpacity style={s.bundleBuyBtn} onPress={onBuy}>
-          <Text style={s.bundleBuyText}>$ 24.900,00</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
+// BundleCard estático removido (Usando DynamicBundleCard)
 
 // ─── Free coins section ───────────────────────────────────────────────────────
-function GratisSection({ cooldownMs, onClaim }) {
+function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, onPressCuates }) {
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -181,7 +178,7 @@ function GratisSection({ cooldownMs, onClaim }) {
       {/* Card 2: invitar cuates */}
       <TouchableOpacity
         style={s.gratisCard}
-        onPress={() => Alert.alert("Invitar", "¡Invita a tus cuates y gana varos!")}
+        onPress={onPressCuates}
       >
         <Image source={require("../../assets/icons/coin.png")} style={s.gratisIcon} />
         <Text style={s.gratisAmount}>50</Text>
@@ -190,13 +187,17 @@ function GratisSection({ cooldownMs, onClaim }) {
 
       {/* Card 3: ver anuncio */}
       <TouchableOpacity
-        style={s.gratisCard}
-        onPress={() => Alert.alert("Anuncio", "Ver anuncio próximamente")}
+        style={[s.gratisCard, (!adAvailable || !adReady) && { opacity: 0.65 }]}
+        onPress={onWatchAd}
+        activeOpacity={0.75}
+        disabled={adAvailable && !adReady}
       >
         <Image source={require("../../assets/icons/coin.png")} style={s.gratisIcon} />
         <Text style={s.gratisAmount}>75</Text>
         <View style={[s.gratisBtn, { backgroundColor: AMBER, borderColor: "#A0541A" }]}>
-          <Text style={[s.gratisBtnText, { fontSize: 11, color: "#fff" }]}>📺 Ad</Text>
+          <Text style={[s.gratisBtnText, { fontSize: 11, color: "#fff" }]}>
+            {adAvailable && !adReady ? "⏳" : "📺 Ad"}
+          </Text>
         </View>
       </TouchableOpacity>
     </View>
@@ -220,6 +221,11 @@ function ItemCard({ item, onBuy }) {
           <Image source={require("../../assets/icons/coin.png")} style={s.itemCoinIcon} />
           <Text style={s.itemPriceCoinsText}>{item.price}</Text>
         </View>
+      ) : item.currency === "diamonds" ? (
+        <View style={s.itemPriceCoins}>
+          <Image source={require("../../assets/icons/diamond.png")} style={[s.itemCoinIcon, { tintColor: undefined }]} />
+          <Text style={s.itemPriceCoinsText}>{item.price}</Text>
+        </View>
       ) : (
         <View style={s.itemPriceReal}>
           <Text style={s.itemPriceRealText}>{item.price}</Text>
@@ -240,16 +246,30 @@ function ItemRow({ items, onBuy }) {
 }
 
 // ─── Main ShopScreen ──────────────────────────────────────────────────────────
-export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false }) {
+export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false, onAdultPackPurchased }) {
+  const navigation = useNavigation();
   const [buying, setBuying] = useState(false);
   const [shopMascotState, setShopMascotState] = useState("idle");
   const [shopMascotBubble, setShopMascotBubble] = useState(null);
+  const [successItem, setSuccessItem] = useState(null);
+  const [cuatesVisible, setCuatesVisible] = useState(false);
+
   const { userId } = useAuth();
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
+  const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
+  const insultoFirstLevel = useQuery(api.levels.getAdultPackFirstLevel, { pack: "insultos" });
+  const suegraFirstLevel  = useQuery(api.levels.getAdultPackFirstLevel, { pack: "suegra" });
   const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
   const buyWithCoins = useMutation(api.shop.buyWithCoins);
+  const applyIAPPurchase  = useMutation(api.shop.applyIAPPurchase);
+  const syncMexPlus       = useMutation(api.shop.syncMexPlusEntitlement);
+  const buyPetFood = useMutation(api.pet.buyPetFood);
+  const buyStreakFreeze = useMutation(api.streaks.buyStreakFreeze);
+  const updateUserCurrency = useMutation(api.users.updateUserCurrency);
+
+  const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
 
   // Auto-trigger the Sin Anuncios subscription dialog when opened from the ads button
   useEffect(() => {
@@ -269,26 +289,182 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
   const cooldown = shopState?.freeCooldownRemaining ?? 0;
   const activePass = shopState?.activePass ?? null;
 
+  // ── Mexicanario Plus — subscribe via RevenueCat Paywall ─────────────────────
+  async function handleSubscribePlus() {
+    if (!userId) {
+      Alert.alert("¡Espérate!", "Necesitas iniciar sesión para suscribirte.", [{ text: "Entendido" }]);
+      return;
+    }
+    setBuying(true);
+    try {
+      const { result, entitlement } = await presentMexicanarioPlusPaywall();
+
+      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+        // Sync the expiry date to Convex so the backend knows Plus is active
+        await syncMexPlus({ userId, expiresAt: entitlement.expiresAt ?? undefined });
+        notifySuccess();
+        const verb = result === PAYWALL_RESULT.PURCHASED ? "activada" : "restaurada";
+        Alert.alert(
+          "⭐ ¡Mexicanario Plus " + verb + "!",
+          "Ya tienes acceso a todos los beneficios Premium.",
+          [{ text: "¡Excelente!" }]
+        );
+      } else if (result === PAYWALL_RESULT.NOT_PRESENTED) {
+        // User already had an active subscription
+        Alert.alert("⭐ Ya eres Plus", "Tu suscripción Mexicanario Plus ya está activa.", [{ text: "¡Genial!" }]);
+      } else if (result === PAYWALL_RESULT.ERROR) {
+        Alert.alert("Error", "No pudimos procesar tu suscripción. Inténtalo de nuevo.", [{ text: "Entendido" }]);
+      }
+      // CANCELLED: user closed the paywall — no alert needed
+    } finally {
+      setBuying(false);
+    }
+  }
+
+  // ── Restore Purchases — required by Apple ────────────────────────────────────
+  async function handleRestorePurchases() {
+    setBuying(true);
+    try {
+      const { restored, entitlement, activeEntitlements } = await restorePurchases();
+
+      // Sync Plus entitlement if it was restored
+      if (userId && entitlement.active) {
+        await syncMexPlus({ userId, expiresAt: entitlement.expiresAt ?? undefined });
+      }
+
+      if (restored) {
+        const plusMsg = entitlement.active ? "¡Mexicanario Plus restaurado! " : "";
+        Alert.alert(
+          "✅ Compras restauradas",
+          plusMsg + `Entitlements activos: ${activeEntitlements.join(", ")}`,
+          [{ text: "¡Qué chido!" }]
+        );
+      } else {
+        Alert.alert(
+          "Sin compras previas",
+          "No encontramos compras anteriores en tu cuenta de tienda.",
+          [{ text: "Entendido" }]
+        );
+      }
+    } catch (_) {
+      Alert.alert(
+        "Restaurar Compras",
+        "Inicia sesión con el mismo Apple ID o Google Account que usaste al comprar.",
+        [{ text: "Entendido" }]
+      );
+    } finally {
+      setBuying(false);
+    }
+  }
+
   async function handleBuyItem(item) {
-    if (!userId || buying) return;
+    if (!userId) {
+      Alert.alert("¡Espérate!", "Necesitas iniciar sesión para comprar.", [{ text: "Entendido" }]);
+      return;
+    }
+    if (buying) return;
 
     if (item.currency === "real") {
-      Alert.alert(
-        "Próximamente 🚀",
-        "Los varos de verdad estarán disponibles cuando la app llegue a Google Play.\n\n¡Échale ojo al chorro de novedades!",
-        [{ text: "¡Órale!" }]
+      setBuying(true);
+      purchaseProduct(
+        item.id,
+        async (receiptToken) => {
+          try {
+            const r = await applyIAPPurchase({ userId, itemId: item.id, receiptToken });
+            notifySuccess();
+            const t = getDiamondPillFallback();
+            const diamonds = (r.diamonds ?? 0) - (shopState?.diamonds ?? 0);
+            if (diamonds > 0) {
+              triggerDiamondFly({
+                fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+                fromY: height * 0.6,
+                toX: t.x + t.w / 2,
+                toY: t.y + t.h / 2,
+                diamonds,
+              });
+            }
+            setSuccessItem(item);
+          } catch (e) {
+            Alert.alert("¡Aguas!", e.message ?? "No se pudo procesar la compra");
+          } finally {
+            setBuying(false);
+          }
+        },
+        (errorMsg) => {
+          setBuying(false);
+          Alert.alert("¡Aguas!", errorMsg);
+        }
       );
+      return;
+    }
+
+    // +18 age gate
+    if (item.id === "content_insultos" || item.id === "content_suegra") {
+      await new Promise((resolve) => {
+        Alert.alert(
+          "🔞 Contenido para Adultos",
+          `"${item.label}" contiene vocabulario para mayores de 18 años.\n\n¿Confirmas que eres mayor de edad?`,
+          [
+            { text: "No, soy menor", style: "cancel", onPress: () => resolve("cancel") },
+            { text: "✅ Soy mayor de 18", onPress: () => resolve("ok") },
+          ]
+        );
+      }).then(async (choice) => {
+        if (choice !== "ok") return;
+        setBuying(true);
+        try {
+          await buyWithCoins({ userId, itemId: item.id });
+          setShopMascotState("celebrating");
+          setShopMascotBubble("¡Ándale!");
+          setTimeout(() => { setShopMascotState("idle"); setShopMascotBubble(null); }, 2500);
+          Alert.alert(
+            "🌶️ ¡Desbloqueado!",
+            `"${item.label}" ya está en tu colección.\n\n¿Qué quieres hacer?`,
+            [
+              { text: "Seguir comprando", style: "cancel" },
+              { text: "¡Jugar ahora! 🌶️", onPress: () => {
+                  onClose();
+                  const firstLevel = item.id === "content_insultos" ? insultoFirstLevel : suegraFirstLevel;
+                  if (firstLevel) {
+                    navigation.navigate("Gameplay", { reviewLevel: firstLevel });
+                  } else {
+                    navigation.navigate("Map", { scrollToAdult: item.id.replace("content_", "") });
+                  }
+                }
+              },
+            ]
+          );
+        } catch (e) {
+          Alert.alert("¡Aguas!", e.message ?? "No se pudo comprar");
+        } finally {
+          setBuying(false);
+        }
+      });
       return;
     }
 
     setBuying(true);
     try {
-      await buyWithCoins({ userId, itemId: item.id });
+      if (item.currency === "coins") {
+        await buyWithCoins({ userId, itemId: item.id });
+      } else if (item.currency === "diamonds") {
+        if (item.id === "streak_freeze") {
+          await buyStreakFreeze({ userId });
+        } else {
+          await buyPetFood({ userId, foodType: item.id });
+        }
+      }
+
       notifySuccess(); // vibración al comprar
-      setShopMascotState("celebrating");
-      setShopMascotBubble("¡Genial!");
-      setTimeout(() => { setShopMascotState("idle"); setShopMascotBubble(null); }, 2500);
-      Alert.alert("¡A todo dar! ✅", `${item.qty} ${item.label} en tu morral`);
+      const showModal = item.currency === "diamonds" || item.id === "streak_freeze_coins";
+      if (showModal) {
+        setSuccessItem(item);
+      } else {
+        setShopMascotState("celebrating");
+        setShopMascotBubble("¡Genial!");
+        setTimeout(() => { setShopMascotState("idle"); setShopMascotBubble(null); }, 2500);
+        Alert.alert("¡A todo dar! ✅", `${item.qty} ${item.label} en tu morral`);
+      }
     } catch (e) {
       setShopMascotState("sad");
       setShopMascotBubble("Ay...");
@@ -307,7 +483,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
       notifySuccess();
       const t = getCoinPillFallback();
       triggerCoinFly({
-        fromX: width / 2,
+        fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
         fromY: height * 0.65,
         toX: t.x + t.w / 2,
         toY: t.y + t.h / 2,
@@ -320,10 +496,43 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
     }
   }
 
-  function handleBuyBundle() {
+  function handleWatchAd() {
+    const shown = showAd(async () => {
+      if (!userId) return;
+      try {
+        await updateUserCurrency({ userId, coins: 75 });
+        notifySuccess();
+        const t = getCoinPillFallback();
+        triggerCoinFly({
+          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+          fromY: height * 0.65,
+          toX: t.x + t.w / 2,
+          toY: t.y + t.h / 2,
+          coins: 75,
+        });
+      } catch { }
+    });
+
+    // En Expo Go (__DEV__ sin módulo nativo) dar monedas directamente
+    if (!shown && __DEV__ && userId) {
+      updateUserCurrency({ userId, coins: 75 }).then(() => {
+        notifySuccess();
+        const t = getCoinPillFallback();
+        triggerCoinFly({
+          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+          fromY: height * 0.65,
+          toX: t.x + t.w / 2,
+          toY: t.y + t.h / 2,
+          coins: 75,
+        });
+      });
+    }
+  }
+
+  function handleBuyDynamicBundle(bundle) {
     Alert.alert(
-      "¡Con todo y chile! 🌶",
-      "Este paquete estará disponible cuando la app llegue a Google Play.",
+      "¡Paquete " + bundle.title + "!",
+      "Este paquete estará disponible mediante RevenueCat cuando la app llegue a producción.\n\nContiene " + bundle.rewards.map(r => r.qty + " " + (r.id === "coins" ? "Monedas" : r.id === "diamonds" ? "Diamantes" : "Trucos")).join(", ") + ".",
       [{ text: "¡Ya mero!" }]
     );
   }
@@ -361,54 +570,153 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
             <Text style={s.headerTitle}>Tienda</Text>
           </View>
 
-          {/* Bundle deal */}
-          <View style={s.bundleTitleWrap}>
-            <View style={s.bundleTitleBg}>
-              <Text style={s.bundleTitleText}>¡Con todo y chile!</Text>
-            </View>
-          </View>
-          <BundleCard activePass={activePass} onBuy={handleBuyBundle} />
+          {/* Bundle rotativo dinámico */}
+          <DynamicBundleCard onBuy={handleBuyDynamicBundle} />
 
           {/* Gratis */}
           <SectionBanner title="Gratis" />
-          <GratisSection cooldownMs={cooldown} onClaim={handleClaim} />
+          <GratisSection
+            cooldownMs={cooldown}
+            onClaim={handleClaim}
+            onWatchAd={handleWatchAd}
+            adReady={adReady}
+            adAvailable={adAvailable}
+            onPressCuates={() => setCuatesVisible(true)}
+          />
 
           {/* Varos (coin packs) */}
           <SectionBanner title="Varos" />
           <ItemRow items={VAROS.slice(0, 3)} onBuy={handleBuyItem} />
           <ItemRow items={VAROS.slice(3, 6)} onBuy={handleBuyItem} />
 
-          {/* Trucos (power-ups) */}
-          <SectionBanner title="Trucos" />
-          <ItemRow items={TRUCOS} onBuy={handleBuyItem} />
+          {/* Diamantes */}
+          <SectionBanner title="Diamantes" />
+          <ItemRow items={DIAMANTES} onBuy={handleBuyItem} />
 
-          {/* Fichas (artículos especiales) */}
-          <SectionBanner title="Fichas" />
-          <ItemRow items={FICHAS} onBuy={handleBuyItem} />
-
-          {/* Sin Anuncios */}
-          <SectionBanner title="Sin Anuncios" />
-          <View style={s.sinAnunciosCard}>
-            <Image source={require("../../assets/icons/ads.png")} style={s.sinAnunciosIcon} />
+          {/* Protector de Racha */}
+          <SectionBanner title="Proteger Racha 🛡️" />
+          <View style={s.protectorCard}>
+            <View style={s.protectorIconWrap}>
+              <Text style={s.protectorIcon}>🛡️</Text>
+              {(shopState?.streakFreezeCount ?? 0) > 0 && (
+                <View style={s.freezeBadge}>
+                  <Text style={s.freezeBadgeText}>{shopState.streakFreezeCount}</Text>
+                </View>
+              )}
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.sinAnunciosTitle}>Sin Anuncios por 1 mes</Text>
-              <Text style={s.sinAnunciosDesc}>
-                Disfruta del juego sin interrupciones. Puedes seguir viendo videos para ganar monedas.
-              </Text>
+              <View style={s.protectorTitleRow}>
+                <Text style={s.protectorTitle}>Escudo de Racha</Text>
+              </View>
+              {(shopState?.streakFreezeCount ?? 0) > 0 ? (
+                <View style={s.freezeCountRow}>
+                  <Text style={s.freezeCountText}>
+                    🛡️ Tienes {shopState.streakFreezeCount} escudo{shopState.streakFreezeCount !== 1 ? "s" : ""} activo{shopState.streakFreezeCount !== 1 ? "s" : ""}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={s.protectorDesc}>Sin escudos — si fallas un día perderás tu racha.</Text>
+              )}
+              <Text style={s.protectorDesc}>Cada escudo protege un día faltado. Se usa automáticamente.</Text>
               <TouchableOpacity
-                style={s.sinAnunciosBtn}
-                onPress={() =>
-                  Alert.alert(
-                    "Suscripcion Sin Anuncios",
-                    "Disponible cuando la app este en Google Play.\n\nPrecio: $5.00 USD / mes (al cambio de tu pais)",
-                    [{ text: "¡Ya mero!" }]
-                  )
-                }
+                style={s.protectorBtn}
+                onPress={() => handleBuyItem(PROTECTORES[0])}
               >
-                <Text style={s.sinAnunciosBtnText}>$ 5.00 USD / mes</Text>
+                <Text style={s.protectorBtnText}>🪙 400 varos — +1 escudo</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Skins Premium */}
+          <SectionBanner title="Skins Premium 🎭" />
+          <View style={s.skinsGrid}>
+            {SKINS_PREMIUM.map((skin) => (
+              <TouchableOpacity key={skin.id} style={s.skinCard} onPress={() => handleBuyItem(skin)} activeOpacity={0.82}>
+                {skin.badge && <View style={s.skinBadge}><Text style={s.skinBadgeText}>{skin.badge}</Text></View>}
+                <Text style={s.skinIcon}>{skin.icon}</Text>
+                <Text style={s.skinLabel}>{skin.label}</Text>
+                <View style={s.skinPriceRow}>
+                  <Text style={s.skinPrice}>🪙 {skin.price}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Contenido +18 */}
+          <SectionBanner title="Contenido +18 🔞" />
+          <View style={s.adultBanner}>
+            <Text style={s.adultBannerText}>🔞 Requiere confirmar mayoría de edad</Text>
+          </View>
+          {CONTENIDO_ADULTO.map((item) => (
+            <TouchableOpacity key={item.id} style={s.adultCard} onPress={() => handleBuyItem(item)} activeOpacity={0.82}>
+              <Text style={s.adultIcon}>{item.icon}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.adultLabel}>{item.label}</Text>
+                <Text style={s.adultDesc}>{item.desc}</Text>
+              </View>
+              <View style={s.adultPricePill}>
+                <Text style={s.adultPriceText}>🪙 {item.price}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {/* Mexicanario Plus */}
+          <SectionBanner title="Mexicanario Plus ⭐" />
+          <View style={s.plusCard}>
+            {/* Header */}
+            <View style={s.plusHeader}>
+              <Text style={s.plusBadge}>⭐ LEGENDARIO</Text>
+              <Text style={s.plusTitle}>Mexicanario Plus</Text>
+              <Text style={s.plusSubtitle}>Todo lo que necesitas para dominar los modismos</Text>
+            </View>
+
+            {/* Benefits list */}
+            <View style={s.plusBenefits}>
+              <View style={s.plusRow}>
+                <Text style={s.plusRowIcon}>🚫📺</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.plusRowTitle}>Sin Anuncios</Text>
+                  <Text style={s.plusRowDesc}>Juega sin interrupciones</Text>
+                </View>
+              </View>
+              <View style={s.plusRow}>
+                <Text style={s.plusRowIcon}>🦝</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.plusRowTitle}>Nahual Legendario</Text>
+                  <Text style={s.plusRowDesc}>Mascota exclusiva · 3 variantes (Norteño, Sureño, Urbano)</Text>
+                </View>
+              </View>
+              <View style={s.plusRow}>
+                <Text style={s.plusRowIcon}>🪙</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.plusRowTitle}>500 monedas al mes</Text>
+                  <Text style={s.plusRowDesc}>Entregadas al activar cada mes</Text>
+                </View>
+              </View>
+              <View style={s.plusRow}>
+                <Text style={s.plusRowIcon}>💎</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.plusRowTitle}>50 diamantes al mes</Text>
+                  <Text style={s.plusRowDesc}>Úsalos en la tienda o para tu mascota</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* CTA */}
+            <TouchableOpacity
+              style={s.plusBtn}
+              activeOpacity={0.85}
+              onPress={handleSubscribePlus}
+            >
+              <Text style={s.plusBtnText}>Suscribirme — $4.99 USD / mes</Text>
+            </TouchableOpacity>
+            <Text style={s.plusDisclaimer}>Cancela cuando quieras · Sin permanencia</Text>
+          </View>
+
+          {/* Restaurar Compras — requerido por Apple */}
+          <TouchableOpacity style={s.restoreBtn} onPress={handleRestorePurchases}>
+            <Text style={s.restoreBtnText}>🔁 Restaurar Compras</Text>
+          </TouchableOpacity>
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -419,15 +727,35 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           </View>
         )}
         <CoinFlyOverlay coins={flyCoins} particles={particles} onCoinArrived={onCoinArrived} />
+        <DiamondFlyOverlay diamonds={flyDiamonds} particles={diamondParticles} onDiamondArrived={onDiamondArrived} />
+
+        {/* Animated Custom modal for diamond purchases */}
+        <PurchaseSuccessModal
+          visible={!!successItem}
+          item={successItem}
+          onClose={() => setSuccessItem(null)}
+        />
+
+        {/* Modal de cuates */}
+        <CuatesModal
+          visible={cuatesVisible}
+          onClose={() => setCuatesVisible(false)}
+        />
       </ImageBackground>
     </Modal>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const ACTION_BG     = GOLD;
+const ACTION_BG = GOLD;
 const ACTION_BORDER = "#C8950A";
-const ACTION_TEXT   = "#523600";
+const ACTION_TEXT = "#523600";
+
+// Accurate TopBar clearance (mirrors TopBar.jsx formula)
+const TOP_SAFE_INSET = Platform.OS === "ios" ? height * 0.058 : height * 0.04;
+const TOP_BAR_H = TOP_SAFE_INSET + width * 0.025 + width * 0.075 + width * 0.025;
+const CLOSE_BTN_TOP = Math.round(TOP_BAR_H + 8);
+const SCROLL_PAD_TOP = CLOSE_BTN_TOP + Math.round(width * 0.1) + 14;
 
 const s = StyleSheet.create({
   bg: {
@@ -455,14 +783,14 @@ const s = StyleSheet.create({
   // Floating mascot (top-left)
   shopMascotWrap: {
     position: "absolute",
-    top: height * 0.12,
+    top: CLOSE_BTN_TOP,
     left: width * 0.035,
     zIndex: 200,
   },
   // Botón cerrar flotante (sobre el TopBar)
   closeBtn: {
     position: "absolute",
-    top: height * 0.12,
+    top: CLOSE_BTN_TOP,
     right: width * 0.035,
     width: width * 0.1,
     height: width * 0.1,
@@ -482,7 +810,7 @@ const s = StyleSheet.create({
   },
 
   scroll: {
-    paddingTop: height * 0.18,
+    paddingTop: SCROLL_PAD_TOP,
     paddingHorizontal: width * 0.035,
     paddingBottom: height * 0.025,
   },
@@ -655,6 +983,91 @@ const s = StyleSheet.create({
   itemPriceRealText: { fontFamily: FONTS.bodyBold, color: ACTION_TEXT, fontSize: width * 0.032 },
 
   // Sin Anuncios
+  // ── Mexicanario Plus ──────────────────────────────────────────────────────
+  plusCard: {
+    marginHorizontal: width * 0.04,
+    marginBottom: height * 0.025,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 2.5,
+    borderColor: "#9C6FDE",
+    backgroundColor: "#1A0A33",
+  },
+  plusHeader: {
+    backgroundColor: "#2D1259",
+    paddingVertical: height * 0.018,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#9C6FDE44",
+  },
+  plusBadge: {
+    color: "#F8BE17",
+    fontSize: width * 0.028,
+    fontFamily: FONTS.bodyBold,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  plusTitle: {
+    fontFamily: FONTS.display,
+    fontSize: width * 0.065,
+    color: "#EDE0FF",
+    marginBottom: 4,
+  },
+  plusSubtitle: {
+    fontFamily: FONTS.body,
+    fontSize: width * 0.03,
+    color: "#B89AD4",
+    textAlign: "center",
+  },
+  plusBenefits: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  plusRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 12,
+    padding: 10,
+  },
+  plusRowIcon: { fontSize: 24, lineHeight: 28 },
+  plusRowTitle: {
+    fontFamily: FONTS.bodyBold,
+    color: "#EDE0FF",
+    fontSize: width * 0.036,
+    marginBottom: 2,
+  },
+  plusRowDesc: {
+    fontFamily: FONTS.body,
+    color: "#B89AD4",
+    fontSize: width * 0.029,
+  },
+  plusBtn: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: "#9C6FDE",
+    borderRadius: 30,
+    paddingVertical: height * 0.018,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#C4A8FF",
+  },
+  plusBtnText: {
+    fontFamily: FONTS.bodyBold,
+    color: "#fff",
+    fontSize: width * 0.04,
+  },
+  plusDisclaimer: {
+    fontFamily: FONTS.body,
+    color: "#7A5EA8",
+    fontSize: width * 0.027,
+    textAlign: "center",
+    marginBottom: 14,
+  },
+
   sinAnunciosCard: {
     backgroundColor: WHEAT,
     borderRadius: width * 0.04,
@@ -686,4 +1099,167 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
+  // Restaurar Compras — Apple-required
+  restoreBtn: {
+    alignItems: "center",
+    paddingVertical: height * 0.018,
+    marginTop: height * 0.008,
+  },
+  restoreBtnText: {
+    fontFamily: FONTS.body,
+    color: "#A0714F",
+    fontSize: width * 0.033,
+    textDecorationLine: "underline",
+  },
+
+  // ── Protector de Racha ──────────────────────────────────────────────────────
+  protectorIconWrap: {
+    position: "relative",
+    width: 52,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  freezeBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#D36B1E",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
+  },
+  freezeBadgeText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  freezeCountRow: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#7CB87A",
+  },
+  freezeCountText: {
+    fontFamily: FONTS.bodyBold,
+    color: "#2E7D32",
+    fontSize: width * 0.033,
+  },
+  protectorCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFF8EC",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#F8BE17",
+    padding: 14,
+    marginBottom: 12,
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#5C2800",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  protectorIcon: { fontSize: 36 },
+  protectorTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 3 },
+  protectorTitle: { fontFamily: FONTS.bodyBold, fontSize: width * 0.042, color: "#5C2800" },
+  protectorDesc: { fontFamily: FONTS.body, fontSize: width * 0.03, color: "#8B5E3C", marginBottom: 8 },
+  protectorBtn: {
+    backgroundColor: "#D36B1E",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
+  protectorBtnText: { fontFamily: FONTS.bodyBold, color: "#FFF", fontSize: width * 0.037 },
+  badgeNew: {
+    backgroundColor: "#E74C3C",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: { color: "#FFF", fontSize: 9, fontWeight: "900" },
+
+  // ── Skins Premium ───────────────────────────────────────────────────────────
+  skinsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+  skinCard: {
+    width: (width - width * 0.07 - 30) / 3,
+    backgroundColor: "#FFF8EC",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#D4A574",
+    padding: 10,
+    alignItems: "center",
+    shadowColor: "#5C2800",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  skinBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#8B4513",
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  skinBadgeText: { color: "#F8BE17", fontSize: 7, fontWeight: "900" },
+  skinIcon: { fontSize: 28, marginBottom: 4 },
+  skinLabel: { fontFamily: FONTS.bodyBold, fontSize: width * 0.028, color: "#5C2800", textAlign: "center", marginBottom: 6 },
+  skinPriceRow: {
+    backgroundColor: "#FFEAAC",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  skinPrice: { fontFamily: FONTS.bodyBold, fontSize: width * 0.028, color: "#8B4513" },
+
+  // ── Contenido +18 ──────────────────────────────────────────────────────────
+  adultBanner: {
+    backgroundColor: "#3D0010",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  adultBannerText: { fontFamily: FONTS.bodyBold, color: "#FF8FAB", fontSize: width * 0.032 },
+  adultCard: {
+    flexDirection: "row",
+    backgroundColor: "#1A0008",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#8B0032",
+    padding: 14,
+    marginBottom: 10,
+    alignItems: "center",
+    gap: 12,
+  },
+  adultIcon: { fontSize: 32 },
+  adultLabel: { fontFamily: FONTS.bodyBold, fontSize: width * 0.04, color: "#FF8FAB", marginBottom: 3 },
+  adultDesc: { fontFamily: FONTS.body, fontSize: width * 0.029, color: "#CC6688" },
+  adultPricePill: {
+    backgroundColor: "#8B0032",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  adultPriceText: { fontFamily: FONTS.bodyBold, color: "#FFD6E7", fontSize: width * 0.032 },
 });

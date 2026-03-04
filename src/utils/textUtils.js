@@ -3,6 +3,22 @@
  */
 
 /**
+ * Strips accents and dieresis from a word for gameplay display.
+ * Keeps Ñ (distinct Spanish letter). Used so tiles show "GUEY" not "GÜEY".
+ */
+export const normalizeWordForDisplay = (word) => {
+  if (!word) return '';
+  return word
+    .toUpperCase()
+    .replace(/Á/g, 'A')
+    .replace(/É/g, 'E')
+    .replace(/Í/g, 'I')
+    .replace(/Ó/g, 'O')
+    .replace(/Ú/g, 'U')
+    .replace(/Ü/g, 'U');
+};
+
+/**
  * Normalizes text by removing accents and converting to uppercase
  * @param {string} text - The text to normalize
  * @returns {string} - Normalized text without accents

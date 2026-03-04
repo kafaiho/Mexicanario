@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 export const createAnonymousUser = mutation({
   args: {},
@@ -31,6 +32,80 @@ export const getUser = query({
   },
 });
 
+
+// ── Social auth linking ────────────────────────────────────────────────────────
+
+// Find a user by their Google ID
+export const getUserByGoogleId = query({
+  args: { googleId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .first();
+  },
+});
+
+// Find a user by their Apple ID
+export const getUserByAppleId = query({
+  args: { appleId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_appleId", (q) => q.eq("appleId", args.appleId))
+      .first();
+  },
+});
+
+// Link a Google or Apple account to an existing anonymous user.
+// Returns { success: true } or { conflict: true, existingUserId: string }
+export const linkSocialAccount = mutation({
+  args: {
+    userId:   v.string(),
+    provider: v.string(),          // "google" | "apple"
+    socialId: v.string(),          // googleId or appleId
+    email:    v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { userId, provider, socialId, email } = args;
+
+    // Check if another account already has this socialId
+    const indexName = provider === "google" ? "by_googleId" : "by_appleId";
+    const fieldName = provider === "google" ? "googleId" : "appleId";
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex(indexName as any, (q: any) => q.eq(fieldName, socialId))
+      .first();
+
+    if (existing && existing._id !== userId) {
+      // Conflict: another account already linked to this social ID
+      return { conflict: true, existingUserId: existing._id as string };
+    }
+
+    // Link the social account to the current user
+    const patch: Record<string, string | undefined> = { [fieldName]: socialId };
+    if (email) patch.email = email;
+    await ctx.db.patch(userId as Id<"users">, patch);
+
+    return { success: true };
+  },
+});
+
+// Validate that a target account exists (used before switching)
+export const validateAccount = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      const user = await ctx.db.get(args.userId as Id<"users">);
+      return user !== null;
+    } catch {
+      return false;
+    }
+  },
+});
+
+// ── Existing mutations ─────────────────────────────────────────────────────────
 
 // Checks if a userId exists in the current deployment.
 // Returns true if found, false if the ID is stale/invalid (e.g. from old project).

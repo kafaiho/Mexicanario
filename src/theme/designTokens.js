@@ -29,5 +29,5 @@ export const RADIUS = { sm: 8, md: 16, lg: 24, pill: 999 };
 export const FONTS = { display: 'Fredoka-Bold', body: 'Nunito-Regular', bodyBold: 'Nunito-Bold' };
 
 // Umbrales vínculo → etapa (índice 0-based, stage = index + 1)
-export const STAGE_THRESHOLDS = [0, 50, 150, 400, 800, 1500]; // índice i → stage i+1
-export const VINCULO_MAX = 2000;
+export const STAGE_THRESHOLDS = [0, 100, 300, 800, 1600, 3000]; // índice i → stage i+1
+export const VINCULO_MAX = 4000;

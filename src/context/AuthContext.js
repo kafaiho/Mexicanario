@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '../../convex/_generated/api';
+import { Alert } from 'react-native';
 
 const AuthContext = createContext(null);
 
@@ -20,6 +21,7 @@ export const AuthProvider = ({ children }) => {
   const staleCheckDone = useRef(false);
 
   const createAnonymousUser = useMutation(api.auth.createAnonymousUser);
+  const linkSocialAccount   = useMutation(api.auth.linkSocialAccount);
   // Query the user — returns null if the userId doesn't exist in this deployment
   const user = useQuery(api.auth.getUser, userId ? { userId } : 'skip');
 
@@ -85,6 +87,34 @@ export const AuthProvider = ({ children }) => {
     loadStoredUser();
   };
 
+  // ── Social account linking ─────────────────────────────────────────────────
+
+  /**
+   * Link a Google or Apple account to the current anonymous user.
+   * Returns { success: true } or { conflict: true, existingUserId: string }
+   */
+  const linkGoogle = async (googleId, email) => {
+    if (!userId) return { error: 'No user' };
+    return await linkSocialAccount({ userId, provider: 'google', socialId: googleId, email });
+  };
+
+  const linkApple = async (appleId, email) => {
+    if (!userId) return { error: 'No user' };
+    return await linkSocialAccount({ userId, provider: 'apple', socialId: appleId, email });
+  };
+
+  /**
+   * Switch to a different account (e.g. after finding a linked account via Google/Apple).
+   * Updates AsyncStorage and local state — the anonymous account is abandoned.
+   */
+  const restoreAccount = async (targetUserId) => {
+    await AsyncStorage.setItem('userId', targetUserId);
+    staleCheckDone.current = true;
+    setUserId(targetUserId);
+  };
+
+  // ── Logout ─────────────────────────────────────────────────────────────────
+
   const logout = async () => {
     try {
       await AsyncStorage.removeItem('userId');
@@ -106,6 +136,10 @@ export const AuthProvider = ({ children }) => {
     retry,
     logout,
     isAuthenticated: !!userId,
+    // Social auth
+    linkGoogle,
+    linkApple,
+    restoreAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

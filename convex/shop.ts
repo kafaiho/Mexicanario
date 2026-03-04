@@ -1,16 +1,25 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { ensureAdultPack } from "./seedAdultWords";
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 // Items that can be bought with coins or diamonds (not real money)
 export const COIN_ITEMS: Record<string, { label: string; currency: "coins" | "diamonds"; price: number; category: string }> = {
-  hint_x5:     { label: "Pistas x5",      currency: "coins",    price: 100, category: "powerups" },
-  reveal_x3:   { label: "Revelar x3",     currency: "coins",    price: 200, category: "powerups" },
-  complete_x1: { label: "Completar x1",   currency: "coins",    price: 400, category: "powerups" },
-  synonym_x5:  { label: "Pista frase x5", currency: "coins",    price: 150, category: "powerups" },
-  pet_food_x5: { label: "Comida x5",      currency: "coins",    price: 80,  category: "mascota"  },
-  pet_toy:     { label: "Juguete",         currency: "diamonds", price: 3,   category: "mascota"  },
-  pet_candy:   { label: "Dulce especial", currency: "diamonds", price: 5,   category: "mascota"  },
+  hint_x5:            { label: "Pistas x5",             currency: "coins",    price: 100,  category: "powerups" },
+  reveal_x3:          { label: "Revelar x3",            currency: "coins",    price: 200,  category: "powerups" },
+  complete_x1:        { label: "Completar x1",          currency: "coins",    price: 400,  category: "powerups" },
+  synonym_x5:         { label: "Pista frase x5",        currency: "coins",    price: 150,  category: "powerups" },
+  pet_food_x5:        { label: "Comida x5",             currency: "coins",    price: 80,   category: "mascota"  },
+  pet_toy:            { label: "Juguete",                currency: "diamonds", price: 3,    category: "mascota"  },
+  pet_candy:          { label: "Dulce especial",        currency: "diamonds", price: 5,    category: "mascota"  },
+  streak_freeze_coins:{ label: "Protector de Racha",    currency: "coins",    price: 400,  category: "streak"   },
+  skin_mariachi:      { label: "Traje de Mariachi",     currency: "coins",    price: 1500, category: "skins"    },
+  skin_charro:        { label: "Charro de Jalisco",     currency: "coins",    price: 2000, category: "skins"    },
+  skin_lucha:         { label: "Luchador Enmascarado",  currency: "coins",    price: 2500, category: "skins"    },
+  skin_catrina:       { label: "La Catrina",            currency: "coins",    price: 3500, category: "skins"    },
+  skin_azteca:        { label: "Guerrero Azteca",       currency: "coins",    price: 5000, category: "skins"    },
+  content_insultos:   { label: "Insultos Finos",        currency: "coins",    price: 1000, category: "adulto"   },
+  content_suegra:     { label: "Diccionario de la Suegra", currency: "coins", price: 1000, category: "adulto"   },
 };
 
 // IAP products (real money) — RevenueCat product IDs
@@ -53,6 +62,7 @@ export const getShopState = query({
       diamonds: user.diamonds,
       powerups: (user as any).powerups ?? {},
       freeCooldownRemaining,
+      streakFreezeCount: (user as any).streakFreezeCount ?? 0,
       activePass: activePass
         ? {
             passId: activePass.passId,
@@ -119,7 +129,7 @@ export const buyWithCoins = mutation({
       await ctx.db.patch(args.userId, { diamonds: user.diamonds - item.price } as any);
     }
 
-    // Add to powerup inventory (for powerup items)
+    // Handle special item categories
     if (item.category === "powerups") {
       const currentPowerups = (user as any).powerups ?? {};
       const inventoryKey: Record<string, string> = {
@@ -128,7 +138,6 @@ export const buyWithCoins = mutation({
         complete_x1: "completes",
         synonym_x5:  "synonyms",
       };
-      // Map to specific powerup field
       const field = inventoryKey[args.itemId];
       const qty: Record<string, number> = {
         hint_x5: 5, reveal_x3: 3, complete_x1: 1, synonym_x5: 5,
@@ -139,6 +148,25 @@ export const buyWithCoins = mutation({
           [field]: (currentPowerups[field] ?? 0) + (qty[args.itemId] ?? 1),
         };
         await ctx.db.patch(args.userId, { powerups: updated } as any);
+      }
+    } else if (item.category === "streak") {
+      // Streak freeze via coins — acumular en contador
+      const currentFreeze = (user as any).streakFreezeCount ?? 0;
+      await ctx.db.patch(args.userId, { streakFreezeCount: currentFreeze + 1 } as any);
+    } else if (item.category === "skins") {
+      // Unlock skin — store in user's purchased skins list
+      const currentSkins: string[] = (user as any).purchasedSkins ?? [];
+      if (!currentSkins.includes(args.itemId)) {
+        await ctx.db.patch(args.userId, { purchasedSkins: [...currentSkins, args.itemId] } as any);
+      }
+    } else if (item.category === "adulto") {
+      // Auto-sembrar palabras del pack si aún no existen en la BD
+      const pack = args.itemId === "content_insultos" ? "insultos" : "suegra";
+      await ensureAdultPack(ctx, pack);
+      // Unlock adult content category
+      const currentUnlocked: string[] = (user as any).adultContentUnlocked ?? [];
+      if (!currentUnlocked.includes(args.itemId)) {
+        await ctx.db.patch(args.userId, { adultContentUnlocked: [...currentUnlocked, args.itemId] } as any);
       }
     }
 
@@ -231,6 +259,27 @@ export const usePowerup = mutation({
     await ctx.db.patch(args.userId, { powerups: updated } as any);
 
     return { remaining: current - 1 };
+  },
+});
+
+/**
+ * Sync the "Mexicanario Pro" entitlement status from RevenueCat to the database.
+ * Called after paywall completion, purchase restoration, or customerInfo listener
+ * updates (subscription renewals / lapses).
+ *
+ * Pass expiresAt as the epoch ms expiry from RevenueCat's entitlement.expirationDate,
+ * or omit/pass 0 to mark the subscription as inactive.
+ */
+export const syncMexPlusEntitlement = mutation({
+  args: {
+    userId:    v.id("users"),
+    expiresAt: v.optional(v.number()), // epoch ms; omit or 0 → not active
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+    await ctx.db.patch(args.userId, { mexPlusExpiresAt: args.expiresAt ?? 0 } as any);
+    return { success: true };
   },
 });
 

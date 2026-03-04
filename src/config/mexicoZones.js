@@ -14,8 +14,8 @@ export const MEXICO_ZONES = [
     levels: [1, 10],
     emoji: '🏙️',
     // Rosa Mexicana — Frida Kahlo, mercados, lucha libre
-    color: '#E4007C',
-    dark:  '#8B0048',
+    color: '#C0185A',
+    dark:  '#7A0035',
     light: '#FFE0F0',
     desc: 'La capital nunca duerme',
   },

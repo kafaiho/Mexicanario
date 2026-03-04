@@ -15,6 +15,7 @@ import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import CoinFlyOverlay from './CoinFlyOverlay';
 import useCoinFly from '../hooks/useCoinFly';
+import { REAL_WIDTH, REAL_HEIGHT, TABLET_MODE } from '../utils/tabletSetup';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,9 +24,9 @@ const REWARD_COINS = 100;
 
 const getCoinPillFallback = () => {
   const topPad = Platform.OS === 'ios' ? height * 0.058 : height * 0.04;
-  const pillH  = width * 0.075;
-  const pillW  = width * 0.22;
-  const pillX  = width - width * 0.03 - pillW;
+  const pillH  = 36;
+  const pillW  = 110;
+  const pillX  = REAL_WIDTH - 16 - pillW;
   return { x: pillX, y: topPad, w: pillW, h: pillH };
 };
 
@@ -49,8 +50,8 @@ export default function GiftModel({ visible, onClose }) {
       comboBurst(5);
       const t = getCoinPillFallback();
       triggerCoinFly({
-        fromX: width / 2,
-        fromY: height * 0.52,
+        fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+        fromY: TABLET_MODE ? REAL_HEIGHT * 0.5 : height * 0.52,
         toX: t.x + t.w / 2,
         toY: t.y + t.h / 2,
         coins: result.coinsAwarded ?? REWARD_COINS,

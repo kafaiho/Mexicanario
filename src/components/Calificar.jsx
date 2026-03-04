@@ -18,7 +18,7 @@ const { width } = Dimensions.get("window");
 const STORE_URL =
   Platform.OS === "ios"
     ? "https://apps.apple.com/app/idXXXXXXXXX" // ← App Store ID
-    : "market://details?id=com.mexicanario.app"; // ← Bundle ID Android
+    : "market://details?id=com.kafaiho.mexicanario"; // ← Bundle ID Android
 
 const STARS = [1, 2, 3, 4, 5];
 

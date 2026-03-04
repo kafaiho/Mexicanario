@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
+import { playSound } from "../utils/soundManager";
 
 // ── Single flying coin — usa Animated (React Native) en vez de Reanimated ────
-function CoinFly({ coin, onCoinArrived }) {
+function CoinFly({ coin, onCoinArrived, isFirst }) {
   const { id, batchId, fromX, fromY, toX, toY, cpX, cpY, delay, duration } = coin;
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const start = () => {
+      // Sonido de moneda sincronizado con el inicio de la animación.
+      // Solo la primera moneda del batch suena para evitar superposición.
+      if (isFirst) playSound("coin");
       Animated.timing(progress, {
         toValue: 1,
         duration,
@@ -128,8 +132,8 @@ function ImpactParticles({ x, y }) {
 export default function CoinFlyOverlay({ coins, particles, onCoinArrived }) {
   return (
     <View style={styles.overlay} pointerEvents="none">
-      {coins.map((coin) => (
-        <CoinFly key={coin.id} coin={coin} onCoinArrived={onCoinArrived} />
+      {coins.map((coin, idx) => (
+        <CoinFly key={coin.id} coin={coin} onCoinArrived={onCoinArrived} isFirst={idx === 0} />
       ))}
       {particles.map((p) => (
         <ImpactParticles key={p.id} x={p.x} y={p.y} />

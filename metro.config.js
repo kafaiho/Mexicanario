@@ -25,6 +25,20 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       ),
     };
   }
+
+  // En Expo Go (desarrollo sin EAS Build) usamos un mock de AdMob para
+  // evitar el crash de TurboModuleRegistry.getEnforcing al cargar el módulo.
+  // En "eas build" la variable EAS_BUILD=true y se usa el módulo real.
+  if (
+    moduleName === "react-native-google-mobile-ads" &&
+    !process.env.EAS_BUILD
+  ) {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(__dirname, "src/mocks/google-mobile-ads.js"),
+    };
+  }
+
   if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
   }

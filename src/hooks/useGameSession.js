@@ -14,7 +14,6 @@ export function useGameSession(userId) {
     try {
       // Wait for level info to be available
       if (!levelInfo) {
-        console.log("Waiting for level info...");
         return null;
       }
 
@@ -32,14 +31,12 @@ export function useGameSession(userId) {
       // Start a new game session if we have a userId
       if (userId) {
         const sessionId = await startSession({ userId });
-        console.log("Created session:", sessionId);
 
         // Update session with active status
         await updateSession({
           sessionId,
           status: "active",
         });
-        console.log("Updated session status");
 
         return {
           sessionId,
@@ -52,7 +49,7 @@ export function useGameSession(userId) {
 
       return null;
     } catch (error) {
-      console.error("Error in startNewGame:", error);
+      if (__DEV__) console.error("Error in startNewGame:", error);
       throw error;
     }
   };
@@ -60,13 +57,13 @@ export function useGameSession(userId) {
   const endGame = async (sessionId) => {
     try {
       if (!sessionId) return; // Skip if no session (default level mode)
-      
+
       await updateSession({
         sessionId,
         status: "completed",
       });
     } catch (error) {
-      console.error("Error ending game:", error);
+      if (__DEV__) console.error("Error ending game:", error);
       throw error;
     }
   };

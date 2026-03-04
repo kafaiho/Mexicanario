@@ -1,4 +1,4 @@
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -6,6 +6,7 @@ import {
   Dimensions,
   Image,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocialAuth } from '../hooks/useSocialAuth';
 import CountryPicker from './CountryPicker';
 import { FONTS } from '../theme/designTokens';
 
@@ -26,15 +28,79 @@ const WHEAT = '#FFE4B5';
 const WHEAT2 = '#F5DEB3';
 
 export default function Perfil({ visible, onClose }) {
-  const { userId, user } = useAuth();
+  const { userId, user, linkGoogle, linkApple, restoreAccount } = useAuth();
   const updateUserProfile = useMutation(api.users.updateUserProfile);
+  const { signInWithGoogle, signInWithApple, googleAuthReady } = useSocialAuth();
 
   const [name, setName] = useState('');
   const [country, setCountry] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(null); // 'google' | 'apple' | null
   const [hasChanges, setHasChanges] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Queries for finding linked accounts (for restore flow)
+  const [pendingGoogleId, setPendingGoogleId] = useState(null);
+  const [pendingAppleId, setPendingAppleId] = useState(null);
+  const foundByGoogle = useQuery(
+    api.auth.getUserByGoogleId,
+    pendingGoogleId ? { googleId: pendingGoogleId } : 'skip'
+  );
+  const foundByApple = useQuery(
+    api.auth.getUserByAppleId,
+    pendingAppleId ? { appleId: pendingAppleId } : 'skip'
+  );
+
+  // When query resolves, handle the restore
+  useEffect(() => {
+    if (foundByGoogle === undefined) return; // still loading
+    if (pendingGoogleId === null) return;
+    const id = pendingGoogleId;
+    setPendingGoogleId(null);
+    setSocialLoading(null);
+    handleRestoreQueryResult(foundByGoogle, id, 'google');
+  }, [foundByGoogle]);
+
+  useEffect(() => {
+    if (foundByApple === undefined) return;
+    if (pendingAppleId === null) return;
+    const id = pendingAppleId;
+    setPendingAppleId(null);
+    setSocialLoading(null);
+    handleRestoreQueryResult(foundByApple, id, 'apple');
+  }, [foundByApple]);
+
+  const handleRestoreQueryResult = (found, socialId, provider) => {
+    if (found) {
+      Alert.alert(
+        '¡Cuenta encontrada! 🎉',
+        `Encontramos tu cuenta con ${found.name}.\n\n¿Cargar ese progreso? Esto reemplazará la sesión actual.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Restaurar progreso',
+            onPress: async () => {
+              await restoreAccount(found._id);
+              onClose();
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'No encontramos cuenta',
+        `No hay ninguna cuenta vinculada a este ${provider === 'google' ? 'Google' : 'Apple ID'}.\n\n¿Quieres vincular tu progreso actual a esta cuenta?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Vincular este progreso',
+            onPress: () => handleLinkFlow(socialId, null, provider),
+          },
+        ]
+      );
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -49,6 +115,85 @@ export default function Perfil({ visible, onClose }) {
       setHasChanges(name !== user.name || country !== user.country);
     }
   }, [name, country, user]);
+
+  // ── Social auth handlers ───────────────────────────────────────────────────
+
+  const handleLinkFlow = async (socialId, email, provider) => {
+    const linkFn = provider === 'google' ? linkGoogle : linkApple;
+    const result = await linkFn(socialId, email);
+    if (result?.success) {
+      Alert.alert('¡Vinculado! ✅', `Tu cuenta está ahora vinculada con ${provider === 'google' ? 'Google' : 'Apple'}. Tu progreso se guardará automáticamente.`);
+    } else if (result?.conflict) {
+      Alert.alert(
+        'Cuenta existente',
+        `Ya hay una cuenta vinculada a este ${provider === 'google' ? 'Google' : 'Apple ID'}.\n\n¿Quieres cargar ese progreso? (perderás el progreso actual)`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Cargar progreso anterior',
+            style: 'destructive',
+            onPress: async () => {
+              await restoreAccount(result.existingUserId);
+              onClose();
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleVincularGoogle = async () => {
+    setSocialLoading('google');
+    try {
+      const creds = await signInWithGoogle();
+      if (!creds) { setSocialLoading(null); return; }
+      await handleLinkFlow(creds.googleId, creds.email, 'google');
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo conectar con Google. Intenta de nuevo.');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleVincularApple = async () => {
+    setSocialLoading('apple');
+    try {
+      const creds = await signInWithApple();
+      if (!creds) { setSocialLoading(null); return; }
+      await handleLinkFlow(creds.appleId, creds.email, 'apple');
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo conectar con Apple. Intenta de nuevo.');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleRestaurarGoogle = async () => {
+    setSocialLoading('google-restore');
+    try {
+      const creds = await signInWithGoogle();
+      if (!creds) { setSocialLoading(null); return; }
+      // Trigger query via state — effect handles the result
+      setPendingGoogleId(creds.googleId);
+    } catch (e) {
+      setSocialLoading(null);
+      Alert.alert('Error', 'No se pudo conectar con Google. Intenta de nuevo.');
+    }
+  };
+
+  const handleRestaurarApple = async () => {
+    setSocialLoading('apple-restore');
+    try {
+      const creds = await signInWithApple();
+      if (!creds) { setSocialLoading(null); return; }
+      setPendingAppleId(creds.appleId);
+    } catch (e) {
+      setSocialLoading(null);
+      Alert.alert('Error', 'No se pudo conectar con Apple. Intenta de nuevo.');
+    }
+  };
+
+  // ── Profile save ───────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (!userId) { Alert.alert('Error', 'Debes iniciar sesión'); return; }
@@ -91,7 +236,7 @@ export default function Perfil({ visible, onClose }) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
             {/* Name field */}
             <View style={styles.field}>
               <View style={styles.fieldIcon}>
@@ -147,6 +292,92 @@ export default function Perfil({ visible, onClose }) {
                   </TouchableOpacity>
                 )}
               </View>
+            </View>
+            {/* ── Vincular cuenta ───────────────────────────────────────── */}
+            <View style={styles.socialSection}>
+              {user?.googleId || user?.appleId ? (
+                // ── Linked state ──────────────────────────────────────────
+                <View style={styles.linkedBanner}>
+                  <Text style={styles.linkedIcon}>✅</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.linkedTitle}>Cuenta vinculada</Text>
+                    <Text style={styles.linkedSub}>
+                      {user.googleId ? '🟦 Google' : '🍎 Apple'}
+                      {user.email ? `  ·  ${user.email}` : ''}
+                    </Text>
+                    <Text style={styles.linkedDesc}>Tu progreso se guarda automáticamente en la nube.</Text>
+                  </View>
+                </View>
+              ) : (
+                // ── Unlinked state ────────────────────────────────────────
+                <>
+                  <View style={styles.socialHeader}>
+                    <Text style={styles.socialTitle}>🔒 Vincular cuenta</Text>
+                    <Text style={styles.socialDesc}>Guarda y recupera tu progreso en cualquier dispositivo.</Text>
+                  </View>
+
+                  {/* Vincular buttons */}
+                  <TouchableOpacity
+                    style={[styles.socialBtn, socialLoading === 'google' && styles.socialBtnDisabled]}
+                    onPress={handleVincularGoogle}
+                    disabled={!!socialLoading || !googleAuthReady}
+                    activeOpacity={0.8}
+                  >
+                    {socialLoading === 'google'
+                      ? <ActivityIndicator size="small" color={BROWN} />
+                      : <Text style={styles.socialBtnText}>🟦  Vincular con Google</Text>
+                    }
+                  </TouchableOpacity>
+
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      style={[styles.socialBtn, socialLoading === 'apple' && styles.socialBtnDisabled]}
+                      onPress={handleVincularApple}
+                      disabled={!!socialLoading}
+                      activeOpacity={0.8}
+                    >
+                      {socialLoading === 'apple'
+                        ? <ActivityIndicator size="small" color={BROWN} />
+                        : <Text style={styles.socialBtnText}>🍎  Vincular con Apple</Text>
+                      }
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Divider */}
+                  <View style={styles.socialDivider}>
+                    <View style={styles.socialDividerLine} />
+                    <Text style={styles.socialDividerText}>¿Ya tienes cuenta guardada?</Text>
+                    <View style={styles.socialDividerLine} />
+                  </View>
+
+                  {/* Restore buttons */}
+                  <TouchableOpacity
+                    style={[styles.socialBtnOutline, socialLoading === 'google-restore' && styles.socialBtnDisabled]}
+                    onPress={handleRestaurarGoogle}
+                    disabled={!!socialLoading || !googleAuthReady}
+                    activeOpacity={0.8}
+                  >
+                    {socialLoading === 'google-restore'
+                      ? <ActivityIndicator size="small" color={AMBER} />
+                      : <Text style={styles.socialBtnOutlineText}>🟦  Restaurar con Google</Text>
+                    }
+                  </TouchableOpacity>
+
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      style={[styles.socialBtnOutline, socialLoading === 'apple-restore' && styles.socialBtnDisabled]}
+                      onPress={handleRestaurarApple}
+                      disabled={!!socialLoading}
+                      activeOpacity={0.8}
+                    >
+                      {socialLoading === 'apple-restore'
+                        ? <ActivityIndicator size="small" color={AMBER} />
+                        : <Text style={styles.socialBtnOutlineText}>🍎  Restaurar con Apple</Text>
+                      }
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
           </ScrollView>
 
@@ -288,4 +519,69 @@ const styles = StyleSheet.create({
 
   cancelBtn: { alignItems: 'center', paddingVertical: height * 0.01 },
   cancelBtnText: { fontFamily: FONTS.body, color: '#9A6030', fontSize: width * 0.037 },
+
+  // ── Social auth section ──────────────────────────────────────────────────
+  socialSection: {
+    marginTop: height * 0.012,
+    marginBottom: height * 0.008,
+  },
+
+  // Linked banner
+  linkedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FFF4',
+    borderRadius: width * 0.04,
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+    padding: width * 0.04,
+    gap: width * 0.03,
+  },
+  linkedIcon: { fontSize: width * 0.08 },
+  linkedTitle: { fontFamily: FONTS.bodyBold, fontSize: width * 0.038, color: '#2E7D32' },
+  linkedSub: { fontFamily: FONTS.bodyBold, fontSize: width * 0.034, color: BROWN, marginTop: 2 },
+  linkedDesc: { fontFamily: FONTS.body, fontSize: width * 0.029, color: '#5A8A5A', marginTop: 4 },
+
+  // Header
+  socialHeader: { marginBottom: height * 0.012 },
+  socialTitle: { fontFamily: FONTS.bodyBold, fontSize: width * 0.04, color: BROWN, marginBottom: 4 },
+  socialDesc: { fontFamily: FONTS.body, fontSize: width * 0.031, color: '#9A6030' },
+
+  // Vincular button (filled)
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: WHEAT2,
+    borderRadius: width * 0.04,
+    borderWidth: 1.5,
+    borderColor: AMBER,
+    paddingVertical: height * 0.015,
+    marginBottom: height * 0.009,
+  },
+  socialBtnDisabled: { opacity: 0.5 },
+  socialBtnText: { fontFamily: FONTS.bodyBold, fontSize: width * 0.038, color: BROWN },
+
+  // Divider
+  socialDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: width * 0.02,
+    marginVertical: height * 0.01,
+  },
+  socialDividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(139,69,19,0.2)' },
+  socialDividerText: { fontFamily: FONTS.body, fontSize: width * 0.028, color: '#9A6030' },
+
+  // Restaurar button (outline)
+  socialBtnOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: width * 0.04,
+    borderWidth: 1.5,
+    borderColor: 'rgba(210,105,30,0.4)',
+    paddingVertical: height * 0.013,
+    marginBottom: height * 0.009,
+  },
+  socialBtnOutlineText: { fontFamily: FONTS.body, fontSize: width * 0.035, color: AMBER },
 });

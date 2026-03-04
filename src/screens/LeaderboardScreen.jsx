@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Dimensions,
   ImageBackground,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,10 +18,18 @@ import LeagueCountdown from "../components/LeagueCountdown";
 import LeaguePlayerRow from "../components/LeaguePlayerRow";
 import LeagueResultModal from "../components/LeagueResultModal";
 import TopBar from "../components/TopBar";
+import AdBanner from "../components/AdBanner";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { scheduleLeagueDrama, hasPermission } from "../services/notificationService";
+import { TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
+
+// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
+const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 32 : 14));
 
 const BROWN = '#8B4513';
 const AMBER = '#D2691E';
@@ -61,6 +70,16 @@ export default function LeaderboardScreen() {
       setShowResult(true);
     }
   }, [leagueStatus?.outcome]);
+
+  // Programar drama de liga el domingo cuando el usuario abre la pantalla
+  useEffect(() => {
+    if (!leagueStatus?.joined || !leagueStatus?.rank) return;
+    const divisionIndex = (leagueStatus.division ?? 1) - 1;
+    const divInfo       = DIVISIONS[divisionIndex] ?? DIVISIONS[0];
+    hasPermission().then(granted => {
+      if (granted) scheduleLeagueDrama(leagueStatus.rank, divInfo.name).catch(() => {});
+    });
+  }, [leagueStatus?.rank, leagueStatus?.joined]);
 
   if (!leagueStatus) {
     return (
@@ -159,6 +178,8 @@ export default function LeaderboardScreen() {
         {activeTab === "mini" && <MiniTab />}
         {activeTab === "historial" && <HistorialTab history={leagueHistory} />}
       </ScrollView>
+
+      <AdBanner style={{ marginBottom: 4 }} />
 
       <LeagueResultModal
         visible={showResult}
@@ -387,7 +408,7 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   headerOuter: {
-    paddingTop: height * 0.13,
+    paddingTop: HEADER_TOP,
     paddingHorizontal: 12,
     paddingBottom: 8,
   },

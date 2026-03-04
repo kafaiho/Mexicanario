@@ -6,6 +6,7 @@ import {
   Dimensions,
   ImageBackground,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +17,7 @@ import { api } from "../../convex/_generated/api";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { TABLET_MODE } from "../utils/tabletSetup";
 
 const BROWN = "#8B4513";
 const AMBER = "#D2691E";
@@ -24,6 +26,11 @@ const WHEAT = "#FFE4B5";
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
+
+// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
+const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 48 : 14));
 
 // Emoji referencial único por palabra mexicana
 const WORD_EMOJI_MAP: Record<string, string> = {
@@ -325,7 +332,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginTop: height * 0.12,
+    marginTop: HEADER_TOP,
     marginBottom: height * 0.01,
     backgroundColor: WHEAT,
     marginHorizontal: width * 0.04,

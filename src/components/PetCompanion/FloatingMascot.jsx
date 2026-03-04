@@ -16,7 +16,7 @@ import StageCropped from './StageCropped';
  *   size    – display width in dp
  *   onTap   – callback fired after internal bounce starts
  */
-export default function FloatingMascot({ petType, stage, size, onTap }) {
+export default function FloatingMascot({ petType, stage, size, onTap, activeSkin }) {
   const floatAnim   = useRef(new Animated.Value(0)).current;
   const scaleAnim   = useRef(new Animated.Value(1)).current;
   const floatLoopRef = useRef(null);
@@ -86,7 +86,7 @@ export default function FloatingMascot({ petType, stage, size, onTap }) {
           ],
         }}
       >
-        <StageCropped petType={petType} stage={stage} size={size} />
+        <StageCropped petType={petType} stage={stage} size={size} activeSkin={activeSkin} />
       </Animated.View>
 
       {/* Dynamic ground shadow */}

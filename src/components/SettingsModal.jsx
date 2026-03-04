@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -10,23 +10,25 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { setSoundEnabled } from "../utils/soundManager";
+import { presentCustomerCenter } from "../services/RevenueCatService";
+import { setMusicEnabled, setSoundEnabled } from "../utils/soundManager";
+import AccountDeletionModal from "./AccountDeletionModal";
 
 const { height } = Dimensions.get("window");
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg:          "#FFF8ED",
-  border:      "#D36B1E",
-  title:       "#5C3A21",
-  closeBtn:    "#D36B1E",
-  toggleOn:    "#D36B1E",
-  toggleOff:   "rgba(139,69,19,0.18)",
+  bg: "#FFF8ED",
+  border: "#D36B1E",
+  title: "#5C3A21",
+  closeBtn: "#D36B1E",
+  toggleOn: "#D36B1E",
+  toggleOff: "rgba(139,69,19,0.18)",
   toggleLabel: "#B38E6A",
-  itemBg:      "#F5E6C8",
-  itemText:    "#5C3A21",
-  divider:     "rgba(92,58,33,0.12)",
-  overlay:     "rgba(0,0,0,0.55)",
+  itemBg: "#F5E6C8",
+  itemText: "#5C3A21",
+  divider: "rgba(92,58,33,0.12)",
+  overlay: "rgba(0,0,0,0.55)",
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -72,9 +74,10 @@ export default function SettingsModal({
   onAvatar,
   onInvitar,
 }) {
-  const [musicEnabled, setMusicEnabled] = useState(true);
-  const [soundFx,      setSoundFx]      = useState(true);
+  const [musicOn, setMusicOn] = useState(true);
+  const [soundFx, setSoundFx] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Load persisted preferences when modal opens
   useEffect(() => {
@@ -83,17 +86,17 @@ export default function SettingsModal({
       pairs.forEach(([key, val]) => {
         if (val === null) return;
         const bool = val === "true";
-        if (key === "pref_music") setMusicEnabled(bool);
+        if (key === "pref_music") setMusicOn(bool);
         if (key === "pref_sound") { setSoundFx(bool); setSoundEnabled(bool); }
         if (key === "pref_notif") setNotifEnabled(bool);
       });
     });
   }, [visible]);
 
-  const handleMusicToggle = (val) => {
-    setMusicEnabled(val);
+  const handleMusicToggle = async (val) => {
+    setMusicOn(val);
     AsyncStorage.setItem("pref_music", String(val));
-    // Connects to background music player when implemented
+    await setMusicEnabled(val); // immediately pauses/resumes BGM
   };
 
   const handleSoundToggle = (val) => {
@@ -125,9 +128,9 @@ export default function SettingsModal({
 
           {/* ── Toggle row ── */}
           <View style={styles.toggleRow}>
-            <ToggleBtn icon="musical-notes" label="Música"  value={musicEnabled} onToggle={handleMusicToggle} />
-            <ToggleBtn icon="volume-high"   label="Sonido"  value={soundFx}      onToggle={handleSoundToggle} />
-            <ToggleBtn icon="notifications" label="Avisos"  value={notifEnabled} onToggle={handleNotifToggle} />
+            <ToggleBtn icon="musical-notes" label="Música" value={musicOn} onToggle={handleMusicToggle} />
+            <ToggleBtn icon="volume-high" label="Sonido" value={soundFx} onToggle={handleSoundToggle} />
+            <ToggleBtn icon="notifications" label="Avisos" value={notifEnabled} onToggle={handleNotifToggle} />
           </View>
 
           {/* ── Divider ── */}
@@ -139,14 +142,16 @@ export default function SettingsModal({
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           >
-            <MenuItem icon="log-out-outline"       label="Desconectar"            onPress={onDisconnect} />
-            <MenuItem icon="person-outline"        label="Perfil"                 onPress={onPerfill} />
-            <MenuItem icon="people-outline"        label="Invitar"                onPress={onInvitar} />
-            <MenuItem icon="cafe-outline"          label="Apoyar"                 onPress={onApoyar} />
-            <MenuItem icon="star-outline"          label="Calificar"              onPress={onCalificar} />
-            <MenuItem icon="document-text-outline" label="Términos de Servicio"   onPress={onTerminosdeservio} />
-            <MenuItem icon="shield-outline"        label="Política de Privacidad" onPress={onPrivacy} />
-            <MenuItem icon="mail-outline"          label="Contactar"              onPress={onSupport} />
+            <MenuItem icon="log-out-outline" label="Desconectar" onPress={onDisconnect} />
+            <MenuItem icon="star-outline" label="Mexicanario Plus ⭐" onPress={presentCustomerCenter} />
+            <MenuItem icon="person-outline" label="Perfil" onPress={onPerfill} />
+            <MenuItem icon="people-outline" label="Invitar" onPress={onInvitar} />
+            <MenuItem icon="cafe-outline" label="Apoyar" onPress={onApoyar} />
+            <MenuItem icon="star-outline" label="Calificar" onPress={onCalificar} />
+            <MenuItem icon="document-text-outline" label="Términos de Servicio" onPress={onTerminosdeservio} />
+            <MenuItem icon="shield-outline" label="Política de Privacidad" onPress={onPrivacy} />
+            <MenuItem icon="mail-outline" label="Contactar" onPress={onSupport} />
+            <MenuItem icon="trash-outline" label="Eliminar Cuenta" onPress={() => setShowDeleteModal(true)} />
           </ScrollView>
 
           {/* ── Footer dismiss ── */}
@@ -156,6 +161,9 @@ export default function SettingsModal({
 
         </View>
       </View>
+
+      {/* Account Deletion — Apple required */}
+      <AccountDeletionModal visible={showDeleteModal} onClose={() => setShowDeleteModal(false)} />
     </Modal>
   );
 }

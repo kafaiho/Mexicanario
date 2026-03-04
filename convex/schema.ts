@@ -23,6 +23,7 @@ export default defineSchema({
     region: v.string(),
     category: v.optional(v.string()), // Added for the Colección screen
     difficulty: v.optional(v.number()), // 1=Fácil 2=Medio 3=Difícil (optional per-word override)
+    pack: v.optional(v.string()),      // "insultos" | "suegra" — solo para palabras adultas
   }),
 
   // Levels table to store level configurations
@@ -56,12 +57,14 @@ export default defineSchema({
     petLastPlayed: v.optional(v.number()),     // timestamp último juego (ms)
     petBornAt: v.optional(v.number()),         // timestamp cuando eclosionó el huevo
     petVinculo: v.optional(v.number()),        // vínculo invisible 0-2000, NUNCA mostrar en UI
+    streakFreezeActive: v.optional(v.boolean()), // legacy — ya no se usa para lógica
+    streakFreezeCount: v.optional(v.number()),   // protectores acumulados (≥0)
     // ── Power-up inventory ──────────────────────────────────────────────
     powerups: v.optional(v.object({
-      hints:     v.optional(v.number()),   // pistas de letra
-      skips:     v.optional(v.number()),   // saltar palabra
+      hints: v.optional(v.number()),   // pistas de letra
+      skips: v.optional(v.number()),   // saltar palabra
       completes: v.optional(v.number()),   // completar palabra
-      synonyms:  v.optional(v.number()),   // pista de frase
+      synonyms: v.optional(v.number()),   // pista de frase
     })),
     // ── Free coins cooldown ─────────────────────────────────────────────
     freeCoinsClaimedAt: v.optional(v.number()),  // timestamp última reclamación gratis
@@ -84,7 +87,25 @@ export default defineSchema({
     // ── Daily missions ───────────────────────────────────────────────────────
     bestComboToday: v.optional(v.number()),      // mejor combo del día actual
     comboTodayDate: v.optional(v.string()),      // "YYYY-MM-DD" para reset diario de combo
-  }),
+    // ── Social auth linking (optional) ─────────────────────────────────────
+    email: v.optional(v.string()),            // email from Google/Apple
+    googleId: v.optional(v.string()),            // Google OAuth `sub`
+    appleId: v.optional(v.string()),            // Apple user identifier
+    // ── Multi-mascota slots ──────────────────────────────────────────────────
+    petSlots: v.optional(v.string()),            // JSON: { ajolote:{...}, xolo:{...}, alebrije:{...}, nahual_norte:{...}, ... }
+    // ── Mexicanario Plus subscription ───────────────────────────────────────
+    mexPlusExpiresAt: v.optional(v.number()),    // epoch ms expiry; active when > Date.now()
+    // ── Cuates / social ─────────────────────────────────────────────────────
+    username: v.optional(v.string()),            // nombre único elegido por el jugador
+    passwordHash: v.optional(v.string()),        // SHA-256 de la contraseña (hex)
+    // ── Skins & contenido desbloqueado ───────────────────────────────────────
+    purchasedSkins: v.optional(v.array(v.string())),         // IDs de skins compradas con monedas
+    adultContentUnlocked: v.optional(v.array(v.string())),  // IDs de categorías +18 desbloqueadas
+  })
+    .index("by_googleId", ["googleId"])
+    .index("by_appleId", ["appleId"])
+    .index("by_email", ["email"])
+    .index("by_username", ["username"]),
 
   // Colections for the game
   collections: defineTable({
@@ -248,6 +269,30 @@ export default defineSchema({
       claimed: v.boolean(),
     })),
   }).index("by_user_date", ["userId", "dateStr"]),
+
+  // ── Nahual runner scores ──────────────────────────────────────────────────
+  // One record per user — stores their best scores per period
+  nahualScores: defineTable({
+    userId: v.id("users"),
+    allTimeBest: v.number(),
+    dailyBest: v.number(),
+    dailyDate: v.string(),   // "YYYY-MM-DD"
+    weeklyBest: v.number(),
+    weeklyStr: v.string(),   // "YYYY-WXX"
+  })
+    .index("by_user", ["userId"])
+    .index("by_alltime", ["allTimeBest"])
+    .index("by_daily", ["dailyDate", "dailyBest"])
+    .index("by_weekly", ["weeklyStr", "weeklyBest"]),
+
+  // ── Sistema de cuates (amigos) ────────────────────────────────────────────
+  friendships: defineTable({
+    userId:   v.id("users"),    // quien agregó
+    friendId: v.id("users"),    // a quien agregó
+    createdAt: v.number(),
+  })
+    .index("by_user",        ["userId"])
+    .index("by_user_friend", ["userId", "friendId"]),
 
   // ── Failed word review system ──────────────────────────────────────────────
   // Words the user failed are scheduled to reappear 2 days later.

@@ -1,5 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getOrderedLevels } from "./levelOrdering";
+
+/** Strip accents/tildes so words are guessable without special keys */
+function normalizeWord(str: string): string {
+  return str
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // remove diacritics (tildes, accents)
+}
 
 export const getCurrentLevel = query({
   args: { userId: v.id("users") },
@@ -36,8 +45,6 @@ export const getCurrentLevel = query({
       };
     }
 
-    console.log("getCurrentLevel");
-    console.log("args.userId", args.userId);
     const user = await ctx.db.get(args.userId);
     if (!user) {
       // If user not found, return level 1 as default
@@ -127,6 +134,27 @@ export const getCurrentLevel = query({
     }
 
     const word = await ctx.db.get(levelConfig.wordId);
+
+    // Task 6: Check for +18 category access
+    if (word?.category === "adulto") {
+      const unlocked = (user as any).adultContentUnlocked ?? [];
+      const categoryId = "content_" + ((word as any).pack ?? "insultos");
+      if (!unlocked.includes(categoryId) && !unlocked.includes("content_insultos") && !unlocked.includes("content_suegra")) {
+        // We return a flagged response instead of throwing to allow the UI to handle it gracefully
+        return {
+          level: currentLevel,
+          word: "BLOQUEADO",
+          meaning: "Contenido Premium +18",
+          example: "Para desbloquear esta categoría, ve a la tienda.",
+          region: word?.region || "México",
+          reward: levelConfig.reward,
+          isLastLevel: false,
+          isDefaultLevel: false,
+          isLocked: true,
+        };
+      }
+    }
+
     const allLevels = await ctx.db.query("levels").collect();
     const maxLevel = Math.max(...allLevels.map(l => l.levelNumber));
 
@@ -203,20 +231,24 @@ export const completeLevel = mutation({
     const DEFAULT_REWARD = { coins: 50, diamonds: 1 };
     const reward = levelConfig?.reward ?? DEFAULT_REWARD;
 
-    // Update user's current level if they completed the next level
+    // Update user's current level if they completed the next level.
+    // Compare against the *effective* level (clamped to maxLevel) so users who
+    // surpassed the available word count are never stuck.
+    const allLevelsCount = await ctx.db.query("levels").collect();
+    const maxLevel = allLevelsCount.length || 1;
     const currentLevel = user.currentLevel || 1;
+    const effectiveLevel = Math.min(currentLevel, maxLevel);
     let levelUp = false;
-    if (args.levelNumber === currentLevel) {
+    let nextLevel = currentLevel;
+    if (args.levelNumber === effectiveLevel) {
       levelUp = true;
+      // When user finishes the last available word, loop back to level 1
+      nextLevel = currentLevel >= maxLevel ? 1 : currentLevel + 1;
       await ctx.db.patch(args.userId, {
-        currentLevel: currentLevel + 1,
-        tacos: ((user as any).tacos ?? 0) + 1,  // +1 taco por palabra adivinada
+        currentLevel: nextLevel,
+        tacos: ((user as any).tacos ?? 0) + 1,
       } as any);
     }
-
-    // Check for new achievements after level completion
-    // Note: This would need to be called from the frontend after level completion
-    // since mutations can't call other mutations directly
 
     // Give rewards
     const newCoins = (user.coins || 0) + reward.coins;
@@ -230,7 +262,7 @@ export const completeLevel = mutation({
       success: true,
       level: args.levelNumber,
       levelUp,
-      newLevel: levelUp ? currentLevel + 1 : currentLevel,
+      newLevel: nextLevel,
       reward,
       newCoins,
       newDiamonds,
@@ -239,24 +271,43 @@ export const completeLevel = mutation({
 });
 
 export const getAllLevels = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, { userId }) => {
+    const rawLevels = await ctx.db.query("levels").collect();
+    const rawWords = await ctx.db.query("words").collect();
+
+    // Use same ordering logic as gameplay so map matches the game exactly
+    const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "");
+
+    const wordMap = new Map(rawWords.map((w) => [w._id.toString(), w]));
+    return ordered.map((lvl) => {
+      const wordDoc = wordMap.get(lvl.wordId?.toString() ?? "");
+      return {
+        ...lvl,
+        word: normalizeWord(wordDoc?.word ?? `Nivel ${lvl.levelNumber}`),
+        meaning: wordDoc?.meaning ?? "",
+        example: wordDoc?.example ?? "",
+        region: wordDoc?.region ?? "",
+        isAdult: wordDoc?.category === "adulto",
+        packId: (wordDoc as any)?.pack ?? null,
+      };
+    });
+  },
+});
+
+// Fetch the first levelNumber of an adult pack (used for "¡Jugar ahora!" after purchase)
+export const getAdultPackFirstLevel = query({
+  args: { pack: v.string() },
+  handler: async (ctx, args) => {
     const allLevels = await ctx.db.query("levels").collect();
-    const sorted = allLevels.sort((a, b) => a.levelNumber - b.levelNumber);
-    // Enrich each level with its word data for the carousel display
-    const enriched = await Promise.all(
-      sorted.map(async (lvl) => {
-        const wordDoc = lvl.wordId ? await ctx.db.get(lvl.wordId) : null;
-        return {
-          ...lvl,
-          word: wordDoc?.word ?? `Nivel ${lvl.levelNumber}`,
-          meaning: wordDoc?.meaning ?? "",
-          example: wordDoc?.example ?? "",
-          region: wordDoc?.region ?? "",
-        };
-      })
-    );
-    return enriched;
+    const allWords  = await ctx.db.query("words").collect();
+    const wordMap   = new Map(allWords.map((w) => [w._id.toString(), w]));
+    for (const lvl of allLevels) {
+      const word = wordMap.get(lvl.wordId.toString());
+      if (word?.category === "adulto" && (word as any)?.pack === args.pack)
+        return lvl.levelNumber;
+    }
+    return null;
   },
 });
 

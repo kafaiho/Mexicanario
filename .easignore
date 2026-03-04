@@ -1,2 +1,6 @@
 /android
 /ios
+/.agents
+/.agent
+/.claude
+/scripts

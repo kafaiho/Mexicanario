@@ -14,37 +14,42 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import CoinFlyOverlay from './CoinFlyOverlay';
-import useCoinFly from '../hooks/useCoinFly';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import useCoinFly from '../hooks/useCoinFly';
+import useDiamondFly from '../hooks/useDiamondFly';
+import { playSound } from '../utils/soundManager';
+import { scheduleWheelReady, hasPermission } from '../services/notificationService';
+import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from '../utils/tabletSetup';
+import CoinFlyOverlay from './CoinFlyOverlay';
+import DiamondFlyOverlay from './DiamondFlyOverlay';
 
 const { width, height } = Dimensions.get('window');
 
 // ─── Prize segments ────────────────────────────────────────────────────────────
 // 8 segments, 45° each, listed clockwise starting from the TOP of the wheel image
 const SEGMENTS = [
-  { label: '20',  coins: 20,  emoji: '🪙', type: 'coins' },
-  { label: '60',  coins: 60,  emoji: '🪙', type: 'coins' },
-  { label: '40',  coins: 40,  emoji: '🪙', type: 'coins' },
-  { label: '25',  coins: 25,  emoji: '🪙', type: 'coins' },
-  { label: '70',  coins: 70,  emoji: '🪙', type: 'coins' },
-  { label: '30',  coins: 30,  emoji: '🪙', type: 'coins' },
-  { label: '💎 1', coins: 0,  emoji: '💎', type: 'diamond', diamonds: 1 },
-  { label: '45',  coins: 45,  emoji: '🪙', type: 'coins' },
+  { label: '💎 3', coins: 0, emoji: '💎', type: 'diamond', diamonds: 3 },
+  { label: '60', coins: 60, emoji: '🪙', type: 'coins' },
+  { label: '40', coins: 40, emoji: '🪙', type: 'coins' },
+  { label: '💎 1', coins: 0, emoji: '💎', type: 'diamond', diamonds: 1 },
+  { label: '70', coins: 70, emoji: '🪙', type: 'coins' },
+  { label: '30', coins: 30, emoji: '🪙', type: 'coins' },
+  { label: '💎 5', coins: 0, emoji: '💎', type: 'diamond', diamonds: 5 },
+  { label: '45', coins: 45, emoji: '🪙', type: 'coins' },
 ];
 
-const NUM_SEGMENTS   = SEGMENTS.length;          // 8
-const SEGMENT_ANGLE  = 360 / NUM_SEGMENTS;       // 45°
+const NUM_SEGMENTS = SEGMENTS.length;          // 8
+const SEGMENT_ANGLE = 360 / NUM_SEGMENTS;       // 45°
 const SPIN_ROTATIONS = 6;                        // full rotations before landing
-const COOLDOWN_MS    = 24 * 60 * 60 * 1000;     // 24 hours
-const STORAGE_KEY    = 'wheel_last_spin';
+const COOLDOWN_MS = 24 * 60 * 60 * 1000;     // 24 hours
+const STORAGE_KEY = 'wheel_last_spin';
 
 const getCoinPillFallback = () => {
-  const topPad = Platform.OS === 'ios' ? height * 0.058 : height * 0.04;
-  const pillH  = width * 0.075;
-  const pillW  = width * 0.22;
-  const pillX  = width - width * 0.03 - pillW;
+  const topPad = Platform.OS === 'ios' ? 52 : 36;
+  const pillH = 36;
+  const pillW = 110;
+  const pillX = REAL_WIDTH - 16 - pillW;  // top-right of real screen
   return { x: pillX, y: topPad, w: pillW, h: pillH };
 };
 
@@ -62,13 +67,14 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
   const { userId } = useAuth();
   const updateCurrency = useMutation(api.users.updateUserCurrency);
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
+  const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
-  const spinAnim    = useRef(new Animated.Value(0)).current;
-  const currentDeg  = useRef(0); // tracks real current rotation degree
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const currentDeg = useRef(0); // tracks real current rotation degree
 
-  const [spinning,    setSpinning]    = useState(false);
-  const [prize,       setPrize]       = useState(null);   // segment index when done
-  const [cooldownMs,  setCooldownMs]  = useState(0);
+  const [spinning, setSpinning] = useState(false);
+  const [prize, setPrize] = useState(null);   // segment index when done
+  const [cooldownMs, setCooldownMs] = useState(0);
   const [adAvailable, setAdAvailable] = useState(true);   // second spin via ad
   const tickRef = useRef(null);
 
@@ -87,7 +93,7 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
       const remaining = Math.max(0, last + COOLDOWN_MS - Date.now());
       setCooldownMs(remaining);
       if (remaining > 0) startTick();
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function startTick() {
@@ -108,11 +114,12 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
 
     // Angle where this segment's center ends up at the top
     // Current degree offset + full rotations + target segment angle + small jitter
-    const jitter      = (Math.random() - 0.5) * (SEGMENT_ANGLE * 0.5); // ± half segment
+    const jitter = (Math.random() - 0.5) * (SEGMENT_ANGLE * 0.5); // ± half segment
     const targetDelta = SPIN_ROTATIONS * 360 + segmentIndex * SEGMENT_ANGLE + jitter;
-    const newDeg      = currentDeg.current + targetDelta;
+    const newDeg = currentDeg.current + targetDelta;
 
     spinAnim.setValue(currentDeg.current);
+    playSound('wheel_spin'); // ← sonido de ruleta girando
 
     Animated.timing(spinAnim, {
       toValue: newDeg,
@@ -124,17 +131,28 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
       currentDeg.current = newDeg % 360; // normalize
       setSpinning(false);
       setPrize(segmentIndex);
+      playSound('celebration'); // ← fanfarria al ganar premio
 
       // Give reward
       const seg = SEGMENTS[segmentIndex];
       if (seg.type === 'coins') {
         const t = getCoinPillFallback();
         triggerCoinFly({
-          fromX: width / 2,
-          fromY: height * 0.38,
+          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+          fromY: TABLET_MODE ? REAL_HEIGHT * 0.45 : height * 0.38,
           toX: t.x + t.w / 2,
           toY: t.y + t.h / 2,
           coins: seg.coins,
+        });
+      } else if (seg.type === 'diamond') {
+        // Fallback assuming diamond pill is near the coin pill, slightly offset
+        const t = getCoinPillFallback();
+        triggerDiamondFly({
+          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+          fromY: TABLET_MODE ? REAL_HEIGHT * 0.45 : height * 0.38,
+          toX: t.x - 50, // Ajuste aproximado asumiendo que diamantes están al lado derecho
+          toY: t.y + t.h / 2,
+          diamonds: seg.diamonds,
         });
       }
       try {
@@ -157,6 +175,8 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
     await AsyncStorage.setItem(STORAGE_KEY, Date.now().toString());
     setCooldownMs(COOLDOWN_MS);
     startTick();
+    // Notificar cuando la ruleta esté lista de nuevo
+    if (await hasPermission()) scheduleWheelReady().catch(() => {});
   }
 
   function handleAdSpin() {
@@ -187,7 +207,7 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
     extrapolate: 'extend',
   });
 
-  const wonPrize   = prize !== null ? SEGMENTS[prize] : null;
+  const wonPrize = prize !== null ? SEGMENTS[prize] : null;
   const canFreeSpin = !spinning && cooldownMs <= 0;
   const cooldownLabel = formatCooldown(cooldownMs);
 
@@ -248,17 +268,20 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
               )}
             </TouchableOpacity>
 
-            {/* Sin Anuncios subscription button */}
+            {/* Mexicanario Plus button */}
             <TouchableOpacity
               style={styles.adButton}
               onPress={() => { onClose(); onOpenShop?.(); }}
               activeOpacity={0.8}
             >
-              <Text style={styles.adButtonText}>🚫📺 Sin anuncios — $5 USD/mes</Text>
+              <Text style={styles.adButtonText}>⭐ Mexicanario Plus — $4.99 USD/mes</Text>
             </TouchableOpacity>
           </View>
         </View>
-      <CoinFlyOverlay coins={flyCoins} particles={particles} onCoinArrived={onCoinArrived} />
+
+        {/* Fly overlays */}
+        <CoinFlyOverlay coins={flyCoins} particles={particles} onCoinArrived={onCoinArrived} />
+        <DiamondFlyOverlay diamonds={flyDiamonds} particles={diamondParticles} onDiamondArrived={onDiamondArrived} />
       </View>
     </Modal>
   );

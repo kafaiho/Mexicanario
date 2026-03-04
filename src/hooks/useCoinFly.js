@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 
 const coinCountForReward = (coins) => {
-  if (coins <= 75)  return 3;
-  if (coins <= 250) return 5;
-  if (coins <= 700) return 7;
-  return 8;
+  if (coins <= 75)  return 5;
+  if (coins <= 250) return 8;
+  if (coins <= 700) return 11;
+  return 14;
 };
 
 export default function useCoinFly() {
@@ -27,10 +27,10 @@ export default function useCoinFly() {
       fromY,
       toX,
       toY,
-      delay: i * 80,
-      cpY: Math.min(fromY, toY) - 110 - Math.random() * 40,
-      cpX: (fromX + toX) / 2 + (Math.random() - 0.5) * 60,
-      duration: 800 + Math.random() * 300,
+      delay: i * 130,
+      cpY: Math.min(fromY, toY) - 130 - Math.random() * 50,
+      cpX: (fromX + toX) / 2 + (Math.random() - 0.5) * 70,
+      duration: 1100 + Math.random() * 400,
     }));
 
     setFlyCoins((prev) => [...prev, ...newCoins]);

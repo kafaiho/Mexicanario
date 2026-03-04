@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
-  useDerivedValue,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSequence,
@@ -36,26 +36,27 @@ import {
  *   mood     – 'idle' | 'happy' | 'sad' | 'neutral' | 'joyful'
  *   reaction – 'correct' | 'wrong' | null
  *   size     – container size in dp
+ *   skin     – text/emoji or image source for regional accessory
  */
-export default function PetSprite({ assets, stage, mood, reaction, size }) {
+export default function PetSprite({ assets, stage, mood, reaction, size, skin }) {
   // ── Shared values ────────────────────────────────────────────────────────
-  const breathScale   = useSharedValue(1.0);
-  const celebrateY    = useSharedValue(0);
-  const squashX       = useSharedValue(1.0);
-  const squashY       = useSharedValue(1.0);
-  const sadY          = useSharedValue(0);
-  const sadScaleV     = useSharedValue(1.0);
+  const breathScale = useSharedValue(1.0);
+  const celebrateY = useSharedValue(0);
+  const squashX = useSharedValue(1.0);
+  const squashY = useSharedValue(1.0);
+  const sadY = useSharedValue(0);
+  const sadScaleV = useSharedValue(1.0);
   // Parallax per layer (oscillate up/down)
-  const bodyParallax  = useSharedValue(0);
+  const bodyParallax = useSharedValue(0);
   const wingsParallax = useSharedValue(0);
-  const auraParallax  = useSharedValue(0);
+  const auraParallax = useSharedValue(0);
 
   // ── Breathing loop ───────────────────────────────────────────────────────
   useEffect(() => {
     breathScale.value = withRepeat(
       withSequence(
         withTiming(BREATHING.to, { duration: BREATHING.duration, easing: BREATHING.easing }),
-        withTiming(1.0,          { duration: BREATHING.duration, easing: BREATHING.easing })
+        withTiming(1.0, { duration: BREATHING.duration, easing: BREATHING.easing })
       ),
       -1,
       false
@@ -68,7 +69,7 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
     bodyParallax.value = -bA;
     bodyParallax.value = withRepeat(
       withSequence(
-        withTiming( bA, { duration: bP / 2, easing: Easing.inOut(Easing.ease) }),
+        withTiming(bA, { duration: bP / 2, easing: Easing.inOut(Easing.ease) }),
         withTiming(-bA, { duration: bP / 2, easing: Easing.inOut(Easing.ease) })
       ),
       -1
@@ -79,7 +80,7 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
     wingsParallax.value = withRepeat(
       withSequence(
         withTiming(-wA, { duration: wP / 2, easing: Easing.inOut(Easing.ease) }),
-        withTiming( wA, { duration: wP / 2, easing: Easing.inOut(Easing.ease) })
+        withTiming(wA, { duration: wP / 2, easing: Easing.inOut(Easing.ease) })
       ),
       -1
     );
@@ -88,7 +89,7 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
     auraParallax.value = 0;
     auraParallax.value = withRepeat(
       withSequence(
-        withTiming( aA, { duration: aP / 2, easing: Easing.inOut(Easing.ease) }),
+        withTiming(aA, { duration: aP / 2, easing: Easing.inOut(Easing.ease) }),
         withTiming(-aA, { duration: aP / 2, easing: Easing.inOut(Easing.ease) })
       ),
       -1
@@ -110,24 +111,24 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
 
     // Squash then stretch then spring back
     squashX.value = withSequence(
-      withTiming(TAP_SQUASH.scaleX,   { duration: TAP_SQUASH.duration }),
-      withTiming(TAP_STRETCH.scaleX,  { duration: TAP_STRETCH.duration }),
+      withTiming(TAP_SQUASH.scaleX, { duration: TAP_SQUASH.duration }),
+      withTiming(TAP_STRETCH.scaleX, { duration: TAP_STRETCH.duration }),
       withSpring(1.0, TAP_SPRING_BACK)
     );
     squashY.value = withSequence(
-      withTiming(TAP_SQUASH.scaleY,   { duration: TAP_SQUASH.duration }),
-      withTiming(TAP_STRETCH.scaleY,  { duration: TAP_STRETCH.duration }),
+      withTiming(TAP_SQUASH.scaleY, { duration: TAP_SQUASH.duration }),
+      withTiming(TAP_STRETCH.scaleY, { duration: TAP_STRETCH.duration }),
       withSpring(1.0, TAP_SPRING_BACK)
     );
   }, []);
 
   // ── Sad droop ────────────────────────────────────────────────────────────
   const triggerSad = useCallback(() => {
-    sadY.value     = withTiming(SAD_DROOP.translateY, { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
-    sadScaleV.value = withTiming(SAD_DROOP.scale,      { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
+    sadY.value = withTiming(SAD_DROOP.translateY, { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
+    sadScaleV.value = withTiming(SAD_DROOP.scale, { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
     // Auto-recover after 1.5s
     setTimeout(() => {
-      sadY.value     = withTiming(0,   { duration: 400 });
+      sadY.value = withTiming(0, { duration: 400 });
       sadScaleV.value = withTiming(1.0, { duration: 400 });
     }, 1500);
   }, []);
@@ -174,12 +175,12 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
 
   // ── Sprite sheet render (new system) ────────────────────────────────────
   if (assets?.sheet) {
-    const crop  = assets[stage] ?? assets[1];
+    const crop = assets[stage] ?? assets[1];
     const scale = size / Math.max(crop.w, crop.h);
-    const imgW  = assets.sheetWidth  * scale;
-    const imgH  = assets.sheetHeight * scale;
-    const offX  = crop.x * scale;
-    const offY  = crop.y * scale;
+    const imgW = assets.sheetWidth * scale;
+    const imgH = assets.sheetHeight * scale;
+    const offX = crop.x * scale;
+    const offY = crop.y * scale;
 
     return (
       <View style={[styles.container, { width: size, height: size }]}>
@@ -207,6 +208,13 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
             />
           </Animated.View>
         </View>
+
+        {/* Accessory/Skin layer for Sprite Sheet */}
+        {skin ? (
+          <Animated.View style={[styles.layer, { width: size, height: size, alignItems: 'center', justifyContent: 'center' }, bodyStyle]} pointerEvents="none">
+            <Text style={{ fontSize: size * 0.35, position: 'absolute', top: size * -0.1, left: size * 0.4 }}>{skin}</Text>
+          </Animated.View>
+        ) : null}
       </View>
     );
   }
@@ -241,6 +249,13 @@ export default function PetSprite({ assets, stage, mood, reaction, size }) {
         style={[styles.layer, { width: size, height: size }, bodyStyle]}
         resizeMode="contain"
       />
+
+      {/* Accessory/Skin layer — animated alongside the body */}
+      {skin ? (
+        <Animated.View style={[styles.layer, { width: size, height: size, alignItems: 'center', justifyContent: 'center' }, bodyStyle]} pointerEvents="none">
+          <Text style={{ fontSize: size * 0.35, position: 'absolute', top: size * -0.1, left: size * 0.4 }}>{skin}</Text>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

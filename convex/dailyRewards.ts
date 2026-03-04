@@ -1,15 +1,16 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-// Daily rewards configuration
+// Daily rewards configuration (coins only as per latest strategy)
+// For Day 7, we'll use a base value here, but the mutation will handle the randomness.
 const DAILY_REWARDS = {
-  1: { coins: 50, diamonds: 0 },    // Day 1
-  2: { coins: 75, diamonds: 0 },    // Day 2
-  3: { coins: 100, diamonds: 0 },   // Day 3
-  4: { coins: 125, diamonds: 0 },   // Day 4
-  5: { coins: 150, diamonds: 1 },   // Day 5
-  6: { coins: 175, diamonds: 1 },   // Day 6
-  7: { coins: 200, diamonds: 2 },   // Day 7 (Weekly bonus)
+  1: { coins: 10, diamonds: 0 },
+  2: { coins: 15, diamonds: 0 },
+  3: { coins: 20, diamonds: 0 },
+  4: { coins: 25, diamonds: 0 },
+  5: { coins: 30, diamonds: 0 },
+  6: { coins: 35, diamonds: 0 },
+  7: { coins: 125, diamonds: 0 }, // Median for UI, randomness in claimDailyReward
 };
 
 const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
@@ -44,7 +45,7 @@ export const getDailyRewardStatus = query({
     // Check if streak is broken (more than 48 hours since last claim)
     const streakBroken = now - dailyReward.lastClaimDate > 2 * MILLISECONDS_IN_DAY;
     const currentStreak = streakBroken ? 0 : dailyReward.currentStreak;
-    
+
     // Next reward day (1-7)
     const nextRewardDay = ((currentStreak % 7) + 1) as keyof typeof DAILY_REWARDS;
 
@@ -83,7 +84,12 @@ export const claimDailyReward = mutation({
 
     // Calculate reward day (1-7)
     const rewardDay = ((currentStreak - 1) % 7 + 1) as keyof typeof DAILY_REWARDS;
-    const reward = DAILY_REWARDS[rewardDay];
+    let reward = { ...DAILY_REWARDS[rewardDay] };
+
+    // Day 7: Variable reward (Piñata) between 50 and 200 coins
+    if (rewardDay === 7) {
+      reward.coins = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
+    }
 
     // Update or create daily rewards record
     const dailyRewardId = status?._id ?? await ctx.db.insert("dailyRewards", {

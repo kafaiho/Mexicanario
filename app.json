@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "game",
-    "slug": "game",
+    "name": "Mexicanario",
+    "slug": "mexicanario",
     "version": "1.0.0",
+    "scheme": "mexicanario",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -12,19 +13,42 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-4368195883573068~7878585744",
+          "iosAppId": "ca-app-pub-4368195883573068~6820150367"
+        }
+      ],
+      "expo-web-browser",
+      "expo-apple-authentication",
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "Usamos datos anónimos para mostrarte anuncios relevantes y mejorar tu experiencia en Mexicanario."
+        }
+      ]
+    ],
     "ios": {
+      "bundleIdentifier": "com.kafaiho.mexicanario",
       "supportsTablet": true,
       "infoPlist": {
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortrait"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown"
+        ],
+        "NSUserTrackingUsageDescription": "Usamos datos anónimos para mostrarte anuncios relevantes y mejorar tu experiencia en Mexicanario.",
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSExceptionDomains": {
-            "convex.cloud": {
-              "NSIncludesSubdomains": true,
-              "NSTemporaryExceptionAllowsInsecureHTTPSLoads": true,
-              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
-            }
-          }
-        }
+          "NSAllowsArbitraryLoads": false
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -33,11 +57,19 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.game"
+      "package": "com.kafaiho.mexicanario",
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ]
     },
-
     "web": {
       "favicon": "./assets/logo.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ea949252-b664-4472-b1a6-afcdadc99cc9"
+      }
+    },
+    "owner": "kafai"
   }
 }

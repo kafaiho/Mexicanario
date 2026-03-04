@@ -4,16 +4,24 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { ConvexProvider, ConvexReactClient, useMutation } from "convex/react";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { Animated, Image, Platform, Pressable, Text, View } from "react-native";
-import config from "./convex/config";
+import { Animated, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import mobileAds from "react-native-google-mobile-ads";
 import { api } from "./convex/_generated/api";
+import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import { initRevenueCat } from "./src/services/RevenueCatService";
 import { setupNotificationHandler } from "./src/services/notificationService";
+import { addCustomerInfoListener, initRevenueCat } from "./src/services/RevenueCatService";
+
+LogBox.ignoreLogs([
+  "expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go",
+]);
+
+const MAX_APP_WIDTH = 430;
 
 // Import screens
 import Apoyar from "./src/components/Apoyar";
 import Calificar from "./src/components/Calificar";
+import DailyRewardModal, { useDailyReward } from "./src/components/DailyRewardModal";
 import DisconnectModal from "./src/components/DisconnectModal";
 import Heriokio from "./src/components/Heriokio";
 import Invitar from "./src/components/Invitar";
@@ -25,21 +33,20 @@ import SupportModal from "./src/components/SupportModal";
 import Terminosdeservio from "./src/components/Terminosdeservio";
 import AchievementsScreen from "./src/screens/AchievementsScreen";
 import ColeccionScreen from "./src/screens/ColeccionScreen";
-import LeaderboardScreen from "./src/screens/LeaderboardScreen";
-import MascotaScreen from "./src/screens/MascotaScreen";
+import CorreNahualScreen from "./src/screens/CorreNahualScreen";
+import DueloAlburesScreen from "./src/screens/DueloAlburesScreen";
 import GameplayScreen from "./src/screens/GameplayScreen";
 import JuegosScreen from "./src/screens/JuegosScreen";
+import LeaderboardScreen from "./src/screens/LeaderboardScreen";
 import LoadingScreen from "./src/screens/LoadingScreen";
-import MainMenuScreen from "./src/screens/MainMenuScreen";
-import ShopScreen from "./src/screens/ShopScreen";
-import DueloAlburesScreen from "./src/screens/DueloAlburesScreen";
-import CorreNahualScreen from "./src/screens/CorreNahualScreen";
-import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import LoteriaExpressScreen from "./src/screens/LoteriaExpressScreen";
+import MainMenuScreen from "./src/screens/MainMenuScreen";
 import MapScreen from "./src/screens/MapScreen";
-import JuicyButton from "./src/components/JuicyButton";
+import MascotaScreen from "./src/screens/MascotaScreen";
+import ShopScreen from "./src/screens/ShopScreen";
+import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import { tapLight } from "./src/services/haptics";
-import { playSound } from "./src/utils/soundManager";
+import { playBGM, playSound, preloadSounds } from "./src/utils/soundManager";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -100,6 +107,14 @@ function MainTabs() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [showPerfil, setShowPerfil] = useState(false);
+
+  // ── Daily reward (7-day login bonus) ────────────────────────────────────────
+  const { shouldShow: showDailyReward, currentDay, rewardCoins, claimed, check: checkDailyReward, claim: claimDailyReward, dismiss: dismissDailyReward } = useDailyReward();
+  useEffect(() => {
+    // Slight delay so the app finishes loading visually before showing the modal
+    const t = setTimeout(() => checkDailyReward(), 1200);
+    return () => clearTimeout(t);
+  }, [checkDailyReward]);
 
   return (
     <>
@@ -238,7 +253,6 @@ function MainTabs() {
       <SettingsModal
         visible={showSettings}
         onClose={() => {
-          console.log("close");
           setShowSettings(false);
         }}
         onDisconnect={() => {
@@ -308,6 +322,16 @@ function MainTabs() {
         visible={showSupport}
         onClose={() => setShowSupport(false)}
       />
+
+      {/* Recompensa diaria — aparece al abrir la app si aún no se ha reclamado */}
+      <DailyRewardModal
+        visible={showDailyReward}
+        currentDay={currentDay}
+        rewardCoins={rewardCoins}
+        claimed={claimed}
+        onClaim={claimDailyReward}
+        onDismiss={dismissDailyReward}
+      />
     </>
   );
 }
@@ -315,19 +339,47 @@ function MainTabs() {
 const convex = new ConvexReactClient(config.deploymentUrl);
 
 function AppContent() {
-  const { isAuthenticated, loading, error, retry } = useAuth();
-  const autoFixDatabase = useMutation(api.patchCategories.autoFixDatabase);
+  const { isAuthenticated, loading, error, retry, userId } = useAuth();
+  const autoFixDatabase    = useMutation(api.patchCategories.autoFixDatabase);
+  const syncMexPlus        = useMutation(api.shop.syncMexPlusEntitlement);
 
   useEffect(() => {
     // Initialize RevenueCat SDK (no-op in Expo Go or if API key not set)
-    initRevenueCat().catch((e) => console.log("[RevenueCat] init error:", e));
+    initRevenueCat().catch((e) => { if (__DEV__) console.log("[RevenueCat] init error:", e); });
+
+    // Initialize AdMob (graceful no-op in Expo Go — module is imported but
+    // TurboModule lookup only happens when mobileAds() is called)
+    try {
+      mobileAds().initialize();
+    } catch {
+      // Native module not registered (Expo Go)
+    }
 
     // Run the database fix silently in the background
-    autoFixDatabase().catch((e) => console.log("Auto-fix skipped or failed:", e));
+    autoFixDatabase().catch((e) => { if (__DEV__) console.log("Auto-fix skipped or failed:", e); });
 
     // Configure how notifications are displayed while the app is open
     setupNotificationHandler();
+
+    // ── Preload ALL sounds immediately on app start ────────────────────────────
+    // This ensures sounds are ready before the user reaches any screen.
+    // After loading, start the menu BGM right away.
+    preloadSounds().then(() => {
+      playBGM("menu");
+    }).catch(() => { });
   }, []);
+
+  // ── RevenueCat customerInfo listener ─────────────────────────────────────────
+  // Fires on subscription renewals, lapses, and restoration — keeps Convex in sync
+  // without requiring the user to re-open the app.
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = addCustomerInfoListener(({ active, expiresAt }) => {
+      syncMexPlus({ userId, expiresAt: active ? (expiresAt ?? undefined) : 0 })
+        .catch(() => {});
+    });
+    return unsub;
+  }, [userId]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -360,9 +412,13 @@ function AppContent() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <>
           <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen name="Gameplay" component={GameplayScreen} />
+          <Stack.Screen
+            name="Gameplay"
+            component={GameplayScreen}
+            options={{ gestureEnabled: false }}
+          />
           <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
-          <Stack.Screen name="Map" component={MapScreen} />
+          <Stack.Screen name="Map" component={MapScreen} options={{ gestureEnabled: false }} />
         </>
       </Stack.Navigator>
     </NavigationContainer>

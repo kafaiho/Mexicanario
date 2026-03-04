@@ -394,7 +394,7 @@ const NEW_WORDS = [
   { word: "Michelada", meaning: "Cerveza con limón, sal y salsas", example: "La michelada con clamato es perfecta en el calor", region: "Todo México", category: "Comida" },
 
   // ── Juegos ──
-  { word: "Tezos", meaning: "Discos de plástico coleccionables de los 90", example: "Los tezos era el juego de moda en la primaria", region: "Infantil", category: "Juegos" },
+  { word: "Tazos", meaning: "Discos de plástico coleccionables de los 90", example: "Los tazos eran el juego de moda en la primaria", region: "Infantil", category: "Juegos" },
   { word: "Juego de naipes", meaning: "Cartas para juegos de mesa tradicionales", example: "Jugamos naipes hasta la madrugada", region: "Todo México", category: "Juegos" },
   { word: "Feria de la escuela", meaning: "Evento escolar de diversión y venta", example: "La feria de la escuela tiene juegos y comida", region: "Escuela", category: "Juegos" },
   { word: "Juego de talla", meaning: "Juego de apuestas con monedas en ferias", example: "Jugamos talla en la feria del pueblo", region: "Norte", category: "Juegos" },

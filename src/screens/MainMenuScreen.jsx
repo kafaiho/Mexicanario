@@ -1,35 +1,55 @@
-import { useQuery, useMutation } from "convex/react";
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import { useMutation, useQuery } from "convex/react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
-  ActivityIndicator,
   Image,
   ImageBackground,
+  Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { api } from "../../convex/_generated/api";
+import AdBanner from "../components/AdBanner";
+import DailyMissionsWidget from "../components/DailyMissionsWidget";
 import GiftModel from "../components/gift";
 import MexicanarioModal from "../components/MexicanarioModal";
+import OnboardingTooltip from "../components/OnboardingTooltip";
 import SinAnuncios from "../components/SinAnuncios";
 import TermsModal from "../components/TermsModal";
-import DailyMissionsWidget from "../components/DailyMissionsWidget";
-import MiniMascot from "../components/MiniMascot";
 import TopBar from "../components/TopBar";
 import WheelModal from "../components/WheelModal";
-import ShopScreen from "./ShopScreen";
-import { useAuth } from "../context/AuthContext";
 import { getZone, getZoneProgress } from "../config/mexicoZones";
+import { useAuth } from "../context/AuthContext";
+import useDevMode from "../hooks/useDevMode";
+import { useOnboarding } from "../hooks/useOnboarding";
 import { tapMedium } from "../services/haptics";
+import { playSound } from "../utils/soundManager";
+import usePetStore from "../store/usePetStore";
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { REAL_HEIGHT, REAL_WIDTH } from "../utils/tabletSetup";
+import ShopScreen from "./ShopScreen";
 
 const { width, height } = Dimensions.get("window");
+// Use real screen dimensions for layout-critical values (carousel snap, full-screen containers)
+const SCREEN_W = REAL_WIDTH;
+const SCREEN_H = REAL_HEIGHT;
 
 const GROUP_SIZE = 50;
-// Each slide takes the full width — the adjacent cards peek in via opacity/scale only
-const ITEM_W = width;
+// Each slide fills the full real screen width so snapping works correctly on all devices
+const ITEM_W = SCREEN_W;
 const SIDE_PAD = 0;
 
 const GROUP_EMOJIS = ["🌮", "🎲", "🎵", "🦎", "🎨", "🏯", "🗣️", "🌵", "🥳", "🤠",
@@ -45,8 +65,8 @@ function getGroupName(idx, firstWord) { return firstWord || GROUP_NAMES[idx % GR
 
 export default function MainMenuScreen({ navigation }) {
   const [showWheel, setShowWheel] = useState(false);
-  const [showShop,  setShowShop]  = useState(false);
-  const [showAds,   setShowAds]   = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [showAds, setShowAds] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showGift, setShowGift] = useState(false);
   const [showSinAnuncios, setShowSinAnuncios] = useState(false);
@@ -54,16 +74,76 @@ export default function MainMenuScreen({ navigation }) {
   const [loadingError, setLoadingError] = useState(false);
   const [devMsg, setDevMsg] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showDevPanel, setShowDevPanel] = useState(false);
+  const devEnabled = useDevMode((s) => s.enabled);
+
+  // ── Floating icon bounce animations ─────────────────────────────────────────
+  const mexicanarioScale = useSharedValue(1);
+  const giftScale        = useSharedValue(1);
+  const wheelScale       = useSharedValue(1);
+  const adsScale         = useSharedValue(1);
+
+  function bounceTap(sv) {
+    playSound("click");
+    sv.value = withSequence(
+      withTiming(1.28, { duration: 70, easing: Easing.out(Easing.cubic) }),
+      withSpring(1, { damping: 3, stiffness: 260 })
+    );
+  }
+
+  const mexicanarioAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: mexicanarioScale.value }] }));
+  const giftAnimStyle        = useAnimatedStyle(() => ({ transform: [{ scale: giftScale.value }] }));
+  const wheelAnimStyle       = useAnimatedStyle(() => ({ transform: [{ scale: wheelScale.value }] }));
+  const adsAnimStyle         = useAnimatedStyle(() => ({ transform: [{ scale: adsScale.value }] }));
 
   const { userId, logout } = useAuth();
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
   const allLevels = useQuery(api.levels.getAllLevels, {});
 
+  // Onboarding — shown only on first launch
+  const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("menu");
+  const TAB_H = Platform.OS === "ios" ? 88 : 64;
+  const ONBOARDING_STEPS = [
+    {
+      text: "¡Bienvenido a Mexicanario! 🇲🇽 Aquí están los grupos de palabras. Desliza para explorar más grupos.",
+      bubbleStyle: { top: height * 0.44, left: 30, right: 30 },
+      handStyle: { top: height * 0.34, left: width / 2 - 24 },
+      handEmoji: "👇",
+      handBounceDir: "down",
+    },
+    {
+      text: "¡Toca el botón naranja para empezar a jugar tu siguiente nivel! 🎮🌮",
+      bubbleStyle: { top: height * 0.22, left: 30, right: 30 },
+      handStyle: { top: height * 0.48, left: width / 2 - 24 },
+      handEmoji: "👆",
+      handBounceDir: "up",
+    },
+    {
+      text: "¡Este es tu Mexicanómetro! 🌮 Cada palabra que adivinas te da un taco. ¡Acumula tacos para subir de rango y convertirte en el mero mero!",
+      bubbleStyle: { top: height * 0.14, left: 30, right: 30 },
+      handStyle: { top: height * 0.07, left: width * 0.18 },
+      handEmoji: "👆",
+      handBounceDir: "up",
+    },
+    {
+      text: "¡Tienes una mascota que te acompañará en tu aventura! 🦎 Cuídala y mírala crecer conforme aprendes más palabras mexicanas.",
+      bubbleStyle: { bottom: TAB_H + 80, left: 30, right: 30 },
+      handStyle: { bottom: TAB_H + 4, left: width * 0.31 },
+      handEmoji: "👇",
+      handBounceDir: "down",
+    },
+  ];
+
   const giveDevCoins = useMutation(api.devTools.giveDevCoins);
   const resetLevelDev = useMutation(api.devTools.resetLevelDev);
+  const switchPetType = useMutation(api.devTools.switchPetType);
   const seed15to18 = useMutation(api.levels.seedLevels15_18);
   const buildLevels = useMutation(api.levels.createLevelsForAllWords);
   const seedOriginal = useMutation(api.words.seedOriginalWords);
+  const seedAdultos = useMutation(api.seedAdultWords.seedAdultWords);
+
+  const DEV_PET_TYPES = ["ajolote", "xolo", "alebrije"];
+  const [devPetIdx, setDevPetIdx] = useState(0);
 
   const flatRef = useRef(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -76,7 +156,9 @@ export default function MainMenuScreen({ navigation }) {
     const result = [];
     for (let i = 0; i < allLevelsData.length; i += GROUP_SIZE) {
       const chunk = allLevelsData.slice(i, i + GROUP_SIZE);
-      const groupStart = chunk[0]?.levelNumber ?? i * GROUP_SIZE + 1;
+      // Use array position (1-indexed) so it aligns with currentLevel,
+      // which is also a sequential counter — not the levelNumber from the DB.
+      const groupStart = i + 1;
       const completed = Math.max(0, Math.min(chunk.length, currentLevel - groupStart));
       const isCompleted = completed >= chunk.length;
       const isActive = !isCompleted && groupStart <= currentLevel;
@@ -244,20 +326,28 @@ export default function MainMenuScreen({ navigation }) {
 
       {/* Floating side icons */}
       <View style={styles.leftColumn}>
-        <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); setShowMexicanario(true); }}>
-          <Image source={require("../../assets/images/venezolario.png")} style={styles.floatIcon} resizeMode="contain" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); setShowGift(true); }}>
-          <Image source={require("../../assets/images/gift.png")} style={styles.floatIcon} resizeMode="contain" />
-        </TouchableOpacity>
+        <Reanimated.View style={mexicanarioAnimStyle}>
+          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(mexicanarioScale); setShowMexicanario(true); }}>
+            <Image source={require("../../assets/images/venezolario.png")} style={styles.floatIcon} resizeMode="contain" />
+          </TouchableOpacity>
+        </Reanimated.View>
+        <Reanimated.View style={giftAnimStyle}>
+          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(giftScale); setShowGift(true); }}>
+            <Image source={require("../../assets/images/gift.png")} style={styles.floatIcon} resizeMode="contain" />
+          </TouchableOpacity>
+        </Reanimated.View>
       </View>
       <View style={styles.rightColumn}>
-        <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); setShowWheel(true); }}>
-          <Image source={require("../../assets/images/wheelPage.png")} style={styles.floatIcon} resizeMode="contain" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); setShowShop(true); setShowAds(true); }}>
-          <Image source={require("../../assets/images/ads.png")} style={styles.floatIcon} resizeMode="contain" />
-        </TouchableOpacity>
+        <Reanimated.View style={wheelAnimStyle}>
+          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(wheelScale); setShowWheel(true); }}>
+            <Image source={require("../../assets/images/wheelPage.png")} style={styles.floatIcon} resizeMode="contain" />
+          </TouchableOpacity>
+        </Reanimated.View>
+        <Reanimated.View style={adsAnimStyle}>
+          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(adsScale); setShowShop(true); setShowAds(true); }}>
+            <Image source={require("../../assets/images/ads.png")} style={styles.floatIcon} resizeMode="contain" />
+          </TouchableOpacity>
+        </Reanimated.View>
       </View>
 
       {/* Carousel */}
@@ -301,33 +391,101 @@ export default function MainMenuScreen({ navigation }) {
       {/* Misiones diarias */}
       <DailyMissionsWidget userId={userId} />
 
-      {/* DEV panel — solo visible en modo desarrollo */}
-      {__DEV__ && (
-        <View style={styles.devPanel}>
-          {[
-            { label: "🪙 ∞", color: "#f5a623", action: async () => { const r = await giveDevCoins({ userId }); setDevMsg(r.success ? `🪙${r.coins}` : "Error"); } },
-            { label: "🔄 N1", color: "#27ae60", action: async () => { const r = await resetLevelDev({ userId }); setDevMsg(r.success ? "N1 ✅" : "Error"); } },
-            { label: "🌱 15-18", color: "#8E44AD", action: async () => { setDevMsg("..."); await seedOriginal(); await seed15to18(); await buildLevels(); setDevMsg("✅ Seed Ok"); } },
-          ].map(({ label, color, action }) => (
-            <TouchableOpacity
-              key={label}
-              style={[styles.devBtn, { backgroundColor: color }]}
-              onPress={async () => { if (!userId) return; await action(); setTimeout(() => setDevMsg(""), 3000); }}
-            >
-              <Text style={styles.devBtnText}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-          {devMsg ? <Text style={styles.devMsg}>{devMsg}</Text> : null}
-        </View>
+      {/* DEV trigger — solo visible en modo desarrollador */}
+      {devEnabled && (
+        <TouchableOpacity style={styles.devTrigger} onPress={() => setShowDevPanel(true)}>
+          <Text style={styles.devTriggerText}>🔧 Herramientas Dev</Text>
+        </TouchableOpacity>
       )}
+
+      {/* DEV panel modal */}
+      <Modal
+        visible={showDevPanel && devEnabled}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDevPanel(false)}
+      >
+        <View style={styles.devModalOverlay}>
+          <View style={styles.devModalCard}>
+            <Text style={styles.devModalTitle}>🔧 Developer Tools</Text>
+            <Text style={styles.devModalSubtitle}>Solo visible en Modo Dev (long-press ⚙️)</Text>
+
+            <ScrollView style={{ width: "100%" }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
+              {/* Economía */}
+              <Text style={styles.devSectionLabel}>💰 Economía</Text>
+              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#f5a623" }]}
+                onPress={async () => { if (!userId) return; const r = await giveDevCoins({ userId }); setDevMsg(r.success ? `🪙 ${r.coins} monedas` : "Error"); }}>
+                <Text style={styles.devModalBtnText}>🪙 Dar monedas infinitas</Text>
+              </TouchableOpacity>
+
+              {/* Progresión */}
+              <Text style={styles.devSectionLabel}>📈 Progresión</Text>
+              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#27ae60" }]}
+                onPress={async () => { if (!userId) return; const r = await resetLevelDev({ userId }); setDevMsg(r.success ? "✅ Nivel → 1" : "Error"); }}>
+                <Text style={styles.devModalBtnText}>🔄 Resetear a Nivel 1</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#8E44AD" }]}
+                onPress={async () => { if (!userId) return; setDevMsg("⏳ Cargando seed..."); await seedOriginal(); await seed15to18(); await buildLevels(); setDevMsg("✅ Seed completo"); }}>
+                <Text style={styles.devModalBtnText}>🌱 Seed palabras 15-18</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#9B1717" }]}
+                onPress={async () => { setDevMsg("⏳ Sembrando palabras +18..."); try { const r = await seedAdultos(); setDevMsg(`✅ ${r.wordsAdded} palabras +18 agregadas (${r.levelsAdded} niveles)`); } catch(e) { setDevMsg("Error: " + e.message); } }}>
+                <Text style={styles.devModalBtnText}>🌶️ Seed palabras +18 (Insultos + Suegra)</Text>
+              </TouchableOpacity>
+
+              {/* Mascota */}
+              <Text style={styles.devSectionLabel}>🐾 Mascota</Text>
+              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#1A6B9A" }]}
+                onPress={async () => {
+                  if (!userId) return;
+                  const next = (devPetIdx + 1) % DEV_PET_TYPES.length;
+                  const petType = DEV_PET_TYPES[next];
+                  const r = await switchPetType({ userId, petType });
+                  if (r.success) { setDevPetIdx(next); usePetStore.getState().setPetType(petType); setDevMsg(`🐾 Mascota → ${petType}`); }
+                  else setDevMsg("Error");
+                }}>
+                <Text style={styles.devModalBtnText}>🐾 Cambiar mascota → {DEV_PET_TYPES[(devPetIdx + 1) % DEV_PET_TYPES.length]}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {devMsg ? <Text style={styles.devModalMsg}>{devMsg}</Text> : null}
+
+            <TouchableOpacity style={styles.devModalClose} onPress={() => { setShowDevPanel(false); setDevMsg(""); }}>
+              <Text style={styles.devModalCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Banner AdMob */}
+      <AdBanner style={{ marginBottom: 4 }} />
 
       {/* Modals */}
       <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowShop(true); setShowAds(true); }} />
-      <ShopScreen  visible={showShop}  onClose={() => { setShowShop(false); setShowAds(false); }} autoSinAnuncios={showAds} />
+      <ShopScreen visible={showShop} onClose={() => { setShowShop(false); setShowAds(false); }} autoSinAnuncios={showAds} />
       <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <GiftModel visible={showGift} onClose={() => setShowGift(false)} />
       <SinAnuncios visible={showSinAnuncios} onClose={() => setShowSinAnuncios(false)} />
       <MexicanarioModal visible={showMexicanario} onClose={() => setShowMexicanario(false)} />
+
+      {/* Onboarding tutorial — shown only on first launch */}
+      {obActive && (() => {
+        const s = ONBOARDING_STEPS[obStep];
+        return (
+          <OnboardingTooltip
+            visible={obActive}
+            text={s.text}
+            bubbleStyle={s.bubbleStyle}
+            handStyle={s.handStyle}
+            handEmoji={s.handEmoji}
+            handBounceDir={s.handBounceDir}
+            step={obStep}
+            total={ONBOARDING_STEPS.length}
+            onNext={() => obAdvance(ONBOARDING_STEPS.length)}
+            onSkip={obSkip}
+          />
+        );
+      })()}
     </ImageBackground>
   );
 }
@@ -336,16 +494,16 @@ export default function MainMenuScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // Side icons — large, two columns, anchored high
-  leftColumn: { position: "absolute", top: height * 0.16, left: width * 0.03, gap: height * 0.07, zIndex: 50 },
-  rightColumn: { position: "absolute", top: height * 0.16, right: width * 0.03, gap: height * 0.07, zIndex: 50 },
+  // Side icons — large, two columns, anchored high (use real screen dims for positioning)
+  leftColumn: { position: "absolute", top: SCREEN_H * 0.16, left: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
+  rightColumn: { position: "absolute", top: SCREEN_H * 0.16, right: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
   floatBadge: { width: width * 0.16, height: width * 0.16, justifyContent: "center", alignItems: "center" },
   floatIcon: { width: "100%", height: "100%" },
 
   // Carousel area: starts after TopBar, takes middle of screen
-  carouselArea: { marginTop: height * 0.17, height: height * 0.48 },
+  carouselArea: { marginTop: SCREEN_H * 0.17, height: SCREEN_H * 0.48 },
 
-  // Each slide = full width, vertically centered
+  // Each slide = full real screen width, vertically centered
   slide: {
     width: ITEM_W,
     height: "100%",
@@ -431,7 +589,7 @@ const styles = StyleSheet.create({
   // Side-slide peek pill (faded)
   peekLabel: {
     position: "absolute",
-    bottom: height * 0.15,
+    bottom: SCREEN_H * 0.15,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
@@ -445,8 +603,19 @@ const styles = StyleSheet.create({
   dotActive: { width: 16, backgroundColor: "white" },
 
   // DEV panel
-  devPanel: { flexDirection: "row", gap: 8, justifyContent: "center", flexWrap: "wrap", paddingHorizontal: 12, marginBottom: 8 },
-  devBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14 },
-  devBtnText: { color: "#fff", fontWeight: "bold", fontSize: 11 },
-  devMsg: { color: "#fff", backgroundColor: "#333", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, fontSize: 11 },
+  // Dev trigger button (replaces floating pills)
+  devTrigger: { alignSelf: "center", marginBottom: 6, backgroundColor: "#222", paddingHorizontal: 18, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: "#555" },
+  devTriggerText: { color: "#aaa", fontSize: 12, fontWeight: "700" },
+
+  // Dev modal
+  devModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "center", alignItems: "center", padding: 24 },
+  devModalCard: { backgroundColor: "#1a1a2e", borderRadius: 20, padding: 22, width: "100%", maxWidth: 400, alignItems: "center", gap: 10 },
+  devModalTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  devModalSubtitle: { color: "#888", fontSize: 11, textAlign: "center", marginTop: -6 },
+  devSectionLabel: { color: "#f5a623", fontWeight: "800", fontSize: 12, alignSelf: "flex-start", marginTop: 4 },
+  devModalBtn: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, width: "100%" },
+  devModalBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  devModalMsg: { color: "#2ecc71", fontWeight: "700", fontSize: 13, textAlign: "center" },
+  devModalClose: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 30, backgroundColor: "#333", borderRadius: 14 },
+  devModalCloseText: { color: "#ccc", fontWeight: "700", fontSize: 14 },
 });

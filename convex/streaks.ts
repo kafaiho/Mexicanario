@@ -109,6 +109,7 @@ export const getStreakStatus = query({
       totalWordsToday: playedToday
         ? (user as any).totalWordsToday ?? 0
         : 0,
+      streakFreezeCount: (user as any).streakFreezeCount ?? 0,
     };
   },
 });
@@ -139,11 +140,49 @@ export const recordDailyPlay = mutation({
       };
     }
 
-    // New day — update streak
-    const yesterday = getYesterdayString();
+    // New day — compute days missed and apply freeze shields if available
     const oldStreak = (user as any).playStreak ?? 0;
-    const newStreak = lastPlay === yesterday ? oldStreak + 1 : 1;
+    const freezeCount = (user as any).streakFreezeCount ?? 0;
+
+    // Days missed = gap between lastPlay and today minus 1
+    // e.g. yesterday → 0 missed, 2 days ago → 1 missed, etc.
+    let daysMissed = 0;
+    if (lastPlay) {
+      const lastMs = new Date(lastPlay + "T12:00:00Z").getTime();
+      const todayMs = new Date(today + "T12:00:00Z").getTime();
+      daysMissed = Math.max(0, Math.round((todayMs - lastMs) / 86_400_000) - 1);
+    }
+
+    let newStreak: number;
+    let freezesConsumed = 0;
+
+    if (daysMissed === 0) {
+      // Continuous (played yesterday or first play ever)
+      newStreak = lastPlay ? oldStreak + 1 : 1;
+    } else if (freezeCount >= daysMissed) {
+      // Enough shields to cover all missed days → streak survives
+      newStreak = oldStreak + 1;
+      freezesConsumed = daysMissed;
+    } else {
+      // Not enough shields → streak resets (shields are NOT consumed on reset)
+      newStreak = 1;
+    }
+
     const maxStreak = Math.max((user as any).playStreakMax ?? 0, newStreak);
+
+    // ── Reward Logic (7-day cycle) ──
+    const streakDay = ((newStreak - 1) % 7) + 1;
+    let coinsEarned = 0;
+    let isPinata = false;
+
+    if (streakDay < 7) {
+      // Day 1: 10, Day 2: 15, Day 3: 20...
+      coinsEarned = 5 + (streakDay * 5);
+    } else {
+      // Day 7: Piñata Surprise (50 - 200)
+      coinsEarned = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
+      isPinata = true;
+    }
 
     await ctx.db.patch(args.userId, {
       lastPlayDate: today,
@@ -151,6 +190,10 @@ export const recordDailyPlay = mutation({
       playStreakMax: maxStreak,
       totalWordsToday: 1,
       todayDate: today,
+      coins: (user.coins ?? 0) + coinsEarned,
+      ...(freezesConsumed > 0 && {
+        streakFreezeCount: Math.max(0, freezeCount - freezesConsumed),
+      }),
     } as any);
 
     // Check unclaimed milestones
@@ -175,6 +218,10 @@ export const recordDailyPlay = mutation({
       streak: newStreak,
       isNewStreak: true,
       unclaimedMilestones,
+      coinsAdded: coinsEarned,
+      isPinata,
+      freezesConsumed,
+      shieldSaved: freezesConsumed > 0,
     };
   },
 });
@@ -260,5 +307,28 @@ export const recordBestCombo = mutation({
     if (Object.keys(updates).length > 0) {
       await ctx.db.patch(args.userId, updates);
     }
+  },
+});
+
+/** Buy a streak freeze — stackable, one consumed per missed day */
+export const buyStreakFreeze = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const COST = 150; // 150 diamantes por escudo
+    if ((user.diamonds ?? 0) < COST) {
+      throw new Error("Diamantes insuficientes para el Protector de Racha");
+    }
+
+    const currentCount = (user as any).streakFreezeCount ?? 0;
+
+    await ctx.db.patch(args.userId, {
+      diamonds: (user.diamonds ?? 0) - COST,
+      streakFreezeCount: currentCount + 1,
+    } as any);
+
+    return { success: true, newCount: currentCount + 1 };
   },
 });

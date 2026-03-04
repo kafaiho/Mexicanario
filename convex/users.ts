@@ -1,36 +1,15 @@
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import {
+  getOrderedLevels
+} from "./levelOrdering";
 
-// ─── Seeded random helpers (deterministic shuffle per user) ───────────────────
-
-/** LCG pseudo-random number generator seeded with a 32-bit integer */
-function seededRng(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = Math.imul(1664525, s) + 1013904223;
-    return (s >>> 0) / 4294967296;
-  };
-}
-
-/** Hash a string to a 32-bit integer */
-function hashStr(str: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/** Deterministic Fisher-Yates shuffle */
-function shuffleSeeded<T>(arr: T[], seed: number): T[] {
-  const out = [...arr];
-  const rng = seededRng(seed);
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
+function normalizeWord(str: string): string {
+  return str
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export const getUser = query({
@@ -66,7 +45,7 @@ export const getCurrentLevel = query({
       const word = await ctx.db.get(level1.wordId);
       return {
         level: 1,
-        word: word?.word || "Default",
+        word: normalizeWord(word?.word || "Default"),
         meaning: word?.meaning || "Default meaning",
         example: word?.example || "Default example",
         region: word?.region || "Default region",
@@ -100,7 +79,7 @@ export const getCurrentLevel = query({
       const word = await ctx.db.get(level1.wordId);
       return {
         level: 1,
-        word: word?.word || "Default",
+        word: normalizeWord(word?.word || "Default"),
         meaning: word?.meaning || "Default meaning",
         example: word?.example || "Default example",
         region: word?.region || "Default region",
@@ -113,9 +92,6 @@ export const getCurrentLevel = query({
     // Get user's current level (how many levels they've completed + 1)
     const currentLevel = user.currentLevel || 1;
 
-    // Load all levels and shuffle them using the userId as a seed.
-    // This gives every user their own unique word order while keeping it
-    // deterministic — the same user always gets the same word at the same position.
     const allLevels = await ctx.db.query("levels").collect();
 
     if (allLevels.length === 0) {
@@ -131,13 +107,15 @@ export const getCurrentLevel = query({
       };
     }
 
-    const seed = hashStr(args.userId.toString());
-    const shuffled = shuffleSeeded(allLevels, seed);
-    const maxLevel = shuffled.length;
+    const allWords = await ctx.db.query("words").collect();
+
+    // Order: first 50 = easy words (same for everyone), rest = seeded per user
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const maxLevel = ordered.length;
 
     // Clamp currentLevel to the available range
     const clampedLevel = Math.min(currentLevel, maxLevel);
-    const levelConfig = shuffled[clampedLevel - 1];
+    const levelConfig = ordered[clampedLevel - 1];
 
     if (!levelConfig) {
       return {
@@ -152,7 +130,25 @@ export const getCurrentLevel = query({
       };
     }
 
-    const word = await ctx.db.get(levelConfig.wordId);
+    const word = await ctx.db.get(levelConfig.wordId as Id<"words">);
+
+    // ── Adult content gate ───────────────────────────────────────────────────
+    if ((word as any)?.category === "adulto") {
+      const unlocked: string[] = (user as any).adultContentUnlocked ?? [];
+      const packId = `content_${(word as any)?.pack ?? "insultos"}`;
+      if (!unlocked.includes(packId)) {
+        return {
+          level: clampedLevel,
+          word: "BLOQUEADO",
+          meaning: "Pack de contenido +18 no desbloqueado.",
+          example: "Ve a la tienda para desbloquear este pack.",
+          region: "México",
+          reward: { coins: 0, diamonds: 0 },
+          isLastLevel: false,
+          isDefaultLevel: false,
+        };
+      }
+    }
 
     return {
       level: clampedLevel,
@@ -261,5 +257,42 @@ export const resetLevel = mutation({
       coins: user.coins,
       diamonds: user.diamonds,
     };
+  },
+});
+
+// ─── Delete Account (Apple App Store required) ────────────────────────────────
+// Permanently removes all data for a user across every table.
+export const deleteAccount = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const { userId } = args;
+
+    // Delete all related table rows in parallel
+    const tables = [
+      "userAchievements",
+      "userCollectedCards",
+      "dailyRewards",
+      "purchases",
+      "seasonPass",
+      "streakMilestones",
+      "gameSessions",
+      "leaguePlayers",
+      "dailyMissions",
+      "failedWords",
+    ] as const;
+
+    for (const table of tables) {
+      const rows = await (ctx.db.query(table) as any)
+        .filter((q: any) => q.eq(q.field("userId"), userId))
+        .collect();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    // Finally, delete the user record itself
+    await ctx.db.delete(userId);
+
+    return { success: true };
   },
 });

@@ -1,56 +1,79 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// SPRITE SHEET SYSTEM
-// Cada mascota tiene una sola imagen con todas sus etapas.
-// PetSprite recorta la región correcta usando overflow:hidden + offsets.
-//
-// Coordenadas { x, y, w, h } son en píxeles de la imagen fuente (estimadas).
-// Ajusta los valores después del primer render si el recorte no queda centrado.
+// Individual-image system — one PNG per stage per mascot type.
+// PetSprite uses the legacy multi-layer path (assets.body).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const XOLO_SHEET     = require('../../../assets/mascota/sheets/xolo.png');
-const ALEBRIJE_SHEET = require('../../../assets/mascota/sheets/alebrije.png');
-const AJOLOTE_SHEET  = require('../../../assets/mascota/sheets/ajolote.png');
+// ── Ajolote (axolotl) ────────────────────────────────────────────────────────
+// 4 unique images: stage1 (hatching), stage2 (baby), stage3-4 (juvenile), stage5-6 (adult)
+const AJO_S1 = require('../../../assets/mascota/ajolote/stage1.png');
+const AJO_S2 = require('../../../assets/mascota/ajolote/stage2.png');
+const AJO_S3 = require('../../../assets/mascota/ajolote/stage3.png');
+const AJO_S5 = require('../../../assets/mascota/ajolote/stage5.png');
 
-// PET_ASSETS[type] = {
-//   sheet, sheetWidth, sheetHeight,
-//   [stage]: { x, y, w, h }
-// }
+// ── Alebrije (dragon) ────────────────────────────────────────────────────────
+// 6 unique images: egg → cracking → hatching → small → medium → adult with wings
+const ALE_S1 = require('../../../assets/mascota/alebrije/stage1.png');
+const ALE_S2 = require('../../../assets/mascota/alebrije/stage2.png');
+const ALE_S3 = require('../../../assets/mascota/alebrije/stage3.png');
+const ALE_S4 = require('../../../assets/mascota/alebrije/stage4.png');
+const ALE_S5 = require('../../../assets/mascota/alebrije/stage5.png');
+const ALE_S6 = require('../../../assets/mascota/alebrije/stage6.png');
+
+// ── Xolo (xoloitzcuintli) ────────────────────────────────────────────────────
+// 6 unique images: aztec egg → cracking → pup hatching → sparkle pup → medium → adult
+const XOL_S1 = require('../../../assets/mascota/xolo/stage1.png');
+const XOL_S2 = require('../../../assets/mascota/xolo/stage2.png');
+const XOL_S3 = require('../../../assets/mascota/xolo/stage3.png');
+const XOL_S4 = require('../../../assets/mascota/xolo/stage4.png');
+const XOL_S5 = require('../../../assets/mascota/xolo/stage5.png');
+const XOL_S6 = require('../../../assets/mascota/xolo/stage6.png');
+
+// ── Nahual (legendario — Mexicanario Plus) ────────────────────────────────────
+// 3 variantes: norteña, sureña, urbana — 6 stages cada una
+// TEST SPRITE: usando help-character.png para todas las variantes y stages.
+// Reemplaza NAH_TEST con imágenes reales cuando el arte esté listo:
+//   assets/mascota/nahual/norte/stage{1-6}.png
+//   assets/mascota/nahual/sur/stage{1-6}.png
+//   assets/mascota/nahual/urbano/stage{1-6}.png
+const NAH_TEST = require('../../../assets/images/help-character.png');
+
+// PET_ASSETS[type][stage] = { body }
+// PetSprite.jsx uses assets.body via the legacy multi-layer render path.
 export const PET_ASSETS = {
   ajolote: {
-    sheet: AJOLOTE_SHEET,
-    sheetWidth: 650, sheetHeight: 450,
-    1: { x: 5,   y: 5,   w: 55,  h: 55  }, // anillo/burbuja azul (top-left)
-    2: { x: 430, y: 0,   w: 210, h: 200 }, // bebé en huevo roto (top-right)
-    3: { x: 430, y: 0,   w: 210, h: 200 }, // bebé en huevo roto (mismo que 2)
-    4: { x: 0,   y: 225, w: 205, h: 225 }, // ajolote pequeño (bottom-left)
-    5: { x: 210, y: 215, w: 220, h: 235 }, // ajolote mediano (bottom-center)
-    6: { x: 435, y: 200, w: 215, h: 250 }, // ajolote grande + aura (bottom-right)
+    1: { body: AJO_S1 },
+    2: { body: AJO_S2 },
+    3: { body: AJO_S3 },
+    4: { body: AJO_S3 }, // juvenile (same image)
+    5: { body: AJO_S5 },
+    6: { body: AJO_S5 }, // adult (same image)
   },
 
   alebrije: {
-    sheet: ALEBRIJE_SHEET,
-    sheetWidth: 640, sheetHeight: 480,
-    1: { x: 0,   y: 0,   w: 145, h: 205 }, // huevo decorado (top-left)
-    2: { x: 150, y: 0,   w: 155, h: 205 }, // huevo rompiendo (top-2)
-    3: { x: 308, y: 0,   w: 155, h: 205 }, // bebé emergiendo (top-3)
-    4: { x: 465, y: 0,   w: 175, h: 205 }, // dragón juvenil (top-right)
-    5: { x: 200, y: 215, w: 215, h: 265 }, // adulto con alas (bottom-center)
-    6: { x: 420, y: 180, w: 220, h: 300 }, // mítico alas extendidas (bottom-right)
+    1: { body: ALE_S1 },
+    2: { body: ALE_S2 },
+    3: { body: ALE_S3 },
+    4: { body: ALE_S4 },
+    5: { body: ALE_S5 },
+    6: { body: ALE_S6 },
   },
 
   xolo: {
-    sheet: XOLO_SHEET,
-    sheetWidth: 640, sheetHeight: 420,
-    1: { x: 0,   y: 0,   w: 140, h: 190 }, // huevo azteca oscuro (top-left)
-    2: { x: 145, y: 0,   w: 150, h: 190 }, // huevo rompiendo + glow (top-2)
-    3: { x: 300, y: 0,   w: 155, h: 190 }, // cachorro saliendo del cascarón (top-3)
-    4: { x: 460, y: 0,   w: 170, h: 190 }, // xolo pequeño (top-right)
-    5: { x: 0,   y: 200, w: 190, h: 220 }, // xolo mediano (bottom-left)
-    6: { x: 410, y: 185, w: 225, h: 240 }, // xolo mítico + llama (bottom-right)
+    1: { body: XOL_S1 },
+    2: { body: XOL_S2 },
+    3: { body: XOL_S3 },
+    4: { body: XOL_S4 },
+    5: { body: XOL_S5 },
+    6: { body: XOL_S6 },
   },
+
+  // ── Nahual (Mexicanario Plus exclusive) — test sprite ────────────────────
+  nahual_norte:  { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
+  nahual_sur:    { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
+  nahual_urbano: { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
 };
 
-// Tamaños de display por etapa (dp)
+// Display sizes per stage (dp)
 export const STAGE_SIZES = {
   1: { full: 100, compact: 64 },
   2: { full: 110, compact: 70 },
@@ -60,5 +83,33 @@ export const STAGE_SIZES = {
   6: { full: 180, compact: 110 },
 };
 
-// Fallback si el petType solicitado no existe
+// Fallback if petType is unknown
 export const FALLBACK_ASSETS = PET_ASSETS.alebrije;
+
+// ── Regional Skins / Accessories ─────────────────────────────────────────────
+// Maps region names to emoji placeholders or image assets.
+export const REGION_SKINS = {
+  "CDMX": "👔", // Godín
+  "Ciudad de México": "👔",
+  "Norte": "🤠", // Sombrero
+  "Jalisco": "🎺", // Mariachi
+  "Puebla": "🌶️",
+  "Oaxaca": "🏺",
+  "Sinaloa": "🌊",
+  "Veracruz": "⚓",
+  "Yucatán": "🌴",
+  "Guerrero": "🏖️",
+  "Chiapas": "🌿",
+  "Michoacán": "🦋",
+  "Tradicional": "🪅",
+  "default": null,
+};
+
+export const getRegionSkin = (region) => {
+  if (!region) return REGION_SKINS["default"];
+  if (REGION_SKINS[region]) return REGION_SKINS[region];
+  const key = Object.keys(REGION_SKINS).find(k =>
+    k !== "default" && region.toLowerCase().includes(k.toLowerCase())
+  );
+  return REGION_SKINS[key] || REGION_SKINS["default"];
+};

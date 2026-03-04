@@ -22,6 +22,8 @@ import { playSound } from "../utils/soundManager";
  */
 export default function JuicyButton({
   onPress,
+  onPressIn: onPressInProp,
+  onPressOut: onPressOutProp,
   style,
   children,
   intensity = "light",
@@ -51,7 +53,9 @@ export default function JuicyButton({
     if (sound) {
       playSound(sound);
     }
-  }, [scaleDown, intensity, sound, scaleAnim]);
+
+    if (onPressInProp) onPressInProp();
+  }, [scaleDown, intensity, sound, scaleAnim, onPressInProp]);
 
   const handlePressOut = useCallback(() => {
     // Rebote elástico al soltar — el "jugo"
@@ -61,7 +65,9 @@ export default function JuicyButton({
       bounciness: 12,  // elasticidad visible pero no exagerada
       useNativeDriver: true,
     }).start();
-  }, [scaleAnim]);
+
+    if (onPressOutProp) onPressOutProp();
+  }, [scaleAnim, onPressOutProp]);
 
   const handlePress = useCallback(() => {
     if (!disabled && onPress) {

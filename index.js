@@ -1,5 +1,8 @@
-import { registerRootComponent } from 'expo';
+// IMPORTANTE: debe ser el primer import — parchea Dimensions.get antes que
+// cualquier pantalla evalúe sus constantes de ancho/alto.
+import './src/utils/tabletSetup';
 
+import { registerRootComponent } from 'expo';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

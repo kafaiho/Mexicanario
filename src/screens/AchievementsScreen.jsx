@@ -18,12 +18,19 @@ import { api } from "../../convex/_generated/api";
 import { ACHIEVEMENT_ICONS } from "../components/AchievementIcons";
 import CoinFlyOverlay from "../components/CoinFlyOverlay";
 import TopBar from "../components/TopBar";
+import AdBanner from "../components/AdBanner";
 import { useAuth } from "../context/AuthContext";
 import useCoinFly from "../hooks/useCoinFly";
 import { FONTS } from "../theme/designTokens";
+import { TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
 const STORAGE_KEY = "mx_claimed_achievements";
+
+// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
+const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 32 : 14));
 
 // ── Paleta Mexicanometro ──────────────────────────────────────────────────────
 const BROWN = "#8B4513";
@@ -428,12 +435,9 @@ export default function AchievementsScreen() {
       if (isClaimed) {
         return (
           <View style={styles.statusContainer}>
-            <Animated.View style={{ transform: [{ scale: checkScale }] }}>
-              <View style={styles.claimedBadge}>
-                <Text style={styles.claimedBadgeText}>✓</Text>
-              </View>
+            <Animated.View style={[styles.claimedPill, { transform: [{ scale: checkScale }] }]}>
+              <Text style={styles.claimedPillText}>✓ Reclamado</Text>
             </Animated.View>
-            <Text style={styles.claimedLabel}>RECLAMADO</Text>
           </View>
         );
       }
@@ -560,6 +564,8 @@ export default function AchievementsScreen() {
         })}
       </ScrollView>
 
+      <AdBanner style={{ marginVertical: 4 }} />
+
       {/* Coin fly animation overlay — rendered above everything */}
       <CoinFlyOverlay
         coins={flyCoins}
@@ -587,7 +593,7 @@ const styles = StyleSheet.create({
   // ── Header ──
   header: {
     alignItems: "center",
-    marginTop: height * 0.12,
+    marginTop: HEADER_TOP,
     marginBottom: height * 0.005,
     backgroundColor: "#FFE4B5",
     marginHorizontal: width * 0.02,
@@ -752,27 +758,22 @@ const styles = StyleSheet.create({
     color: "#523600",
   },
 
-  // Reclamado
-  claimedBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  // Reclamado — compact inline pill
+  claimedPill: {
     backgroundColor: "rgba(39,174,96,0.15)",
-    borderWidth: 2,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: "rgba(39,174,96,0.45)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
+    width: "100%",
   },
-  claimedBadgeText: {
-    fontSize: 18,
-    color: "#27AE60",
-    fontWeight: "bold",
-  },
-  claimedLabel: {
+  claimedPillText: {
     fontFamily: FONTS.bodyBold,
-    fontSize: width * 0.024,
+    fontSize: width * 0.028,
     color: "#27AE60",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    textAlign: "center",
   },
 });

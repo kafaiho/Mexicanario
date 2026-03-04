@@ -1,17 +1,28 @@
+import { useQuery } from "convex/react";
 import React from "react";
 import {
   Dimensions,
   ImageBackground,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { api } from "../../convex/_generated/api";
+import AdBanner from "../components/AdBanner";
 import TopBar from "../components/TopBar";
+import { useAuth } from "../context/AuthContext";
 import { tapMedium } from "../services/haptics";
+import { TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
+
+// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
+const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 32 : 14));
 
 // ── Palette (Mexicanómetro tokens) ──────────────────────────────────────────
 const BROWN  = "#8B4513";
@@ -50,7 +61,20 @@ const games = [
   },
 ];
 
+const ADULT_PACKS = [
+  { id: "content_insultos", pack: "insultos", name: "Insultos Finos", icon: "🌶️", color: "#9B1717", dark: "#6B0E0E", desc: "Léxico picante de alto nivel cultural" },
+  { id: "content_suegra",   pack: "suegra",   name: "Diccionario de la Suegra", icon: "👵", color: "#6B2FA0", dark: "#421A6B", desc: "El vocabulario más temido de México" },
+];
+
 export default function JuegosScreen({ navigation }) {
+  const { user } = useAuth();
+
+  const insultoFirst = useQuery(api.levels.getAdultPackFirstLevel, { pack: "insultos" });
+  const suegraFirst  = useQuery(api.levels.getAdultPackFirstLevel, { pack: "suegra" });
+
+  const adultUnlocked = user?.adultContentUnlocked ?? [];
+  const purchasedPacks = ADULT_PACKS.filter((p) => adultUnlocked.includes(p.id));
+
   const handlePlayGame = (gameId) => {
     tapMedium();
     switch (gameId) {
@@ -121,6 +145,43 @@ export default function JuegosScreen({ navigation }) {
           <Text style={styles.comingSoonEmoji}>🔒</Text>
           <Text style={styles.comingSoonText}>¡Nuevos juegos próximamente!</Text>
         </View>
+
+        {/* ── Mis Packs +18 (solo si compró alguno) ── */}
+        {purchasedPacks.length > 0 && (
+          <View style={styles.adultSection}>
+            <Text style={styles.adultSectionTitle}>🔞 Mis Packs +18</Text>
+            {purchasedPacks.map((pack) => {
+              const firstLevel = pack.pack === "insultos" ? insultoFirst : suegraFirst;
+              return (
+                <View key={pack.id} style={[styles.adultCard, { borderColor: pack.color + "88" }]}>
+                  <View style={[styles.adultIconWrap, { backgroundColor: pack.dark }]}>
+                    <Text style={styles.adultIcon}>{pack.icon}</Text>
+                  </View>
+                  <View style={styles.adultInfo}>
+                    <Text style={[styles.adultName, { color: pack.color }]}>{pack.name}</Text>
+                    <Text style={styles.adultDesc}>{pack.desc}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.adultPlayBtn, { backgroundColor: pack.color }]}
+                    onPress={() => {
+                      tapMedium();
+                      if (firstLevel) {
+                        navigation.navigate("Gameplay", { reviewLevel: firstLevel });
+                      } else {
+                        navigation.navigate("Map", { scrollToAdult: pack.pack });
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.adultPlayBtnText}>Jugar</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <AdBanner style={{ marginVertical: 8 }} />
       </ScrollView>
     </ImageBackground>
   );
@@ -133,7 +194,7 @@ const styles = StyleSheet.create({
 
   // ── Section header ──
   sectionHeader: {
-    marginTop: height * 0.13,
+    marginTop: HEADER_TOP,
     marginHorizontal: width * 0.04,
     marginBottom: height * 0.015,
     backgroundColor: "#FFE4B5",
@@ -268,5 +329,58 @@ const styles = StyleSheet.create({
     color: "#9A6030",
     textAlign: "center",
     fontStyle: "italic",
+  },
+
+  // ── Packs +18 ──
+  adultSection: {
+    gap: height * 0.012,
+  },
+  adultSectionTitle: {
+    fontSize: width * 0.04,
+    fontWeight: "900",
+    color: "#9B1717",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  adultCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A0A0A",
+    borderRadius: width * 0.037,
+    borderWidth: 1.5,
+    padding: width * 0.032,
+    gap: width * 0.03,
+  },
+  adultIconWrap: {
+    width: width * 0.13,
+    height: width * 0.13,
+    borderRadius: width * 0.065,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  adultIcon: {
+    fontSize: width * 0.062,
+  },
+  adultInfo: {
+    flex: 1,
+  },
+  adultName: {
+    fontSize: width * 0.038,
+    fontWeight: "bold",
+  },
+  adultDesc: {
+    fontSize: width * 0.03,
+    color: "rgba(255,255,255,0.55)",
+    marginTop: 3,
+  },
+  adultPlayBtn: {
+    paddingHorizontal: width * 0.04,
+    paddingVertical: height * 0.011,
+    borderRadius: width * 0.05,
+  },
+  adultPlayBtnText: {
+    color: "#fff",
+    fontSize: width * 0.036,
+    fontWeight: "900",
   },
 });

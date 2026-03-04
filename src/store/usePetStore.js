@@ -2,6 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { STAGE_THRESHOLDS, VINCULO_MAX } from '../theme/designTokens';
+import SKIN_CONFIG from '../constants/skinConfig';
+
+export { SKIN_CONFIG };
 
 // Derive stage from vinculo (1-6)
 export const getStage = (vinculo) => {
@@ -30,27 +33,37 @@ const usePetStore = create(
       streak: 0,
       petType: 'alebrije',          // 'alebrije' | 'xolo' | 'ajolote'
       petName: 'Alebrije',
+      activeSkin: null,             // skin ID activo o null
       lastInteraction: Date.now(),
       lastDecayCheck: Date.now(),
+      lastTapDate: null,            // 'YYYY-MM-DD' string for daily tap tracking
+      tapsTodayCount: 0,            // taps used today
 
       // ── Actions ─────────────────────────────────────────────────────────
-      // +15 por acierto
+      // +2 por acierto (antes +15 — ralentizado intencionalmente)
       acierto: () =>
         set((s) => ({
-          vinculo: clamp(s.vinculo + 15, 0, VINCULO_MAX),
+          vinculo: clamp(s.vinculo + 2, 0, VINCULO_MAX),
           lastInteraction: Date.now(),
         })),
 
-      // -3 por error
-      error: () =>
-        set((s) => ({ vinculo: clamp(s.vinculo - 3, 0, VINCULO_MAX) })),
+      // Errores no afectan el vínculo
+      error: () => {},
 
-      // +5 por caricia (tap directo sobre mascota)
+      // +2 por caricia, máximo 10 taps diarios
       caricia: () =>
-        set((s) => ({
-          vinculo: clamp(s.vinculo + 5, 0, VINCULO_MAX),
-          lastInteraction: Date.now(),
-        })),
+        set((s) => {
+          const today = new Date().toISOString().slice(0, 10);
+          const isNewDay = s.lastTapDate !== today;
+          const tapsToday = isNewDay ? 0 : s.tapsTodayCount;
+          if (tapsToday >= 10) return {}; // límite diario alcanzado
+          return {
+            vinculo: clamp(s.vinculo + 2, 0, VINCULO_MAX),
+            lastInteraction: Date.now(),
+            lastTapDate: today,
+            tapsTodayCount: tapsToday + 1,
+          };
+        }),
 
       // +(streak * 2) al completar racha
       streakBonus: (days) =>
@@ -78,6 +91,7 @@ const usePetStore = create(
 
       setPetType: (petType) => set({ petType }),
       setPetName: (petName) => set({ petName }),
+      setActiveSkin: (activeSkin) => set({ activeSkin }),
     }),
     {
       name: 'pet-bond-storage',
@@ -88,8 +102,11 @@ const usePetStore = create(
         streak: state.streak,
         petType: state.petType,
         petName: state.petName,
+        activeSkin: state.activeSkin,
         lastInteraction: state.lastInteraction,
         lastDecayCheck: state.lastDecayCheck,
+        lastTapDate: state.lastTapDate,
+        tapsTodayCount: state.tapsTodayCount,
       }),
     }
   )

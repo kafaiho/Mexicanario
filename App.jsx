@@ -12,6 +12,7 @@ import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { setupNotificationHandler } from "./src/services/notificationService";
 import { addCustomerInfoListener, initRevenueCat } from "./src/services/RevenueCatService";
+import * as Linking from "expo-linking";
 
 LogBox.ignoreLogs([
   "expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go",
@@ -347,6 +348,33 @@ function AppContent() {
   const soundsLoaded = useRef(false);
 
   useEffect(() => {
+    // ── Capture referral deep link at app open ────────────────────────────────
+    (async () => {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          const parsed = Linking.parse(initialUrl);
+          const refCode = parsed.queryParams?.ref ?? parsed.path?.replace(/^ref\/?/, "") ?? null;
+          if (refCode && typeof refCode === "string" && refCode.trim()) {
+            await AsyncStorage.setItem("@mexicanario:pendingRef", refCode.trim().toLowerCase());
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.log("[referral] getInitialURL error:", e);
+      }
+    })();
+
+    // ── Also listen for links while app is already open ───────────────────────
+    const linkingSub = Linking.addEventListener("url", ({ url }) => {
+      try {
+        const parsed = Linking.parse(url);
+        const refCode = parsed.queryParams?.ref ?? parsed.path?.replace(/^ref\/?/, "") ?? null;
+        if (refCode && typeof refCode === "string" && refCode.trim()) {
+          AsyncStorage.setItem("@mexicanario:pendingRef", refCode.trim().toLowerCase()).catch(() => {});
+        }
+      } catch {}
+    });
+
     // Initialize RevenueCat SDK (no-op in Expo Go or if API key not set)
     initRevenueCat().catch((e) => { if (__DEV__) console.log("[RevenueCat] init error:", e); });
 
@@ -413,6 +441,7 @@ function AppContent() {
     });
 
     return () => {
+      linkingSub.remove();
       subscription.remove();
       unloadSounds().catch(() => {});
     };
@@ -458,8 +487,22 @@ function AppContent() {
     );
   }
 
+  const linking = {
+    prefixes: ["mexicanario://"],
+    config: {
+      screens: {
+        Main: "main",
+        Gameplay: {
+          path: "challenge",
+          parse: { reviewLevel: (v) => parseInt(v, 10) },
+          stringify: { reviewLevel: (v) => String(v) },
+        },
+      },
+    },
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <>

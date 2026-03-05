@@ -23,7 +23,7 @@ export default defineSchema({
     region: v.string(),
     category: v.optional(v.string()), // Added for the Colección screen
     difficulty: v.optional(v.number()), // 1=Fácil 2=Medio 3=Difícil (optional per-word override)
-    pack: v.optional(v.string()),      // "insultos" | "suegra" — solo para palabras adultas
+    pack: v.optional(v.string()),       // content pack ID (e.g. "insultos", "suegra") for adult packs
   }),
 
   // Levels table to store level configurations
@@ -98,12 +98,18 @@ export default defineSchema({
     petSlots: v.optional(v.string()),            // JSON: { ajolote:{...}, xolo:{...}, alebrije:{...}, nahual_norte:{...}, ... }
     // ── Mexicanario Plus subscription ───────────────────────────────────────
     mexPlusExpiresAt: v.optional(v.number()),    // epoch ms expiry; active when > Date.now()
+    // ── Sistema de referidos ─────────────────────────────────────────────────────
+    referredBy:    v.optional(v.id("users")), // quién me invitó (solo 1 vez)
+    referralCount: v.optional(v.number()),    // total de cuates que han entrado por mi link
     // ── Cuates / social ─────────────────────────────────────────────────────
     username: v.optional(v.string()),            // nombre único elegido por el jugador
     passwordHash: v.optional(v.string()),        // SHA-256 de la contraseña (hex)
     // ── Skins & contenido desbloqueado ───────────────────────────────────────
     purchasedSkins: v.optional(v.array(v.string())),         // IDs de skins compradas con monedas
-    adultContentUnlocked: v.optional(v.array(v.string())),  // IDs de categorías +18 desbloqueadas
+    adultContentUnlocked: v.optional(v.array(v.string())),   // IDs de paquetes de contenido adulto desbloqueados
+    // ── Código de creador/referido ───────────────────────────────────────────
+    creatorCode: v.optional(v.string()),         // código aplicado (e.g., "ALANA")
+    creatorCodeAppliedAt: v.optional(v.number()), // timestamp de cuando lo aplicó
   })
     .index("by_googleId", ["googleId"])
     .index("by_appleId", ["appleId"])
@@ -288,13 +294,55 @@ export default defineSchema({
     .index("by_daily", ["dailyDate", "dailyBest"])
     .index("by_weekly", ["weeklyStr", "weeklyBest"]),
 
+  // ── Taquero Rush scores ───────────────────────────────────────────────────────
+  taqueroScores: defineTable({
+    userId: v.id("users"),
+    allTimeBest: v.number(),
+    dailyBest: v.number(),
+    dailyDate: v.string(),
+    weeklyBest: v.number(),
+    weeklyStr: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_alltime", ["allTimeBest"])
+    .index("by_daily", ["dailyDate", "dailyBest"])
+    .index("by_weekly", ["weeklyStr", "weeklyBest"]),
+
+  // ── Duelo de Albures scores ───────────────────────────────────────────────────
+  alburesScores: defineTable({
+    userId: v.id("users"),
+    allTimeBest: v.number(),
+    dailyBest: v.number(),
+    dailyDate: v.string(),
+    weeklyBest: v.number(),
+    weeklyStr: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_alltime", ["allTimeBest"])
+    .index("by_daily", ["dailyDate", "dailyBest"])
+    .index("by_weekly", ["weeklyStr", "weeklyBest"]),
+
+  // ── Lotería Exprés scores ─────────────────────────────────────────────────────
+  loteriaScores: defineTable({
+    userId: v.id("users"),
+    allTimeBest: v.number(),
+    dailyBest: v.number(),
+    dailyDate: v.string(),
+    weeklyBest: v.number(),
+    weeklyStr: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_alltime", ["allTimeBest"])
+    .index("by_daily", ["dailyDate", "dailyBest"])
+    .index("by_weekly", ["weeklyStr", "weeklyBest"]),
+
   // ── Sistema de cuates (amigos) ────────────────────────────────────────────
   friendships: defineTable({
-    userId:   v.id("users"),    // quien agregó
+    userId: v.id("users"),    // quien agregó
     friendId: v.id("users"),    // a quien agregó
     createdAt: v.number(),
   })
-    .index("by_user",        ["userId"])
+    .index("by_user", ["userId"])
     .index("by_user_friend", ["userId", "friendId"]),
 
   // ── Failed word review system ──────────────────────────────────────────────
@@ -309,4 +357,28 @@ export default defineSchema({
     failCount: v.number(),      // total times failed across all sessions
   }).index("by_user_scheduled", ["userId", "scheduledAt"])
     .index("by_user_word", ["userId", "wordId"]),
+
+  // ── Códigos de creadores (referral codes para YouTubers/streamers) ──────────
+  referralCodes: defineTable({
+    code: v.string(),             // MAYÚSCULAS único, e.g., "ALANA"
+    creatorName: v.string(),      // nombre visible, e.g., "Alana Flores"
+    creatorHandle: v.string(),    // @handle para UI
+    discountPct: v.number(),      // % bonus varos en compras IAP (e.g., 5)
+    bonusCoins: v.number(),       // varos gratis al aplicar por primera vez
+    active: v.boolean(),
+    totalUses: v.number(),        // usuarios que usaron este código
+    totalPurchases: v.number(),   // compras IAP atribuidas (para analytics del creador)
+  }).index("by_code", ["code"]),
+
+  // ── Referidos (Invita y Gana) ─────────────────────────────────────────────────
+  referrals: defineTable({
+    referrerId:     v.id("users"),
+    referredId:     v.id("users"),
+    createdAt:      v.number(),
+    coinsReferrer:  v.number(),
+    coinsReferred:  v.number(),
+    milestoneBonus: v.optional(v.boolean()),
+  })
+    .index("by_referrer", ["referrerId"])
+    .index("by_referred",  ["referredId"]),
 });

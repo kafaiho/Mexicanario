@@ -4,6 +4,7 @@ import { tapMedium } from "../services/haptics";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   ImageBackground,
   Modal,
   Platform,
@@ -19,10 +20,35 @@ import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 
-const BROWN = "#8B4513";
-const AMBER = "#D2691E";
-const GOLD  = "#F8BE17";
-const WHEAT = "#FFE4B5";
+const BROWN  = "#8B4513";
+const ORANGE = "#FF6B35";
+const AMBER  = "#D2691E";
+const GOLD   = "#F8BE17";
+const WHEAT  = "#FFE4B5";
+
+// ── Imágenes AI por categoría ─────────────────────────────────────────────────
+const CATEGORY_IMAGE_MAP: Record<string, any> = {
+  "Expresiones":       require("../../assets/images/collections/expresiones.png"),
+  "Picaresca":         require("../../assets/images/collections/picaresca.png"),
+  "Tipos Sociales":    require("../../assets/images/collections/tipos_sociales.png"),
+  "Verbos del Barrio": require("../../assets/images/collections/verbos_barrio.png"),
+  "Comida":            require("../../assets/images/collections/comida.png"),
+  "Bebida":            require("../../assets/images/collections/bebida.png"),
+  "Animales":          require("../../assets/images/collections/animales.png"),
+  "Historia":          require("../../assets/images/collections/historia.png"),
+  "Música":            require("../../assets/images/collections/musica.png"),
+  "Juegos":            require("../../assets/images/collections/juegos.png"),
+  "Tradiciones":       require("../../assets/images/collections/tradiciones.png"),
+  "Plantas":           require("../../assets/images/collections/plantas.png"),
+  "Monumentos":        require("../../assets/images/collections/monumentos.png"),
+  "Artistas":          require("../../assets/images/collections/artistas.png"),
+  "Streamers":         require("../../assets/images/collections/streamers.png"),
+  "Músicos":           require("../../assets/images/collections/musicos_digital.png"),
+  "Futbolistas":       require("../../assets/images/collections/futbolistas.png"),
+  "Jerga Digital":     require("../../assets/images/collections/jerga_digital.png"),
+  "Regionalismos":     require("../../assets/images/collections/regionalismos.png"),
+  "Leyendas":          require("../../assets/images/collections/leyendas.png"),
+};
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
@@ -199,34 +225,41 @@ export default function ColeccionScreen() {
     );
   }
 
-  const CollectionCard = (category, index) => {
+  const CollectionCard = (category: any, index: number) => {
     const totalWords = category.levels.length;
-    const unlockedWords = category.levels.filter(lvl => isWordUnlocked(lvl.levelNumber)).length;
-
-    // Warm category accent colors (Mexicanometro palette — no blues)
-    const bgColors = ["#D2691E", "#5A8A40", "#8B4513", "#F8BE17", "#C0392B", "#6B9E57", "#A0714F", "#D4842E", "#7F5430"];
-    const bgColor = bgColors[index % bgColors.length];
+    const unlockedWords = category.levels.filter(
+      (lvl: any) => isWordUnlocked(lvl.levelNumber)
+    ).length;
+    const pct = totalWords > 0 ? unlockedWords / totalWords : 0;
+    const img = CATEGORY_IMAGE_MAP[category.name] ?? null;
 
     return (
       <TouchableOpacity
         key={index}
         style={styles.card}
         onPress={() => onCardPress(category)}
-        activeOpacity={0.8}
+        activeOpacity={0.82}
       >
-        <View style={[styles.iconCircle, { backgroundColor: bgColor }]}>
-          <Text style={styles.cardIcon}>{category.icon}</Text>
+        {/* Icono cuadrado AI — estilo Mexicanómetro */}
+        <View style={styles.iconSquare}>
+          {img ? (
+            <Image source={img} style={styles.iconImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.iconFallback}>{category.icon}</Text>
+          )}
         </View>
 
-        <View style={styles.cardContent}>
-          <Text style={styles.cardTitle}>{category.name}</Text>
-          <Text style={styles.progressText}>
-            {unlockedWords}/{totalWords}
-          </Text>
+        {/* Nombre */}
+        <Text style={styles.cardTitle} numberOfLines={2}>{category.name}</Text>
+
+        {/* Barra de progreso amber — igual que fill bar del Mexicanómetro */}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${Math.round(pct * 100)}%` as any }]} />
         </View>
+        <Text style={styles.progressText}>{unlockedWords}/{totalWords}</Text>
       </TouchableOpacity>
-    )
-  }
+    );
+  };
 
   return (
     <ImageBackground
@@ -379,37 +412,39 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "rgba(139,69,19,0.35)",
   },
-  iconCircle: {
-    width: width * 0.18,
-    height: width * 0.18,
-    borderRadius: (width * 0.18) / 2,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
+  // ── Icono cuadrado AI (reemplaza círculo con emoji) ─────────────────────────
+  iconSquare: {
+    width: width * 0.17,
+    height: width * 0.17,
+    borderRadius: 14,
+    overflow: "hidden",
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: "rgba(139,69,19,0.3)",
   },
-  cardIcon: {
+  iconImage: {
+    width: "100%",
+    height: "100%",
+  },
+  iconFallback: {
     fontSize: width * 0.09,
-    textAlign: "center"
+    textAlign: "center",
+    lineHeight: width * 0.17,
   },
-  rarityBadge: {
-    position: "absolute",
-    top: -height * 0.01,
-    right: -width * 0.01,
-    backgroundColor: WHEAT2,
-    paddingHorizontal: width * 0.02,
-    paddingVertical: height * 0.005,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(139,69,19,0.35)",
+  // ── Barra de progreso estilo Mexicanómetro fill bar ──────────────────────
+  progressTrack: {
+    width: "88%",
+    height: 5,
+    backgroundColor: "rgba(139,69,19,0.18)",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginTop: 4,
+    marginBottom: 2,
   },
-  rarityText: {
-    fontFamily: FONTS.bodyBold,
-    fontSize: width * 0.025,
-    color: BROWN,
-  },
-  cardContent: {
-    flex: 1,
-    alignItems: "center",
+  progressFill: {
+    height: "100%",
+    backgroundColor: AMBER,
+    borderRadius: 3,
   },
   cardTitle: {
     fontFamily: FONTS.bodyBold,
@@ -420,7 +455,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontFamily: FONTS.bodyBold,
-    fontSize: width * 0.032,
+    fontSize: width * 0.027,
     color: AMBER,
   },
   modalOverlay: {

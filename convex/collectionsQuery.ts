@@ -6,23 +6,37 @@ import { getOrderedLevels, completedWordIds } from "./levelOrdering";
 function categoryIcon(cat: string): string {
   const map: Record<string, string> = {
     // Tier 1 — Fácil
-    "Comida":          "🌮",
-    "Bebida":          "🍹",
-    "Juegos":          "🎯",
-    "Modismos":        "🤙",
-    "Refranes":        "💭",
-    // Tier 2 — Medio
-    "Música":          "🎶",
-    "Animales":        "🦅",
-    "Plantas":         "🌿",
-    "Artistas":        "🎨",
-    "Tradiciones":     "🎉",
-    "Cultura Popular": "📺",
-    "Leyendas":        "👻",
+    "Comida":            "🌮",
+    "Bebida":            "🍹",
+    "Juegos":            "🎯",
+    "Modismos":          "🤙",
+    "Popular":           "🤙",
+    "Refranes":          "💭",
+    // Sub-categorías de Modismos
+    "Expresiones":       "🗣️",
+    "Picaresca":         "🌶️",
+    "Tipos Sociales":    "🎭",
+    "Verbos del Barrio": "🏙️",
+    // Tier 2 — Medio (cultura clásica)
+    "Música":            "🎶",
+    "Animales":          "🦅",
+    "Plantas":           "🌿",
+    "Artistas":          "🎨",
+    "Tradiciones":       "🎉",
+    "Regionalismos":     "🗺️",
+    "Gastronomia":       "🍽️",
+    "Telenovelas":       "📺",
+    "Cultura Popular":   "📺",
+    "Leyendas":          "👻",
+    // Tier 2 — Medio (cultura digital y deporte)
+    "Streamers":         "📱",
+    "Músicos":           "🎵",
+    "Futbolistas":       "⚽",
+    "Jerga Digital":     "💬",
     // Tier 3 — Difícil
-    "Historia":        "📜",
-    "Civilizaciones":  "🗿",
-    "Monumentos":      "🏛️",
+    "Historia":          "📜",
+    "Civilizaciones":    "🗿",
+    "Monumentos":        "🏛️",
   };
   return map[cat] ?? "📖";
 }

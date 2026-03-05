@@ -21,13 +21,15 @@
       "android": {
         "buildType": "app-bundle",
         "env": {
-          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud"
+          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud",
+          "EAS_BUILD": "true"
         }
       },
       "ios": {
         "credentialsSource": "remote",
         "env": {
-          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud"
+          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud",
+          "EAS_BUILD": "true"
         }
       }
     }

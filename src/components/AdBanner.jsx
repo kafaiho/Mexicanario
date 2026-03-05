@@ -36,9 +36,13 @@ export default function AdBanner({ style }) {
 
   useEffect(() => {
     if (!ADS_AVAILABLE) return;
-    AsyncStorage.getItem(AD_FREE_KEY).then((val) => {
-      const adFreeActive = val && Date.now() < parseInt(val, 10);
-      setShow(!adFreeActive);
+    Promise.all([
+      AsyncStorage.getItem(AD_FREE_KEY),
+      AsyncStorage.getItem("@mexicanario:mexPlusActive"),
+    ]).then(([adFreeVal, plusVal]) => {
+      const adFreeActive = adFreeVal && Date.now() < parseInt(adFreeVal, 10);
+      const isPlusActive = plusVal === "1";
+      setShow(!adFreeActive && !isPlusActive);
     });
   }, []);
 

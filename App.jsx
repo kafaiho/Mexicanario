@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
 import mobileAds, { AdsConsent, AdsConsentStatus } from "react-native-google-mobile-ads";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./convex/_generated/api";
 import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
@@ -423,8 +424,11 @@ function AppContent() {
   useEffect(() => {
     if (!userId) return;
     const unsub = addCustomerInfoListener(({ active, expiresAt }) => {
+      // Sync Plus status to Convex backend
       syncMexPlus({ userId, expiresAt: active ? (expiresAt ?? undefined) : 0 })
         .catch(() => {});
+      // Cache Plus status locally so AdBanner can hide ads without a network call
+      AsyncStorage.setItem("@mexicanario:mexPlusActive", active ? "1" : "0").catch(() => {});
     });
     return unsub;
   }, [userId]);

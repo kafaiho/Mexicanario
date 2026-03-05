@@ -28,7 +28,8 @@
         {
           "userTrackingPermission": "Usamos datos anónimos para mostrarte anuncios relevantes y mejorar tu experiencia en Mexicanario."
         }
-      ]
+      ],
+      "react-native-edge-to-edge"
     ],
     "ios": {
       "bundleIdentifier": "com.kafaiho.mexicanario",
@@ -52,6 +53,7 @@
       }
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"

@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
   Image,
@@ -210,6 +211,59 @@ export default function GameplayScreen({ navigation, route }) {
   const [showCoinsModal, setShowCoinsModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // which power-up was attempted when coins ran out
   const [showShop, setShowShop] = useState(false);
+  const [showExitPrompt, setShowExitPrompt] = useState(false);
+
+  // Android Back Button Handler
+  useEffect(() => {
+    const backAction = () => {
+      // Don't show exit prompt if they already won/lost or are viewing another modal
+      if (
+        isCorrect ||
+        showLevelUp ||
+        showDictionary ||
+        showMexicanario ||
+        showWheel ||
+        showTerms ||
+        showSupport ||
+        showVenezolanometro ||
+        showAdRemoval ||
+        showAuthPrompt ||
+        showRegisterLure ||
+        showCuatesReg ||
+        showCoinsModal ||
+        showShop ||
+        showDevModal
+      ) {
+        return false; // let default behavior happen (e.g., close modal)
+      }
+
+      setShowExitPrompt(true);
+      return true; // prevent default (exit app/go back)
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [
+    isCorrect,
+    showLevelUp,
+    showDictionary,
+    showMexicanario,
+    showWheel,
+    showTerms,
+    showSupport,
+    showVenezolanometro,
+    showAdRemoval,
+    showAuthPrompt,
+    showRegisterLure,
+    showCuatesReg,
+    showCoinsModal,
+    showShop,
+    showDevModal,
+  ]);
 
   // Refs para coin fly
   const topBarRef = useRef(null);
@@ -879,7 +933,11 @@ export default function GameplayScreen({ navigation, route }) {
 
         // Defer all backend work until animations settle
         InteractionManager.runAfterInteractions(() => {
-          completeLevelMutation({ userId, levelNumber: levelInfo.level })
+          completeLevelMutation({
+            userId,
+            levelNumber: levelInfo.level,
+            isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
+          })
             .then((levelResult) => {
               if (levelResult.success) {
                 const totalCoins = reward.coins; // already 0 if powerup was used
@@ -1457,35 +1515,35 @@ export default function GameplayScreen({ navigation, route }) {
                   const isSpecial = key === "DELETE_ONE" || key === "CLEAR_ALL";
                   const isDimmed = revealedKeys !== null && !isSpecial && !revealedKeys.has(key);
                   return (
-                  <JuicyButton
-                    key={key}
-                    style={[
-                      styles.key,
-                      key === "DELETE_ONE" && styles.deleteKey,
-                      key === "CLEAR_ALL" && styles.clearKey,
-                      isDimmed && styles.keyDimmed,
-                    ]}
-                    disabled={isDimmed}
-                    onPress={() => onKeyPress(key)}
-                    onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
-                    onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
-                    intensity={key === "CLEAR_ALL" ? "medium" : "light"}
-                    scaleDown={0.88}
-                  >
-                    {key === "DELETE_ONE" ? (
-                      <Image
-                        source={require("../../assets/images/delete_one.png")}
-                        style={styles.deleteIcon}
-                      />
-                    ) : key === "CLEAR_ALL" ? (
-                      <Image
-                        source={require("../../assets/icons/trash.png")}
-                        style={styles.clearIcon}
-                      />
-                    ) : (
-                      <Text style={styles.keyText}>{key}</Text>
-                    )}
-                  </JuicyButton>
+                    <JuicyButton
+                      key={key}
+                      style={[
+                        styles.key,
+                        key === "DELETE_ONE" && styles.deleteKey,
+                        key === "CLEAR_ALL" && styles.clearKey,
+                        isDimmed && styles.keyDimmed,
+                      ]}
+                      disabled={isDimmed}
+                      onPress={() => onKeyPress(key)}
+                      onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
+                      onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
+                      intensity={key === "CLEAR_ALL" ? "medium" : "light"}
+                      scaleDown={0.88}
+                    >
+                      {key === "DELETE_ONE" ? (
+                        <Image
+                          source={require("../../assets/images/delete_one.png")}
+                          style={styles.deleteIcon}
+                        />
+                      ) : key === "CLEAR_ALL" ? (
+                        <Image
+                          source={require("../../assets/icons/trash.png")}
+                          style={styles.clearIcon}
+                        />
+                      ) : (
+                        <Text style={styles.keyText}>{key}</Text>
+                      )}
+                    </JuicyButton>
                   );
                 })}
               </View>
@@ -1626,6 +1684,35 @@ export default function GameplayScreen({ navigation, route }) {
               </TouchableOpacity>
               <TouchableOpacity style={styles.regDismiss} onPress={() => setShowRegisterLure(false)}>
                 <Text style={{ color: "#A0714F", fontSize: 13 }}>Quizás después</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Exit Game Confirmation Modal (Android Back Button) */}
+        <Modal visible={showExitPrompt} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>¿Deseas salir?</Text>
+              <Text style={styles.modalText}>
+                Si sales ahora perderás tu progreso en esta palabra.
+              </Text>
+              <TouchableOpacity
+                style={styles.modalBtnPrimary}
+                onPress={() => {
+                  setShowExitPrompt(false);
+                  navigation.goBack();
+                }}
+              >
+                <Text style={styles.modalBtnText}>Sí, salir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ marginTop: 15, paddingVertical: 10, width: "100%", alignItems: "center" }}
+                onPress={() => setShowExitPrompt(false)}
+              >
+                <Text style={{ color: "#1A5276", fontWeight: "bold", fontSize: 16 }}>
+                  Cancelar
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2308,7 +2395,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   deleteKey: { width: TABLET_MODE ? 64 : 52, backgroundColor: "#C8C8D0" },
-  clearKey:  { width: TABLET_MODE ? 64 : 52, backgroundColor: "#C8C8D0" },
+  clearKey: { width: TABLET_MODE ? 64 : 52, backgroundColor: "#C8C8D0" },
   keyDimmed: { backgroundColor: "#D0D0D8", opacity: 0.25 },
   keyText: {
     fontSize: TABLET_MODE ? 21 : 18,

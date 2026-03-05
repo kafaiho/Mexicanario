@@ -88,6 +88,8 @@ export default defineSchema({
     // ── Daily missions ───────────────────────────────────────────────────────
     bestComboToday: v.optional(v.number()),      // mejor combo del día actual
     comboTodayDate: v.optional(v.string()),      // "YYYY-MM-DD" para reset diario de combo
+    // ── XP de sabiduría cultural ─────────────────────────────────────────────
+    xp: v.optional(v.number()),                  // XP total acumulado (Experiencia Cultural)
     // ── Social auth linking (optional) ─────────────────────────────────────
     email: v.optional(v.string()),            // email from Google/Apple
     googleId: v.optional(v.string()),            // Google OAuth `sub`

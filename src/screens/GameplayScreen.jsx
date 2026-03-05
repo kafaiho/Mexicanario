@@ -386,6 +386,7 @@ export default function GameplayScreen({ navigation, route }) {
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
   const updateUserCurrency = useMutation(api.users.updateUserCurrency);
   const completeLevelMutation = useMutation(api.levels.completeLevel);
+  const addXp = useMutation(api.users.addXp);
   const gainPetXp = useMutation(api.pet.gainPetXp);
   const allLevels = useQuery(api.levels.getAllLevels);
   const jumpToLevelMutation = useMutation(api.devTools.jumpToLevel);
@@ -945,6 +946,9 @@ export default function GameplayScreen({ navigation, route }) {
                   updateUserCurrency({ userId, coins: totalCoins, diamonds: reward.diamonds }).catch(() => { });
                 }
                 gainPetXp({ userId }).catch(() => { });
+                // XP cultural: +10 base, +15 si nivel perfecto (0 errores, sin powerups)
+                const isPerfectLevel = !isMapReview && attempts === 0 && !usedPowerupRef.current;
+                addXp({ userId, amount: isPerfectLevel ? 25 : 10 }).catch(() => { });
                 recordLeagueCXP({ userId, attempts, comboCount: newCombo }).catch(() => { });
                 recordDailyPlay({ userId })
                   .then(async (streakResult) => {

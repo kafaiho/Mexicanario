@@ -260,6 +260,20 @@ export const resetLevel = mutation({
   },
 });
 
+// ─── XP Cultural ─────────────────────────────────────────────────────────────
+// Suma XP al perfil del jugador.
+// amount: +10 por palabra, +5 sin errores, +15 nivel perfecto.
+export const addXp = mutation({
+  args: { userId: v.id("users"), amount: v.number() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return;
+    await ctx.db.patch(args.userId, {
+      xp: (user.xp ?? 0) + args.amount,
+    });
+  },
+});
+
 // ─── Delete Account (Apple App Store required) ────────────────────────────────
 // Permanently removes all data for a user across every table.
 export const deleteAccount = mutation({

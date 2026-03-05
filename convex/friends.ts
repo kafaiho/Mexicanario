@@ -31,12 +31,13 @@ const REGISTER_DIAMONDS = 5;
 // Devuelve { success, coinsAdded, diamondsAdded } solo en primera inscripción
 export const registerAccount = mutation({
   args: {
-    userId:   v.id("users"),
-    email:    v.string(),
-    password: v.string(),
-    username: v.string(),
+    userId:           v.id("users"),
+    email:            v.string(),
+    password:         v.string(),
+    username:         v.string(),
+    referrerUsername: v.optional(v.string()),  // username del cuate que invitó
   },
-  handler: async (ctx, { userId, email, password, username }) => {
+  handler: async (ctx, { userId, email, password, username, referrerUsername }) => {
     const uname      = cleanUsername(username);
     const emailLower = email.toLowerCase().trim();
 
@@ -82,10 +83,73 @@ export const registerAccount = mutation({
 
     await ctx.db.patch(userId, patch);
 
+    // ── Claim referral bonus if invited by another user ───────────────────────────
+    let referralResult = null;
+    if (isFirstTime && referrerUsername) {
+      try {
+        const referrerUsernameCleaned = referrerUsername.toLowerCase().trim();
+        const referrer = await ctx.db
+          .query("users")
+          .withIndex("by_username", (q) => q.eq("username", referrerUsernameCleaned))
+          .first();
+
+        if (referrer && referrer._id !== userId) {
+          const currentReferred = await ctx.db.get(userId);
+          if (!currentReferred?.referredBy) {
+            const COINS_REFERRED  = 200;
+            const COINS_REFERRER  = 300;
+            const MILESTONES = [
+              { count: 5,  coins: 500,   diamonds: 2  },
+              { count: 10, coins: 1000,  diamonds: 5  },
+              { count: 25, coins: 2000,  diamonds: 15 },
+              { count: 50, coins: 3000,  diamonds: 30 },
+            ];
+            const newCount = (referrer.referralCount ?? 0) + 1;
+            const milestone = MILESTONES.find((m) => m.count === newCount) ?? null;
+
+            const referrerCoinsGain   = COINS_REFERRER + (milestone?.coins   ?? 0);
+            const referrerDiamondGain = milestone?.diamonds ?? 0;
+
+            // Award referred user bonus on top of already-patched coins
+            await ctx.db.patch(userId, {
+              coins:      (currentReferred?.coins ?? 0) + COINS_REFERRED,
+              referredBy: referrer._id,
+            });
+
+            // Award referrer
+            await ctx.db.patch(referrer._id, {
+              coins:         (referrer.coins    ?? 0) + referrerCoinsGain,
+              diamonds:      (referrer.diamonds ?? 0) + referrerDiamondGain,
+              referralCount: newCount,
+            });
+
+            await ctx.db.insert("referrals", {
+              referrerId:     referrer._id,
+              referredId:     userId,
+              createdAt:      Date.now(),
+              coinsReferrer:  referrerCoinsGain,
+              coinsReferred:  COINS_REFERRED,
+              milestoneBonus: milestone ? true : undefined,
+            });
+
+            referralResult = {
+              coinsReferred:    COINS_REFERRED,
+              coinsReferrer:    referrerCoinsGain,
+              milestoneReached: milestone?.count ?? null,
+            };
+          }
+        }
+      } catch (e) {
+        // Referral is non-critical — never block registration
+        if (process.env.NODE_ENV !== "production") console.log("[referral] error:", e);
+      }
+    }
+
     return {
       success:       true,
       coinsAdded:    isFirstTime ? REGISTER_COINS    : 0,
       diamondsAdded: isFirstTime ? REGISTER_DIAMONDS : 0,
+      referral:      referralResult,
     };
   },
 });

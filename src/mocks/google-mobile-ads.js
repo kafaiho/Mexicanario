@@ -43,7 +43,22 @@ function mobileAds() {
   };
 }
 
+const AdsConsentStatus = {
+  UNKNOWN:      "UNKNOWN",
+  NOT_REQUIRED: "NOT_REQUIRED",
+  REQUIRED:     "REQUIRED",
+  OBTAINED:     "OBTAINED",
+};
+
+const AdsConsent = {
+  requestInfoUpdate: () => Promise.resolve({
+    status: AdsConsentStatus.NOT_REQUIRED,
+    isConsentFormAvailable: false,
+  }),
+  showForm: () => Promise.resolve(),
+};
+
 export const IS_MOCKED = true;
 
 export default mobileAds;
-export { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType };
+export { BannerAd, BannerAdSize, TestIds, RewardedAd, RewardedAdEventType, AdsConsent, AdsConsentStatus };

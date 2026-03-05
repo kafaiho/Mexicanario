@@ -5,7 +5,7 @@ import { ConvexProvider, ConvexReactClient, useMutation } from "convex/react";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
-import mobileAds from "react-native-google-mobile-ads";
+import mobileAds, { AdsConsent, AdsConsentStatus } from "react-native-google-mobile-ads";
 import { api } from "./convex/_generated/api";
 import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
@@ -349,13 +349,28 @@ function AppContent() {
     // Initialize RevenueCat SDK (no-op in Expo Go or if API key not set)
     initRevenueCat().catch((e) => { if (__DEV__) console.log("[RevenueCat] init error:", e); });
 
-    // Initialize AdMob (graceful no-op in Expo Go — module is imported but
-    // TurboModule lookup only happens when mobileAds() is called)
-    try {
-      mobileAds().initialize();
-    } catch {
-      // Native module not registered (Expo Go)
-    }
+    // Initialize AdMob with UMP consent flow (required by Google Play policy)
+    (async () => {
+      try {
+        // 1. Request consent status from Google UMP SDK
+        const consentInfo = await AdsConsent.requestInfoUpdate();
+
+        // 2. Show consent form if required (GDPR, LGPD, etc.)
+        if (
+          consentInfo.isConsentFormAvailable &&
+          (consentInfo.status === AdsConsentStatus.REQUIRED ||
+            consentInfo.status === AdsConsentStatus.UNKNOWN)
+        ) {
+          await AdsConsent.showForm();
+        }
+
+        // 3. Initialize AdMob after consent is resolved
+        await mobileAds().initialize();
+      } catch {
+        // Native module not registered (Expo Go) or consent error — initialize anyway
+        try { await mobileAds().initialize(); } catch {}
+      }
+    })();
 
     // Run the database fix silently in the background
     autoFixDatabase().catch((e) => { if (__DEV__) console.log("Auto-fix skipped or failed:", e); });

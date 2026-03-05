@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
+import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 
 // ── SHA-256 usando Web Crypto API (disponible en V8 runtime de Convex) ────────
 async function hashPassword(password: string): Promise<string> {
@@ -96,16 +97,8 @@ export const registerAccount = mutation({
         if (referrer && referrer._id !== userId) {
           const currentReferred = await ctx.db.get(userId);
           if (!currentReferred?.referredBy) {
-            const COINS_REFERRED  = 200;
-            const COINS_REFERRER  = 300;
-            const MILESTONES = [
-              { count: 5,  coins: 500,   diamonds: 2  },
-              { count: 10, coins: 1000,  diamonds: 5  },
-              { count: 25, coins: 2000,  diamonds: 15 },
-              { count: 50, coins: 3000,  diamonds: 30 },
-            ];
             const newCount = (referrer.referralCount ?? 0) + 1;
-            const milestone = MILESTONES.find((m) => m.count === newCount) ?? null;
+            const milestone = REFERRAL_MILESTONES.find((m) => m.count === newCount) ?? null;
 
             const referrerCoinsGain   = COINS_REFERRER + (milestone?.coins   ?? 0);
             const referrerDiamondGain = milestone?.diamonds ?? 0;

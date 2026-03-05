@@ -1,20 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-// ── Reward constants ──────────────────────────────────────────────────────────
-const COINS_REFERRED  = 200;   // referido recibe
-const COINS_REFERRER  = 300;   // referidor recibe por cuate
-
-// Milestone bonuses (awarded when referralCount hits these numbers)
-const MILESTONES: Array<{ count: number; coins: number; diamonds: number }> = [
-  { count: 5,  coins: 500,   diamonds: 2  },
-  { count: 10, coins: 1000,  diamonds: 5  },
-  { count: 25, coins: 2000,  diamonds: 15 },
-  { count: 50, coins: 3000,  diamonds: 30 },
-];
+import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 
 function getMilestoneBonus(newCount: number) {
-  return MILESTONES.find((m) => m.count === newCount) ?? null;
+  return REFERRAL_MILESTONES.find((m) => m.count === newCount) ?? null;
 }
 
 // ── claimReferral ─────────────────────────────────────────────────────────────
@@ -110,8 +99,7 @@ export const getReferralStats = query({
     );
 
     // Next milestone info
-    const MILESTONE_COUNTS = [5, 10, 25, 50];
-    const nextMilestone = MILESTONE_COUNTS.find((n) => n > referralCount) ?? null;
+    const nextMilestone = REFERRAL_MILESTONES.find((m) => m.count > referralCount)?.count ?? null;
 
     return {
       referralCount,

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
 import React, { useEffect, useState } from "react";
 import {
@@ -124,9 +125,28 @@ export default function CuatesModal({ visible, onClose }) {
       Alert.alert("Contraseña muy corta", "Mínimo 6 caracteres.");
       return;
     }
+    // Read pending referral code
+    let pendingRef = null;
+    try {
+      pendingRef = await AsyncStorage.getItem("@mexicanario:pendingRef");
+    } catch {}
     setBusy(true);
     try {
-      const res = await registerAccount({ userId, email: trimEmail, password, username: trimUsername });
+      const res = await registerAccount({
+        userId,
+        email: trimEmail,
+        password,
+        username: trimUsername,
+        referrerUsername: pendingRef ?? undefined,
+      });
+      // Clear the pending ref after use
+      AsyncStorage.removeItem("@mexicanario:pendingRef").catch(() => {});
+      if (res?.referral?.coinsReferred) {
+        Alert.alert(
+          "¡Bienvenido! 🎉",
+          `Un cuate te invitó. ¡Ganaste ${res.referral.coinsReferred} monedas extra!`
+        );
+      }
       if (res?.coinsAdded > 0 || res?.diamondsAdded > 0) {
         setReward({ coins: res.coinsAdded, diamonds: res.diamondsAdded });
       }

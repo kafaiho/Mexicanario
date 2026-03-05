@@ -3,8 +3,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { ConvexProvider, ConvexReactClient, useMutation } from "convex/react";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useState } from "react";
-import { Animated, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
 import mobileAds from "react-native-google-mobile-ads";
 import { api } from "./convex/_generated/api";
 import config from "./convex/config";
@@ -46,7 +46,7 @@ import MascotaScreen from "./src/screens/MascotaScreen";
 import ShopScreen from "./src/screens/ShopScreen";
 import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import { tapLight } from "./src/services/haptics";
-import { playBGM, playSound, preloadSounds } from "./src/utils/soundManager";
+import { playBGM, playSound, preloadSounds, unloadSounds } from "./src/utils/soundManager";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -342,6 +342,8 @@ function AppContent() {
   const { isAuthenticated, loading, error, retry, userId } = useAuth();
   const autoFixDatabase    = useMutation(api.patchCategories.autoFixDatabase);
   const syncMexPlus        = useMutation(api.shop.syncMexPlusEntitlement);
+  const appState = useRef(AppState.currentState);
+  const soundsLoaded = useRef(false);
 
   useEffect(() => {
     // Initialize RevenueCat SDK (no-op in Expo Go or if API key not set)
@@ -362,11 +364,42 @@ function AppContent() {
     setupNotificationHandler();
 
     // ── Preload ALL sounds immediately on app start ────────────────────────────
-    // This ensures sounds are ready before the user reaches any screen.
-    // After loading, start the menu BGM right away.
     preloadSounds().then(() => {
+      soundsLoaded.current = true;
       playBGM("menu");
     }).catch(() => { });
+
+    // ── AppState listener — unload/reload sounds on background/foreground ──────
+    // ExoPlayer (used by expo-av on Android) MUST be released from the main thread.
+    // If the Activity is destroyed before we clean up, AVManager.onHostDestroy()
+    // is called from a pool thread causing a crash. Proactively releasing from JS
+    // (which coordinates with the correct thread) prevents this.
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (
+        appState.current === "active" &&
+        (nextState === "background" || nextState === "inactive")
+      ) {
+        // App going to background — release ExoPlayer resources from the JS side
+        // so the native module finds nothing to release on its background thread.
+        unloadSounds().catch(() => {});
+        soundsLoaded.current = false;
+      } else if (
+        (appState.current === "background" || appState.current === "inactive") &&
+        nextState === "active"
+      ) {
+        // App coming back to foreground — reload sounds
+        preloadSounds().then(() => {
+          soundsLoaded.current = true;
+          playBGM("menu");
+        }).catch(() => {});
+      }
+      appState.current = nextState;
+    });
+
+    return () => {
+      subscription.remove();
+      unloadSounds().catch(() => {});
+    };
   }, []);
 
   // ── RevenueCat customerInfo listener ─────────────────────────────────────────

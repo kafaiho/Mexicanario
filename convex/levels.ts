@@ -215,7 +215,8 @@ export const checkLevelUp = mutation({
 export const completeLevel = mutation({
   args: {
     userId: v.id("users"),
-    levelNumber: v.number()
+    levelNumber: v.number(),
+    isPerfect: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -244,10 +245,14 @@ export const completeLevel = mutation({
       levelUp = true;
       // When user finishes the last available word, loop back to level 1
       nextLevel = currentLevel >= maxLevel ? 1 : currentLevel + 1;
-      await ctx.db.patch(args.userId, {
+      const levelPatch: any = {
         currentLevel: nextLevel,
         tacos: ((user as any).tacos ?? 0) + 1,
-      } as any);
+      };
+      if (args.isPerfect) {
+        levelPatch.perfectLevels = ((user as any).perfectLevels ?? 0) + 1;
+      }
+      await ctx.db.patch(args.userId, levelPatch);
     }
 
     // Give rewards

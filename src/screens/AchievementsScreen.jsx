@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { comboBurst } from "../services/haptics";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -57,6 +57,13 @@ export default function AchievementsScreen() {
 
   const updateCurrency = useMutation(api.users.updateUserCurrency);
 
+  // ── Real user data from Convex ──────────────────────────────────────────────
+  const user = useQuery(api.users.getUser, userId ? { userId } : "skip");
+  const collections = useQuery(
+    api.collectionsQuery.getCollectionsWithProgress,
+    userId ? { userId } : "skip"
+  );
+
   // ── Coin animation ─────────────────────────────────────────────────────────
   const topBarRef = useRef(null);
   const buttonRefs = useRef({});
@@ -70,251 +77,282 @@ export default function AchievementsScreen() {
     });
   }, []);
 
-  // ── Logros ─────────────────────────────────────────────────────────────────
-  const achievementsData = [
-    // ── PRIMEROS PASOS ──────────────────────────────────────────────────────
-    {
-      id: "primer_taco",
-      category: "Primeros Pasos",
-      icon: "🌮",
-      name: "¡Órale, ándale!",
-      description: "Resuelve tu primera palabra mexicana",
-      target: 1, current: 1, completed: true, claimed: false,
-      reward: { coins: 25, diamonds: 0 },
-    },
-    {
-      id: "diez_palabras",
-      category: "Primeros Pasos",
-      icon: "🌶️",
-      name: "Ya va picando",
-      description: "Resuelve 10 palabras",
-      target: 10, current: 10, completed: true, claimed: false,
-      reward: { coins: 50, diamonds: 0 },
-    },
-    {
-      id: "cincuenta_palabras",
-      category: "Primeros Pasos",
-      icon: "🏙️",
-      name: "Chilango de corazón",
-      description: "Resuelve 50 palabras",
-      target: 50, current: 1, completed: false, claimed: false,
-      reward: { coins: 150, diamonds: 1 },
-    },
-    {
-      id: "cien_palabras",
-      category: "Primeros Pasos",
-      icon: "🦅",
-      name: "Mero mero mexicano",
-      description: "Resuelve 100 palabras",
-      target: 100, current: 1, completed: false, claimed: false,
-      reward: { coins: 300, diamonds: 2 },
-    },
-    {
-      id: "doscientas_palabras",
-      category: "Primeros Pasos",
-      icon: "🇲🇽",
-      name: "Neta del mexica",
-      description: "Resuelve 200 palabras mexicanas",
-      target: 200, current: 1, completed: false, claimed: false,
-      reward: { coins: 500, diamonds: 4 },
-    },
-    // ── RACHA DIARIA ────────────────────────────────────────────────────────
-    {
-      id: "racha_3",
-      category: "Racha Diaria",
-      icon: "🌅",
-      name: "Madrugador",
-      description: "Juega 3 días seguidos",
-      target: 3, current: 1, completed: false, claimed: false,
-      reward: { coins: 75, diamonds: 1 },
-    },
-    {
-      id: "racha_7",
-      category: "Racha Diaria",
-      icon: "🔥",
-      name: "¡Ni pa' qué parar!",
-      description: "Juega 7 días seguidos",
-      target: 7, current: 1, completed: false, claimed: false,
-      reward: { coins: 200, diamonds: 2 },
-    },
-    {
-      id: "racha_14",
-      category: "Racha Diaria",
-      icon: "🌵",
-      name: "¡Más duro que un nopal!",
-      description: "Juega 14 días seguidos",
-      target: 14, current: 1, completed: false, claimed: false,
-      reward: { coins: 350, diamonds: 3 },
-    },
-    {
-      id: "racha_30",
-      category: "Racha Diaria",
-      icon: "🦎",
-      name: "Constante como el ajolote",
-      description: "Juega 30 días diferentes",
-      target: 30, current: 1, completed: false, claimed: false,
-      reward: { coins: 500, diamonds: 5 },
-    },
-    // ── COLECCIONES ─────────────────────────────────────────────────────────
-    {
-      id: "primera_coleccion",
-      category: "Colecciones",
-      icon: "🏆",
-      name: "Echado pa' lante",
-      description: "Completa tu primera colección del álbum",
-      target: 1, current: 1, completed: true, claimed: false,
-      reward: { coins: 200, diamonds: 2 },
-    },
-    {
-      id: "cincuenta_cartas",
-      category: "Colecciones",
-      icon: "🃏",
-      name: "El rey del álbum",
-      description: "Desbloquea 50 cartas en la colección",
-      target: 50, current: 0, completed: false, claimed: false,
-      reward: { coins: 400, diamonds: 3 },
-    },
-    {
-      id: "cien_cartas",
-      category: "Colecciones",
-      icon: "🎴",
-      name: "El rey del mazo",
-      description: "Desbloquea 100 cartas de colección",
-      target: 100, current: 0, completed: false, claimed: false,
-      reward: { coins: 600, diamonds: 5 },
-    },
-    {
-      id: "cinco_colecciones",
-      category: "Colecciones",
-      icon: "📚",
-      name: "Catálogo de lo bueno",
-      description: "Completa 5 colecciones del álbum",
-      target: 5, current: 0, completed: false, claimed: false,
-      reward: { coins: 500, diamonds: 5 },
-    },
-    // ── NIVEL EXPERTO ────────────────────────────────────────────────────────
-    {
-      id: "nivel_perfecto",
-      category: "Nivel Experto",
-      icon: "🫕",
-      name: "¡Le atinaste al mole!",
-      description: "Completa 1 nivel sin cometer errores",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 150, diamonds: 2 },
-    },
-    {
-      id: "nivel_50",
-      category: "Nivel Experto",
-      icon: "⭐",
-      name: "De pelos el dato",
-      description: "Llega al nivel 50",
-      target: 50, current: 1, completed: false, claimed: false,
-      reward: { coins: 600, diamonds: 5 },
-    },
-    {
-      id: "nivel_100",
-      category: "Nivel Experto",
-      icon: "🗿",
-      name: "El gran mexica",
-      description: "Llega al nivel 100",
-      target: 100, current: 1, completed: false, claimed: false,
-      reward: { coins: 1000, diamonds: 10 },
-    },
-    // ── COMBOS ──────────────────────────────────────────────────────────────
-    {
-      id: "combo_3",
-      category: "Combos",
-      icon: "🌶️",
-      name: "¡Picoso!",
-      description: "Logra un combo de 3 respuestas perfectas",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 75, diamonds: 1 },
-    },
-    {
-      id: "combo_5",
-      category: "Combos",
-      icon: "⚡",
-      name: "¡Que se las dan todas!",
-      description: "Logra un combo de 5 respuestas perfectas",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 200, diamonds: 2 },
-    },
-    {
-      id: "combo_10",
-      category: "Combos",
-      icon: "💥",
-      name: "¡Chingón total!",
-      description: "Logra un combo de 10 respuestas perfectas",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 400, diamonds: 4 },
-    },
-    // ── PERFECCIÓN ───────────────────────────────────────────────────────────
-    {
-      id: "tres_perfectos",
-      category: "Perfección",
-      icon: "🎯",
-      name: "Tres al hilo sin falla",
-      description: "Completa 3 niveles sin cometer errores",
-      target: 3, current: 0, completed: false, claimed: false,
-      reward: { coins: 250, diamonds: 3 },
-    },
-    {
-      id: "diez_perfectos",
-      category: "Perfección",
-      icon: "🏹",
-      name: "Puntería de charro",
-      description: "Completa 10 niveles sin cometer errores",
-      target: 10, current: 0, completed: false, claimed: false,
-      reward: { coins: 700, diamonds: 6 },
-    },
-    // ── POR CATEGORÍA ────────────────────────────────────────────────────────
-    {
-      id: "foodie_mx",
-      category: "Por Categoría",
-      icon: "🌮",
-      name: "Al pastor, como siempre",
-      description: "Completa la colección de Comida",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 120, diamonds: 1 },
-    },
-    {
-      id: "mariachi_fan",
-      category: "Por Categoría",
-      icon: "🎺",
-      name: "Corazón de mariachi",
-      description: "Completa la colección de Música",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 120, diamonds: 1 },
-    },
-    {
-      id: "historia_viva",
-      category: "Por Categoría",
-      icon: "📜",
-      name: "Historia viva",
-      description: "Completa la colección de Historia",
-      target: 1, current: 0, completed: false, claimed: false,
-      reward: { coins: 150, diamonds: 1 },
-    },
-    // ── SOCIAL ───────────────────────────────────────────────────────────────
-    {
-      id: "invitar_3",
-      category: "Social",
-      icon: "📢",
-      name: "De boca en boca",
-      description: "Invita a 3 cuates a jugar",
-      target: 3, current: 0, completed: false, claimed: false,
-      reward: { coins: 200, diamonds: 2 },
-    },
-    {
-      id: "invitar_10",
-      category: "Social",
-      icon: "👥",
-      name: "Jalando parejo",
-      description: "Invita a 10 cuates a jugar",
-      target: 10, current: 0, completed: false, claimed: false,
-      reward: { coins: 500, diamonds: 5 },
-    },
-  ];
+  // ── Compute achievements from real user data ────────────────────────────────
+  const achievementsData = useMemo(() => {
+    const tacos       = user?.tacos ?? 0;
+    const streak      = Math.max(user?.playStreakMax ?? 0, user?.playStreak ?? 0);
+    const bestCombo   = user?.bestCombo ?? 0;
+    const currentLvl  = user?.currentLevel ?? 1;
+    const perfectLvls = user?.perfectLevels ?? 0;
+
+    // Collections: count fully-completed categories and total solved words
+    const completedCats = (collections ?? []).filter(
+      (c) => c.total > 0 && c.completed >= c.total
+    ).length;
+    const comidaDone   = (collections ?? []).find((c) => c.name === "Comida")?.completed ?? 0;
+    const comidaTotal  = (collections ?? []).find((c) => c.name === "Comida")?.total ?? 1;
+    const musicaDone   = (collections ?? []).find((c) => c.name === "Música")?.completed ?? 0;
+    const musicaTotal  = (collections ?? []).find((c) => c.name === "Música")?.total ?? 1;
+    const historiaDone = (collections ?? []).find((c) => c.name === "Historia")?.completed ?? 0;
+    const historiaTotal= (collections ?? []).find((c) => c.name === "Historia")?.total ?? 1;
+
+    const mk = (current, target) => ({
+      current: Math.min(current, target),
+      target,
+      completed: current >= target,
+    });
+
+    return [
+      // ── PRIMEROS PASOS ────────────────────────────────────────────────────
+      {
+        id: "primer_taco",
+        category: "Primeros Pasos",
+        icon: "🌮",
+        name: "¡Órale, ándale!",
+        description: "Resuelve tu primera palabra mexicana",
+        ...mk(tacos, 1),
+        reward: { coins: 25, diamonds: 0 },
+      },
+      {
+        id: "diez_palabras",
+        category: "Primeros Pasos",
+        icon: "🌶️",
+        name: "Ya va picando",
+        description: "Resuelve 10 palabras",
+        ...mk(tacos, 10),
+        reward: { coins: 50, diamonds: 0 },
+      },
+      {
+        id: "cincuenta_palabras",
+        category: "Primeros Pasos",
+        icon: "🏙️",
+        name: "Chilango de corazón",
+        description: "Resuelve 50 palabras",
+        ...mk(tacos, 50),
+        reward: { coins: 150, diamonds: 1 },
+      },
+      {
+        id: "cien_palabras",
+        category: "Primeros Pasos",
+        icon: "🦅",
+        name: "Mero mero mexicano",
+        description: "Resuelve 100 palabras",
+        ...mk(tacos, 100),
+        reward: { coins: 300, diamonds: 2 },
+      },
+      {
+        id: "doscientas_palabras",
+        category: "Primeros Pasos",
+        icon: "🇲🇽",
+        name: "Neta del mexica",
+        description: "Resuelve 200 palabras mexicanas",
+        ...mk(tacos, 200),
+        reward: { coins: 500, diamonds: 4 },
+      },
+      // ── RACHA DIARIA ──────────────────────────────────────────────────────
+      {
+        id: "racha_3",
+        category: "Racha Diaria",
+        icon: "🌅",
+        name: "Madrugador",
+        description: "Juega 3 días seguidos",
+        ...mk(streak, 3),
+        reward: { coins: 75, diamonds: 1 },
+      },
+      {
+        id: "racha_7",
+        category: "Racha Diaria",
+        icon: "🔥",
+        name: "¡Ni pa' qué parar!",
+        description: "Juega 7 días seguidos",
+        ...mk(streak, 7),
+        reward: { coins: 200, diamonds: 2 },
+      },
+      {
+        id: "racha_14",
+        category: "Racha Diaria",
+        icon: "🌵",
+        name: "¡Más duro que un nopal!",
+        description: "Juega 14 días seguidos",
+        ...mk(streak, 14),
+        reward: { coins: 350, diamonds: 3 },
+      },
+      {
+        id: "racha_30",
+        category: "Racha Diaria",
+        icon: "🦎",
+        name: "Constante como el ajolote",
+        description: "Juega 30 días seguidos",
+        ...mk(streak, 30),
+        reward: { coins: 500, diamonds: 5 },
+      },
+      // ── COLECCIONES ───────────────────────────────────────────────────────
+      {
+        id: "primera_coleccion",
+        category: "Colecciones",
+        icon: "🏆",
+        name: "Echado pa' lante",
+        description: "Completa tu primera colección del álbum",
+        ...mk(completedCats, 1),
+        reward: { coins: 200, diamonds: 2 },
+      },
+      {
+        id: "cincuenta_cartas",
+        category: "Colecciones",
+        icon: "🃏",
+        name: "El rey del álbum",
+        description: "Desbloquea 50 cartas en la colección",
+        ...mk(tacos, 50),
+        reward: { coins: 400, diamonds: 3 },
+      },
+      {
+        id: "cien_cartas",
+        category: "Colecciones",
+        icon: "🎴",
+        name: "El rey del mazo",
+        description: "Desbloquea 100 cartas de colección",
+        ...mk(tacos, 100),
+        reward: { coins: 600, diamonds: 5 },
+      },
+      {
+        id: "cinco_colecciones",
+        category: "Colecciones",
+        icon: "📚",
+        name: "Catálogo de lo bueno",
+        description: "Completa 5 colecciones del álbum",
+        ...mk(completedCats, 5),
+        reward: { coins: 500, diamonds: 5 },
+      },
+      // ── NIVEL EXPERTO ─────────────────────────────────────────────────────
+      {
+        id: "nivel_perfecto",
+        category: "Nivel Experto",
+        icon: "🫕",
+        name: "¡Le atinaste al mole!",
+        description: "Completa 1 nivel sin cometer errores",
+        ...mk(perfectLvls, 1),
+        reward: { coins: 150, diamonds: 2 },
+      },
+      {
+        id: "nivel_50",
+        category: "Nivel Experto",
+        icon: "⭐",
+        name: "De pelos el dato",
+        description: "Llega al nivel 50",
+        ...mk(currentLvl, 50),
+        reward: { coins: 600, diamonds: 5 },
+      },
+      {
+        id: "nivel_100",
+        category: "Nivel Experto",
+        icon: "🗿",
+        name: "El gran mexica",
+        description: "Llega al nivel 100",
+        ...mk(currentLvl, 100),
+        reward: { coins: 1000, diamonds: 10 },
+      },
+      // ── COMBOS ────────────────────────────────────────────────────────────
+      {
+        id: "combo_3",
+        category: "Combos",
+        icon: "🌶️",
+        name: "¡Picoso!",
+        description: "Logra un combo de 3 respuestas perfectas",
+        ...mk(bestCombo, 3),
+        reward: { coins: 75, diamonds: 1 },
+      },
+      {
+        id: "combo_5",
+        category: "Combos",
+        icon: "⚡",
+        name: "¡Que se las dan todas!",
+        description: "Logra un combo de 5 respuestas perfectas",
+        ...mk(bestCombo, 5),
+        reward: { coins: 200, diamonds: 2 },
+      },
+      {
+        id: "combo_10",
+        category: "Combos",
+        icon: "💥",
+        name: "¡Chingón total!",
+        description: "Logra un combo de 10 respuestas perfectas",
+        ...mk(bestCombo, 10),
+        reward: { coins: 400, diamonds: 4 },
+      },
+      // ── PERFECCIÓN ────────────────────────────────────────────────────────
+      {
+        id: "tres_perfectos",
+        category: "Perfección",
+        icon: "🎯",
+        name: "Tres al hilo sin falla",
+        description: "Completa 3 niveles sin cometer errores",
+        ...mk(perfectLvls, 3),
+        reward: { coins: 250, diamonds: 3 },
+      },
+      {
+        id: "diez_perfectos",
+        category: "Perfección",
+        icon: "🏹",
+        name: "Puntería de charro",
+        description: "Completa 10 niveles sin cometer errores",
+        ...mk(perfectLvls, 10),
+        reward: { coins: 700, diamonds: 6 },
+      },
+      // ── POR CATEGORÍA ─────────────────────────────────────────────────────
+      {
+        id: "foodie_mx",
+        category: "Por Categoría",
+        icon: "🌮",
+        name: "Al pastor, como siempre",
+        description: "Completa la colección de Comida",
+        current: comidaDone,
+        target: comidaTotal,
+        completed: comidaTotal > 0 && comidaDone >= comidaTotal,
+        reward: { coins: 120, diamonds: 1 },
+      },
+      {
+        id: "mariachi_fan",
+        category: "Por Categoría",
+        icon: "🎺",
+        name: "Corazón de mariachi",
+        description: "Completa la colección de Música",
+        current: musicaDone,
+        target: musicaTotal,
+        completed: musicaTotal > 0 && musicaDone >= musicaTotal,
+        reward: { coins: 120, diamonds: 1 },
+      },
+      {
+        id: "historia_viva",
+        category: "Por Categoría",
+        icon: "📜",
+        name: "Historia viva",
+        description: "Completa la colección de Historia",
+        current: historiaDone,
+        target: historiaTotal,
+        completed: historiaTotal > 0 && historiaDone >= historiaTotal,
+        reward: { coins: 150, diamonds: 1 },
+      },
+      // ── SOCIAL ────────────────────────────────────────────────────────────
+      {
+        id: "invitar_3",
+        category: "Social",
+        icon: "📢",
+        name: "De boca en boca",
+        description: "Invita a 3 cuates a jugar",
+        current: 0, target: 3, completed: false,
+        reward: { coins: 200, diamonds: 2 },
+      },
+      {
+        id: "invitar_10",
+        category: "Social",
+        icon: "👥",
+        name: "Jalando parejo",
+        description: "Invita a 10 cuates a jugar",
+        current: 0, target: 10, completed: false,
+        reward: { coins: 500, diamonds: 5 },
+      },
+    ];
+  }, [user, collections]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 

@@ -75,6 +75,7 @@ export default defineSchema({
     playStreak: v.optional(v.number()),          // días consecutivos jugando
     playStreakMax: v.optional(v.number()),        // récord de racha
     bestCombo: v.optional(v.number()),           // mejor combo en una sesión
+    perfectLevels: v.optional(v.number()),       // niveles completados sin errores
     totalWordsToday: v.optional(v.number()),     // palabras completadas hoy
     todayDate: v.optional(v.string()),           // "YYYY-MM-DD" para resetear todayWords
     streakGoalDays: v.optional(v.number()),      // meta comprometida (7, 14, 30, 50)

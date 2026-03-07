@@ -17,12 +17,12 @@
  *
  * Setup:
  *   En Convex Dashboard > Settings > Environment Variables:
- *   GEMINI_API_KEY = AIzaSyBs79QYjY-1bjXf0PA0HvycnFV1oDMNa0o
+ *   GEMINI_API_KEY = (Set your API key here)
  */
 
-import { v }                        from "convex/values";
-import { action, mutation, query, internalAction } from "./_generated/server";
-import { api, internal }            from "./_generated/api";
+import { v } from "convex/values";
+import { api } from "./_generated/api";
+import { action, mutation, query } from "./_generated/server";
 
 // ─── Módulo 1: Descubridor de Tendencias MX via Gemini ───────────────────────
 // En lugar de scraping (APIs de Google/Twitter bloqueadas desde servidores),
@@ -202,8 +202,8 @@ async function callGemini(term: string): Promise<GeminiResult | GeminiError> {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
           safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH",       threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
             { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
           ],
@@ -238,11 +238,11 @@ async function callGemini(term: string): Promise<GeminiResult | GeminiError> {
     if (!parsed.meaning) return { _error: "no meaning in response" };
     if (!CATEGORIES.includes(parsed.category)) parsed.category = "Expresiones y Modismos";
     return {
-      word:       (parsed.word || term).toUpperCase().trim(),
-      meaning:    parsed.meaning,
-      example:    parsed.example || `Ejemplo de uso de ${term} en México.`,
-      region:     parsed.region || "Todo México",
-      category:   parsed.category,
+      word: (parsed.word || term).toUpperCase().trim(),
+      meaning: parsed.meaning,
+      example: parsed.example || `Ejemplo de uso de ${term} en México.`,
+      region: parsed.region || "Todo México",
+      category: parsed.category,
       difficulty: typeof parsed.difficulty === "number" ? parsed.difficulty : 1,
     };
   } catch (e: any) {
@@ -255,19 +255,19 @@ async function callGemini(term: string): Promise<GeminiResult | GeminiError> {
 /** Inserta un candidato en wordCandidates (internal, llamado por el action) */
 export const submitCandidate = mutation({
   args: {
-    word:       v.string(),
-    meaning:    v.string(),
-    example:    v.string(),
-    region:     v.string(),
-    category:   v.string(),
+    word: v.string(),
+    meaning: v.string(),
+    example: v.string(),
+    region: v.string(),
+    category: v.string(),
     difficulty: v.number(),
-    source:     v.string(),
-    ipFlag:     v.optional(v.string()),
+    source: v.string(),
+    ipFlag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("wordCandidates", {
       ...args,
-      status:    "pending",
+      status: "pending",
       createdAt: Date.now(),
     });
   },
@@ -292,11 +292,11 @@ export const approveCandidate = mutation({
 
     // Insert into words
     const wordId = await ctx.db.insert("words", {
-      word:       candidate.word,
-      meaning:    candidate.meaning,
-      example:    candidate.example,
-      region:     candidate.region,
-      category:   candidate.category,
+      word: candidate.word,
+      meaning: candidate.meaning,
+      example: candidate.example,
+      region: candidate.region,
+      category: candidate.category,
       difficulty: candidate.difficulty,
     });
 
@@ -310,7 +310,7 @@ export const approveCandidate = mutation({
       levelNumber: nextLevel,
       wordId,
       reward: {
-        coins:    50 + (nextLevel - 1) * 10,
+        coins: 50 + (nextLevel - 1) * 10,
         diamonds: Math.floor((nextLevel - 1) / 5) + 1,
       },
     });
@@ -369,11 +369,11 @@ export const processSeedQueue = action({
 
     // Load existing words and pending candidates to skip duplicates
     const existing: { word: string }[] = await ctx.runQuery(api.words.getAllWords as any) ?? [];
-    const pending: { word: string }[]  = await ctx.runQuery(api.curator.listPending) ?? [];
+    const pending: { word: string }[] = await ctx.runQuery(api.curator.listPending) ?? [];
 
     const existingKeys = new Set([
       ...existing.map((w: any) => w.word.toUpperCase().trim()),
-      ...pending.map((w: any)  => w.word.toUpperCase().trim()),
+      ...pending.map((w: any) => w.word.toUpperCase().trim()),
     ]);
 
     const toProcess = SEED_QUEUE
@@ -406,13 +406,13 @@ export const processSeedQueue = action({
 
       // Módulo 4: Staging
       await ctx.runMutation(api.curator.submitCandidate, {
-        word:       wordData.word,
-        meaning:    wordData.meaning,
-        example:    wordData.example,
-        region:     wordData.region,
-        category:   wordData.category,
+        word: wordData.word,
+        meaning: wordData.meaning,
+        example: wordData.example,
+        region: wordData.region,
+        category: wordData.category,
         difficulty: wordData.difficulty,
-        source:     "seed",
+        source: "seed",
         ipFlag,
       });
 
@@ -422,16 +422,16 @@ export const processSeedQueue = action({
       await new Promise(r => setTimeout(r, 4500));
     }
 
-    const ok    = results.filter(r => r.status === "ok").length;
+    const ok = results.filter(r => r.status === "ok").length;
     const skips = results.filter(r => r.status === "skip").length;
-    const errs  = results.filter(r => r.status === "error").length;
+    const errs = results.filter(r => r.status === "error").length;
 
     return {
       processed: ok,
-      skipped:   skips,
-      errors:    errs,
-      details:   results,
-      message:   `✅ ${ok} candidatos en staging | ⏭ ${skips} descartados por IA | ❌ ${errs} errores`,
+      skipped: skips,
+      errors: errs,
+      details: results,
+      message: `✅ ${ok} candidatos en staging | ⏭ ${skips} descartados por IA | ❌ ${errs} errores`,
     };
   },
 });
@@ -462,10 +462,10 @@ export const processTrends = action({
   handler: async (ctx) => {
     // Load existing words/candidates (needed for dedup + Gemini context)
     const existing: { word: string }[] = await ctx.runQuery(api.words.getAllWords as any) ?? [];
-    const pending: { word: string }[]  = await ctx.runQuery(api.curator.listPending) ?? [];
+    const pending: { word: string }[] = await ctx.runQuery(api.curator.listPending) ?? [];
     const existingKeys = new Set([
       ...existing.map((w: any) => w.word.toUpperCase().trim()),
-      ...pending.map((w: any)  => w.word.toUpperCase().trim()),
+      ...pending.map((w: any) => w.word.toUpperCase().trim()),
     ]);
 
     // Módulo 1: descubrir términos culturales nuevos con Gemini
@@ -494,13 +494,13 @@ export const processTrends = action({
 
       // Módulo 4: Staging
       await ctx.runMutation(api.curator.submitCandidate, {
-        word:       wordData.word,
-        meaning:    wordData.meaning,
-        example:    wordData.example,
-        region:     wordData.region,
-        category:   wordData.category,
+        word: wordData.word,
+        meaning: wordData.meaning,
+        example: wordData.example,
+        region: wordData.region,
+        category: wordData.category,
         difficulty: wordData.difficulty,
-        source:     "trend",
+        source: "trend",
         ipFlag,
       });
 
@@ -510,17 +510,17 @@ export const processTrends = action({
       await new Promise(r => setTimeout(r, 4500));
     }
 
-    const ok    = results.filter(r => r.status === "ok").length;
+    const ok = results.filter(r => r.status === "ok").length;
     const skips = results.filter(r => r.status === "skip").length;
-    const errs  = results.filter(r => r.status === "error").length;
+    const errs = results.filter(r => r.status === "error").length;
 
     return {
-      scraped:   toProcess.length,
+      scraped: toProcess.length,
       processed: ok,
-      skipped:   skips,
-      errors:    errs,
-      details:   results,
-      message:   `📈 ${toProcess.length} descubiertos | ✅ ${ok} en staging | ⏭ ${skips} no son cultura MX | ❌ ${errs} errores`,
+      skipped: skips,
+      errors: errs,
+      details: results,
+      message: `📈 ${toProcess.length} descubiertos | ✅ ${ok} en staging | ⏭ ${skips} no son cultura MX | ❌ ${errs} errores`,
     };
   },
 });

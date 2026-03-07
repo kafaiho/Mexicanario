@@ -2,44 +2,80 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { getOrderedLevels, completedWordIds } from "./levelOrdering";
 
-// ─── Icon helper — 15 categorías canónicas ───────────────────────────────────
+// ─── 19 colecciones canónicas ─────────────────────────────────────────────────
+
+// Mapa de nombres viejos (DB) → canónicos
+const CANONICAL: Record<string, string> = {
+  "Modismos":    "Expresiones y Modismos",
+  "Expresiones": "Expresiones y Modismos",
+  "Comida":      "Comida Mexicana",
+  "Juegos":      "Juegos y Niñez",
+  "Bebida":      "Bebidas",
+  "Animales":    "Animales de México",
+  "Plantas":     "Flora Mexicana",
+  "Música":      "Música y Artistas",
+  "Artistas":    "Música y Artistas",
+  "Monumentos":  "Monumentos y Lugares",
+  "Historia":    "Historia de México",
+  "Albures":     "Albures y Picaresca",
+  "Leyendas":    "Leyendas y Mitos",
+  "Digital":     "Mundo Digital",
+  "Refranes":    "Refranes y Dichos",
+  "Tradiciones": "Tradiciones y Fiestas",
+  "Jerga":       "Expresiones y Modismos",
+};
+
+/** Normaliza nombre de categoría (viejo o nuevo) → canónico */
+function canonicalize(cat: string): string {
+  return CANONICAL[cat] ?? cat;
+}
+
 function categoryIcon(cat: string): string {
   const map: Record<string, string> = {
-    // Tier 1 — Fácil
-    "Comida":            "🌮",
-    "Bebida":            "🍹",
-    "Juegos":            "🎯",
-    "Modismos":          "🤙",
-    "Popular":           "🤙",
-    "Refranes":          "💭",
-    // Sub-categorías de Modismos
-    "Expresiones":       "🗣️",
-    "Picaresca":         "🌶️",
-    "Tipos Sociales":    "🎭",
-    "Verbos del Barrio": "🏙️",
-    // Tier 2 — Medio (cultura clásica)
-    "Música":            "🎶",
-    "Animales":          "🦅",
-    "Plantas":           "🌿",
-    "Artistas":          "🎨",
-    "Tradiciones":       "🎉",
-    "Regionalismos":     "🗺️",
-    "Gastronomia":       "🍽️",
-    "Telenovelas":       "📺",
-    "Cultura Popular":   "📺",
-    "Leyendas":          "👻",
-    // Tier 2 — Medio (cultura digital y deporte)
-    "Streamers":         "📱",
-    "Músicos":           "🎵",
-    "Futbolistas":       "⚽",
-    "Jerga Digital":     "💬",
-    // Tier 3 — Difícil
-    "Historia":          "📜",
-    "Civilizaciones":    "🗿",
-    "Monumentos":        "🏛️",
+    "Expresiones y Modismos": "🗣️",
+    "Comida Mexicana":        "🌮",
+    "Juegos y Niñez":         "🎯",
+    "Bebidas":                "🍹",
+    "Refranes y Dichos":      "💭",
+    "Animales de México":     "🦅",
+    "Flora Mexicana":         "🌿",
+    "Tradiciones y Fiestas":  "🎉",
+    "Música y Artistas":      "🎶",
+    "Historia de México":     "📜",
+    "Albures y Picaresca":    "🌶️",
+    "Cultura Popular":        "📺",
+    "Monumentos y Lugares":   "🏛️",
+    "Leyendas y Mitos":       "👻",
+    "Mundo Digital":          "📱",
+    "Vida Cotidiana":         "🏠",
+    "Remedios Caseros":       "💊",
+    "Artesanías de México":   "🎨",
+    "Deportes Mexicanos":     "🤼",
   };
-  return map[cat] ?? "📖";
+  return map[canonicalize(cat)] ?? "📖";
 }
+
+const COLLECTION_UNLOCK_LEVEL: Record<string, number> = {
+  "Expresiones y Modismos": 1,
+  "Comida Mexicana":        1,
+  "Juegos y Niñez":         1,
+  "Bebidas":                10,
+  "Vida Cotidiana":         15,
+  "Refranes y Dichos":      20,
+  "Animales de México":     35,
+  "Remedios Caseros":       45,
+  "Flora Mexicana":         50,
+  "Tradiciones y Fiestas":  75,
+  "Música y Artistas":      100,
+  "Historia de México":     130,
+  "Albures y Picaresca":    160,
+  "Artesanías de México":   175,
+  "Cultura Popular":        200,
+  "Deportes Mexicanos":     225,
+  "Monumentos y Lugares":   250,
+  "Leyendas y Mitos":       300,
+  "Mundo Digital":          350,
+};
 
 // ─── Region taxonomy (mirrors src/config/regionConfig.js) ────────────────────
 const MACRO_REGIONS_DEF = [
@@ -80,7 +116,8 @@ export const getCollectionData = query({
 
     for (const item of levelsWithWords) {
       if (!item.wordData) continue;
-      const cat = (item.wordData as any).category || "Modismos";
+      const rawCat = (item.wordData as any).category || "Expresiones y Modismos";
+      const cat = canonicalize(rawCat);
       if (!categoriesMap.has(cat)) {
         categoriesMap.set(cat, { name: cat, icon: categoryIcon(cat), levels: [] });
       }
@@ -123,6 +160,8 @@ export const getCollectionsWithProgress = query({
         icon: string;
         total: number;
         completed: number;
+        unlockLevel: number;
+        isUnlocked: boolean;
         words: Array<{
           levelNumber: number;
           word: string;
@@ -136,14 +175,18 @@ export const getCollectionsWithProgress = query({
     for (const lvl of ordered) {
       const wordDoc = wordMap.get(lvl.wordId.toString());
       if (!wordDoc) continue;
-      const cat = (wordDoc as any).category || "Modismos";
+      const rawCat = (wordDoc as any).category || "Expresiones y Modismos";
+      const cat = canonicalize(rawCat);
 
       if (!categoriesMap.has(cat)) {
+        const unlockLvl = COLLECTION_UNLOCK_LEVEL[cat] ?? 1;
         categoriesMap.set(cat, {
           name: cat,
           icon: categoryIcon(cat),
           total: 0,
           completed: 0,
+          unlockLevel: unlockLvl,
+          isUnlocked: userCurrentLevel >= unlockLvl,
           words: [],
         });
       }
@@ -162,17 +205,21 @@ export const getCollectionsWithProgress = query({
       if (isCompleted) entry.completed++;
     }
 
-    // Sort: categories with most progress first, then alphabetically
+    // Sort: unlocked first (by progress desc), then locked (by unlockLevel asc)
     return Array.from(categoriesMap.values())
       .map((cat) => {
         cat.words.sort((a, b) => a.levelNumber - b.levelNumber);
         return cat;
       })
       .sort((a, b) => {
-        const pctA = a.total > 0 ? a.completed / a.total : 0;
-        const pctB = b.total > 0 ? b.completed / b.total : 0;
-        if (pctB !== pctA) return pctB - pctA;
-        return a.name.localeCompare(b.name);
+        if (a.isUnlocked !== b.isUnlocked) return a.isUnlocked ? -1 : 1;
+        if (a.isUnlocked) {
+          const pctA = a.total > 0 ? a.completed / a.total : 0;
+          const pctB = b.total > 0 ? b.completed / b.total : 0;
+          if (pctB !== pctA) return pctB - pctA;
+          return a.name.localeCompare(b.name);
+        }
+        return a.unlockLevel - b.unlockLevel;
       });
   },
 });

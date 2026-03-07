@@ -1,18 +1,20 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import { ConvexProvider, ConvexReactClient, useMutation } from "convex/react";
-import { StatusBar } from "expo-status-bar";
+import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
+import Constants from "expo-constants";
+import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import { SystemBars } from "react-native-edge-to-edge";
 import mobileAds, { AdsConsent, AdsConsentStatus } from "react-native-google-mobile-ads";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "./convex/_generated/api";
 import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { setupNotificationHandler } from "./src/services/notificationService";
 import { addCustomerInfoListener, initRevenueCat } from "./src/services/RevenueCatService";
-import * as Linking from "expo-linking";
 
 LogBox.ignoreLogs([
   "expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go",
@@ -25,6 +27,7 @@ import Apoyar from "./src/components/Apoyar";
 import Calificar from "./src/components/Calificar";
 import DailyRewardModal, { useDailyReward } from "./src/components/DailyRewardModal";
 import DisconnectModal from "./src/components/DisconnectModal";
+import ForceUpdateModal from "./src/components/ForceUpdateModal";
 import Heriokio from "./src/components/Heriokio";
 import Invitar from "./src/components/Invitar";
 import Perfil from "./src/components/Perfil";
@@ -48,7 +51,7 @@ import MascotaScreen from "./src/screens/MascotaScreen";
 import ShopScreen from "./src/screens/ShopScreen";
 import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import { tapLight } from "./src/services/haptics";
-import { playBGM, playSound, preloadSounds, unloadSounds } from "./src/utils/soundManager";
+import { playBGM, playSound, preloadSounds, setMusicEnabled, setSoundEnabled, unloadSounds } from "./src/utils/soundManager";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -96,6 +99,7 @@ function JuicyTabButton({ children, onPress, accessibilityState, style, ...rest 
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
   const [showSettings, setShowSettings] = useState(false);
   const [showHvhu, setShowHvhu] = useState(false);
   const [showShop, setShowShop] = useState(false);
@@ -125,8 +129,8 @@ function MainTabs() {
           tabBarShowLabel: false,
           tabBarButton: (props) => <JuicyTabButton {...props} />,
           tabBarStyle: {
-            height: Platform.OS === "ios" ? 88 : 64,
-            paddingBottom: Platform.OS === "ios" ? 24 : 8,
+            height: Platform.OS === "ios" ? 88 : 64 + insets.bottom,
+            paddingBottom: Platform.OS === "ios" ? 24 : 8 + insets.bottom,
             paddingTop: 8,
             backgroundColor: "#E8C99A",
             borderTopWidth: 0,
@@ -340,12 +344,48 @@ function MainTabs() {
 
 const convex = new ConvexReactClient(config.deploymentUrl);
 
+// Versión actual del build (debe coincidir con app.json versionCode)
+const CURRENT_ANDROID_VERSION_CODE = Constants.expoConfig?.android?.versionCode ?? 11;
+const CURRENT_IOS_VERSION = Constants.expoConfig?.version ?? "1.2.3";
+
+// ── RemoteConfig fetcher — aislado en Error Boundary para no crashear la app ─
+function RemoteConfigFetcher({ onConfig }) {
+  const cfg = useQuery(api.appConfig.getAppConfig);
+  useEffect(() => { if (cfg !== undefined) onConfig(cfg); }, [cfg]);
+  return null;
+}
+
+class RemoteConfigBoundary extends React.Component {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) return null; // falla silenciosa — app funciona sin chequeo
+    return this.props.children;
+  }
+}
+
 function AppContent() {
   const { isAuthenticated, loading, error, retry, userId } = useAuth();
-  const autoFixDatabase    = useMutation(api.patchCategories.autoFixDatabase);
-  const syncMexPlus        = useMutation(api.shop.syncMexPlusEntitlement);
+  const autoFixDatabase = useMutation(api.patchCategories.autoFixDatabase);
+  const syncMexPlus = useMutation(api.shop.syncMexPlusEntitlement);
   const appState = useRef(AppState.currentState);
   const soundsLoaded = useRef(false);
+
+  // ── Verificación de versión remota ────────────────────────────────────────
+  const [remoteConfig, setRemoteConfig] = useState(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+
+  const needsUpdate = remoteConfig && (() => {
+    if (Platform.OS === "android") {
+      return CURRENT_ANDROID_VERSION_CODE < remoteConfig.minAndroidVersionCode;
+    }
+    // iOS: comparación simple de versión semántica
+    const toNum = (v) => v.split(".").map(Number).reduce((acc, n, i) => acc + n * Math.pow(1000, 2 - i), 0);
+    return toNum(CURRENT_IOS_VERSION) < toNum(remoteConfig.minIosVersion);
+  })();
+
+  const showUpdateModal = needsUpdate && !updateDismissed;
+  const forceUpdate = needsUpdate && !!remoteConfig?.forceUpdate;
 
   useEffect(() => {
     // ── Capture referral deep link at app open ────────────────────────────────
@@ -370,9 +410,9 @@ function AppContent() {
         const parsed = Linking.parse(url);
         const refCode = parsed.queryParams?.ref ?? parsed.path?.replace(/^ref\/?/, "") ?? null;
         if (refCode && typeof refCode === "string" && refCode.trim()) {
-          AsyncStorage.setItem("@mexicanario:pendingRef", refCode.trim().toLowerCase()).catch(() => {});
+          AsyncStorage.setItem("@mexicanario:pendingRef", refCode.trim().toLowerCase()).catch(() => { });
         }
-      } catch {}
+      } catch { }
     });
 
     // Initialize RevenueCat SDK (no-op in Expo Go or if API key not set)
@@ -397,7 +437,7 @@ function AppContent() {
         await mobileAds().initialize();
       } catch {
         // Native module not registered (Expo Go) or consent error — initialize anyway
-        try { await mobileAds().initialize(); } catch {}
+        try { await mobileAds().initialize(); } catch { }
       }
     })();
 
@@ -410,7 +450,24 @@ function AppContent() {
     // ── Preload ALL sounds immediately on app start ────────────────────────────
     preloadSounds().then(() => {
       soundsLoaded.current = true;
-      playBGM("menu");
+      // Load saved sound preferences before deciding to play music
+      AsyncStorage.multiGet(["pref_music", "pref_sound"]).then((pairs) => {
+        let savedMusicOn = true;
+        pairs.forEach(([key, val]) => {
+          if (val === null) return;
+          const bool = val === "true";
+          if (key === "pref_music") {
+            savedMusicOn = bool;
+            setMusicEnabled(bool); // sets the internal var in soundManager
+          }
+          if (key === "pref_sound") setSoundEnabled(bool);
+        });
+
+        // Only explicitly call playBGM if user had music enabled
+        if (savedMusicOn) {
+          playBGM("menu");
+        }
+      });
     }).catch(() => { });
 
     // ── AppState listener — unload/reload sounds on background/foreground ──────
@@ -425,7 +482,7 @@ function AppContent() {
       ) {
         // App going to background — release ExoPlayer resources from the JS side
         // so the native module finds nothing to release on its background thread.
-        unloadSounds().catch(() => {});
+        unloadSounds().catch(() => { });
         soundsLoaded.current = false;
       } else if (
         (appState.current === "background" || appState.current === "inactive") &&
@@ -434,8 +491,13 @@ function AppContent() {
         // App coming back to foreground — reload sounds
         preloadSounds().then(() => {
           soundsLoaded.current = true;
-          playBGM("menu");
-        }).catch(() => {});
+          // Re-check preference just in case
+          AsyncStorage.getItem("pref_music").then((val) => {
+            if (val === null || val === "true") {
+              playBGM("menu");
+            }
+          });
+        }).catch(() => { });
       }
       appState.current = nextState;
     });
@@ -443,7 +505,7 @@ function AppContent() {
     return () => {
       linkingSub.remove();
       subscription.remove();
-      unloadSounds().catch(() => {});
+      unloadSounds().catch(() => { });
     };
   }, []);
 
@@ -455,9 +517,9 @@ function AppContent() {
     const unsub = addCustomerInfoListener(({ active, expiresAt }) => {
       // Sync Plus status to Convex backend
       syncMexPlus({ userId, expiresAt: active ? (expiresAt ?? undefined) : 0 })
-        .catch(() => {});
+        .catch(() => { });
       // Cache Plus status locally so AdBanner can hide ads without a network call
-      AsyncStorage.setItem("@mexicanario:mexPlusActive", active ? "1" : "0").catch(() => {});
+      AsyncStorage.setItem("@mexicanario:mexPlusActive", active ? "1" : "0").catch(() => { });
     });
     return unsub;
   }, [userId]);
@@ -503,17 +565,22 @@ function AppContent() {
 
   return (
     <NavigationContainer linking={linking}>
-      <StatusBar style="light" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <SystemBars style={{ statusBar: "light", navigationBar: "dark" }} />
+      <RemoteConfigBoundary>
+        <RemoteConfigFetcher onConfig={setRemoteConfig} />
+      </RemoteConfigBoundary>
+      <ForceUpdateModal
+        visible={!!showUpdateModal}
+        forceUpdate={forceUpdate}
+        message={remoteConfig?.updateMessage}
+        onDismiss={() => setUpdateDismissed(true)}
+      />
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
         <>
           <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen
-            name="Gameplay"
-            component={GameplayScreen}
-            options={{ gestureEnabled: false }}
-          />
+          <Stack.Screen name="Gameplay" component={GameplayScreen} />
           <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
-          <Stack.Screen name="Map" component={MapScreen} options={{ gestureEnabled: false }} />
+          <Stack.Screen name="Map" component={MapScreen} />
         </>
       </Stack.Navigator>
     </NavigationContainer>
@@ -522,10 +589,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ConvexProvider client={convex}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ConvexProvider>
+    <SafeAreaProvider>
+      <ConvexProvider client={convex}>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ConvexProvider>
+    </SafeAreaProvider>
   );
 }

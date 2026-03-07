@@ -1,6 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
 import React, { useEffect, useRef, useState } from "react";
-import { notifySuccess } from "../services/haptics";
 import {
   Animated,
   Dimensions,
@@ -13,19 +12,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import CoinFlyOverlay from './CoinFlyOverlay';
-import useCoinFly from '../hooks/useCoinFly';
 import { api } from "../../convex/_generated/api";
+import useCoinFly from '../hooks/useCoinFly';
+import { notifySuccess } from "../services/haptics";
 import { COLORS, FONTS } from "../theme/designTokens";
-import { REAL_WIDTH, REAL_HEIGHT, TABLET_MODE } from "../utils/tabletSetup";
+import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
+import CoinFlyOverlay from './CoinFlyOverlay';
 
 const { width, height } = Dimensions.get('window');
 
 const getCoinPillFallback = () => {
   const topPad = Platform.OS === 'ios' ? height * 0.058 : height * 0.04;
-  const pillH  = 36;
-  const pillW  = 110;
-  const pillX  = REAL_WIDTH - 16 - pillW;
+  const pillH = 36;
+  const pillW = 110;
+  const pillX = REAL_WIDTH - 16 - pillW;
   return { x: pillX, y: topPad, w: pillW, h: pillH };
 };
 const CARD_W = width - 24;
@@ -33,35 +33,35 @@ const CARD_W = width - 24;
 // ── Paleta Mexicanometro ───────────────────────────────────────────────────────
 const BROWN = '#8B4513';
 const AMBER = '#D2691E';
-const GOLD  = '#F8BE17';
+const GOLD = '#F8BE17';
 const BURLY = '#DEB887';
 
 // ── Identidad por tipo de misión ─────────────────────────────────────────────
 // Gradiente de temperatura: fresco (aprender) → cálido (acción) → fuego (racha)
 const TYPE_ACCENT = {
-  words:  COLORS.turquesa,  // #00B2A9 — fresco/aprender
-  combo:  '#FF922B',        // ámbar-naranja cálido (coherente con la paleta warm)
+  words: COLORS.turquesa,  // #00B2A9 — fresco/aprender
+  combo: '#FF922B',        // ámbar-naranja cálido (coherente con la paleta warm)
   streak: COLORS.copal,     // #FF6B35 — fuego/racha
 };
 
 // Íconos en el mismo lenguaje cultural de Mexicanometro
 const TYPE_EMOJI = {
-  words:  '🌮',  // el taco = vocabulario mexicano
-  combo:  '⚡',  // relámpago = combo rápido
+  words: '🌮',  // el taco = vocabulario mexicano
+  combo: '⚡',  // relámpago = combo rápido
   streak: '🔥',  // fuego = racha
 };
 
 // Estados especiales (listo / reclamado)
 const STATE_ACCENT = {
-  ready:   COLORS.cempasuchil,  // #FFB800
+  ready: COLORS.cempasuchil,  // #FFB800
   claimed: '#27AE60',
 };
 
 // Fondos de tarjeta — tints cálidos
 const ROW_BG = {
-  active:  'rgba(255,228,181,0.10)',
+  active: 'rgba(255,228,181,0.10)',
   pending: 'rgba(255,228,181,0.05)',
-  ready:   'rgba(248,190,23,0.18)',
+  ready: 'rgba(248,190,23,0.18)',
   claimed: 'rgba(39,174,96,0.09)',
 };
 
@@ -127,21 +127,21 @@ function ClaimedStamp() {
 
 function MissionCard({ mission, onClaim, claiming }) {
   const { id, type, label, target, progress, reward, claimed } = mission;
-  const fraction   = Math.min(progress / target, 1);
+  const fraction = Math.min(progress / target, 1);
   const isComplete = fraction >= 1;
-  const canClaim   = isComplete && !claimed;
+  const canClaim = isComplete && !claimed;
 
   const state = claimed ? 'claimed' : canClaim ? 'ready' : fraction > 0 ? 'active' : 'pending';
 
   const accentColor = state === 'claimed' ? STATE_ACCENT.claimed
-                    : state === 'ready'   ? STATE_ACCENT.ready
-                    : (TYPE_ACCENT[type] ?? COLORS.turquesa);
+    : state === 'ready' ? STATE_ACCENT.ready
+      : (TYPE_ACCENT[type] ?? COLORS.turquesa);
 
-  const borderColor  = TYPE_ACCENT[type] ?? COLORS.turquesa;
+  const borderColor = TYPE_ACCENT[type] ?? COLORS.turquesa;
   const barFillColor = state === 'pending' ? `${BURLY}66` : accentColor;
 
-  const pulseAnim     = useRef(new Animated.Value(0)).current;
-  const claimAnim     = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const claimAnim = useRef(new Animated.Value(1)).current;
   const rewardOpacity = useRef(new Animated.Value(0)).current;
   const [rewardText, setRewardText] = useState('');
   const [showReward, setShowReward] = useState(false);
@@ -150,7 +150,7 @@ function MissionCard({ mission, onClaim, claiming }) {
     if (state === 'ready') {
       const loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1,    duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
           Animated.timing(pulseAnim, { toValue: 0.25, duration: 700, useNativeDriver: true }),
         ])
       );
@@ -163,9 +163,9 @@ function MissionCard({ mission, onClaim, claiming }) {
 
   const handleClaim = () => {
     Animated.sequence([
-      Animated.timing(claimAnim, { toValue: 0.92, duration: 80,  useNativeDriver: true }),
+      Animated.timing(claimAnim, { toValue: 0.92, duration: 80, useNativeDriver: true }),
       Animated.timing(claimAnim, { toValue: 1.08, duration: 100, useNativeDriver: true }),
-      Animated.timing(claimAnim, { toValue: 1,    duration: 120, useNativeDriver: true }),
+      Animated.timing(claimAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
     ]).start(() => {
       onClaim(id, (result) => {
         if (!result) return;
@@ -190,7 +190,7 @@ function MissionCard({ mission, onClaim, claiming }) {
         />
       )}
 
-      <MissionIcon type={type} state={state} size={40} accentColor={accentColor} />
+      <MissionIcon type={type} state={state} size={28} accentColor={accentColor} />
 
       <View style={styles.cardContent}>
         <Text style={styles.cardLabel} numberOfLines={2}>{label}</Text>
@@ -253,11 +253,11 @@ function PageDots({ missions, activeIndex }) {
 // ── MissionHeader ─────────────────────────────────────────────────────────────
 
 function MissionHeader({ missions }) {
-  const claimedCount   = missions.filter(m => m.claimed).length;
+  const claimedCount = missions.filter(m => m.claimed).length;
   const completedCount = missions.filter(m => m.progress >= m.target).length;
 
   const segmentColor = (i) => {
-    if (i < claimedCount)   return STATE_ACCENT.claimed;
+    if (i < claimedCount) return STATE_ACCENT.claimed;
     if (i < completedCount) return STATE_ACCENT.ready;
     return 'rgba(222,184,135,0.3)';   // burlywood cálido para inactivos
   };
@@ -287,12 +287,12 @@ export default function DailyMissionsWidget({ userId }) {
   const [activeCard, setActiveCard] = useState(0);
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
 
-  const data           = useQuery(api.dailyMissions.getTodayMissions, userId ? { userId } : 'skip');
+  const data = useQuery(api.dailyMissions.getTodayMissions, userId ? { userId } : 'skip');
   const ensureMissions = useMutation(api.dailyMissions.ensureDailyMissions);
-  const claimMission   = useMutation(api.dailyMissions.claimMission);
+  const claimMission = useMutation(api.dailyMissions.claimMission);
 
   useEffect(() => {
-    if (userId) ensureMissions({ userId }).catch(() => {});
+    if (userId) ensureMissions({ userId }).catch(() => { });
   }, [userId]);
 
   const handleClaim = async (missionId, onResult) => {
@@ -328,38 +328,38 @@ export default function DailyMissionsWidget({ userId }) {
 
   return (
     <>
-    <Modal
-      visible={flyCoins.length > 0 || particles.length > 0}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-    >
-      <CoinFlyOverlay coins={flyCoins} particles={particles} onCoinArrived={onCoinArrived} />
-    </Modal>
-    <View style={styles.container}>
-      <MissionHeader missions={data.missions} />
-      <FlatList
-        data={sorted}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <MissionCard
-            mission={item}
-            onClaim={handleClaim}
-            claiming={claiming}
-          />
-        )}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
-          setActiveCard(idx);
-        }}
-        scrollEventThrottle={16}
-        getItemLayout={(_, i) => ({ length: CARD_W, offset: CARD_W * i, index: i })}
-      />
-      <PageDots missions={sorted} activeIndex={activeCard} />
-    </View>
+      <Modal
+        visible={flyCoins.length > 0 || particles.length > 0}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+      >
+        <CoinFlyOverlay coins={flyCoins} particles={particles} onCoinArrived={onCoinArrived} />
+      </Modal>
+      <View style={styles.container}>
+        <MissionHeader missions={data.missions} />
+        <FlatList
+          data={sorted}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <MissionCard
+              mission={item}
+              onClaim={handleClaim}
+              claiming={claiming}
+            />
+          )}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
+            setActiveCard(idx);
+          }}
+          scrollEventThrottle={16}
+          getItemLayout={(_, i) => ({ length: CARD_W, offset: CARD_W * i, index: i })}
+        />
+        <PageDots missions={sorted} activeIndex={activeCard} />
+      </View>
     </>
   );
 }
@@ -385,8 +385,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingBottom: 10,
-    marginBottom: 4,
+    paddingBottom: 6,
+    marginBottom: 2,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(210,105,30,0.4)',  // separador chocolate
   },
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderLeftWidth: 3,
-    paddingVertical: 16,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     overflow: 'hidden',
   },
@@ -440,18 +440,18 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontFamily: FONTS.bodyBold,
     color: 'rgba(255,228,181,0.92)',          // trigo cálido en lugar de blanco frío
-    fontSize: 15,
-    marginBottom: 10,
+    fontSize: 13,
+    marginBottom: 5,
   },
 
   // Progress bar
   barBg: {
     width: '100%',
-    height: 8,
+    height: 5,
     backgroundColor: 'rgba(222,184,135,0.25)',  // burlywood cálido
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 5,
   },
   barFill: {
     height: '100%',
@@ -467,14 +467,14 @@ const styles = StyleSheet.create({
   // Claim button
   claimBtn: {
     backgroundColor: COLORS.cempasuchil,      // #FFB800
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   claimBtnText: {
     fontFamily: FONTS.bodyBold,
     color: '#1C0E06',                          // dark warm brown (mejor contraste que #13131F)
-    fontSize: 13,
+    fontSize: 11,
   },
 
   // Claimed stamp
@@ -518,12 +518,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 4,
-    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 2,
+    gap: 5,
   },
   dot: {
-    height: 6,
+    height: 5,
     borderRadius: 3,
   },
 });

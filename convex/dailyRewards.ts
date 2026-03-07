@@ -4,13 +4,13 @@ import { mutation, query } from "./_generated/server";
 // Daily rewards configuration (coins only as per latest strategy)
 // For Day 7, we'll use a base value here, but the mutation will handle the randomness.
 const DAILY_REWARDS = {
-  1: { coins: 10, diamonds: 0 },
-  2: { coins: 15, diamonds: 0 },
-  3: { coins: 20, diamonds: 0 },
-  4: { coins: 25, diamonds: 0 },
-  5: { coins: 30, diamonds: 0 },
-  6: { coins: 35, diamonds: 0 },
-  7: { coins: 125, diamonds: 0 }, // Median for UI, randomness in claimDailyReward
+  1: { coins: 5, diamonds: 0 },
+  2: { coins: 8, diamonds: 0 },
+  3: { coins: 10, diamonds: 0 },
+  4: { coins: 12, diamonds: 0 },
+  5: { coins: 15, diamonds: 0 },
+  6: { coins: 18, diamonds: 0 },
+  7: { coins: 60, diamonds: 0 }, // Median for UI, randomness in claimDailyReward
 };
 
 const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
@@ -86,9 +86,9 @@ export const claimDailyReward = mutation({
     const rewardDay = ((currentStreak - 1) % 7 + 1) as keyof typeof DAILY_REWARDS;
     let reward = { ...DAILY_REWARDS[rewardDay] };
 
-    // Day 7: Variable reward (Piñata) between 50 and 200 coins
+    // Day 7: Variable reward (Piñata) between 25 and 100 coins
     if (rewardDay === 7) {
-      reward.coins = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
+      reward.coins = Math.floor(Math.random() * (100 - 25 + 1)) + 25;
     }
 
     // Update or create daily rewards record

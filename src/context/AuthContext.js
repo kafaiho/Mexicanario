@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
 
   const createAnonymousUser = useMutation(api.auth.createAnonymousUser);
   const linkSocialAccount   = useMutation(api.auth.linkSocialAccount);
+  const loginWithEmailMut   = useMutation(api.friends.loginWithEmail);
   // Query the user — returns null if the userId doesn't exist in this deployment
   const user = useQuery(api.auth.getUser, userId ? { userId } : 'skip');
 
@@ -32,6 +33,10 @@ export const AuthProvider = ({ children }) => {
         staleCheckDone.current = false; // reset so the effect can check
         setUserId(storedUserId);
       } else {
+        // No stored user — try auto-restore by email first
+        const restored = await tryAutoRestoreByEmail();
+        if (restored) return;
+
         // No stored user — create a new one with timeout
         const promise = createAnonymousUser();
         const timeout = new Promise((_, reject) =>
@@ -50,6 +55,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Auto-restore: if we have saved email+password, login automatically
+  const tryAutoRestoreByEmail = async () => {
+    try {
+      const savedEmail = await AsyncStorage.getItem('@mexicanario:savedEmail');
+      const savedPass  = await AsyncStorage.getItem('@mexicanario:savedPass');
+      if (!savedEmail || !savedPass) return false;
+
+      const result = await loginWithEmailMut({ email: savedEmail, password: savedPass });
+      if (result?.userId) {
+        await AsyncStorage.setItem('userId', result.userId);
+        staleCheckDone.current = true;
+        setUserId(result.userId);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Auto-restore by email failed:', err);
+      // Clear saved credentials if they're invalid
+      await AsyncStorage.multiRemove(['@mexicanario:savedEmail', '@mexicanario:savedPass']);
+    }
+    return false;
+  };
+
   useEffect(() => {
     loadStoredUser();
   }, []);
@@ -65,6 +92,10 @@ export const AuthProvider = ({ children }) => {
       staleCheckDone.current = true;
       (async () => {
         try {
+          // Try to restore by email before creating a new user
+          const restored = await tryAutoRestoreByEmail();
+          if (restored) return;
+
           await AsyncStorage.removeItem('userId');
           setUserId(null);
           const newUserId = await createAnonymousUser();
@@ -113,10 +144,27 @@ export const AuthProvider = ({ children }) => {
     setUserId(targetUserId);
   };
 
+  /**
+   * Save email + password locally so the session auto-restores on next app open.
+   * Call this after a successful registerAccount or loginWithEmail.
+   */
+  const saveCredentials = async (email, password) => {
+    await AsyncStorage.setItem('@mexicanario:savedEmail', email.toLowerCase().trim());
+    await AsyncStorage.setItem('@mexicanario:savedPass', password);
+  };
+
+  /**
+   * Clear saved credentials (on logout or account deletion).
+   */
+  const clearCredentials = async () => {
+    await AsyncStorage.multiRemove(['@mexicanario:savedEmail', '@mexicanario:savedPass']);
+  };
+
   // ── Logout ─────────────────────────────────────────────────────────────────
 
   const logout = async () => {
     try {
+      await clearCredentials();
       await AsyncStorage.removeItem('userId');
       setUserId(null);
       staleCheckDone.current = true;
@@ -140,6 +188,9 @@ export const AuthProvider = ({ children }) => {
     linkGoogle,
     linkApple,
     restoreAccount,
+    // Email session persistence
+    saveCredentials,
+    clearCredentials,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

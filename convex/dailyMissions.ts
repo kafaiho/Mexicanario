@@ -10,12 +10,12 @@ function getTodayString(): string {
 // ── Mission pool ──────────────────────────────────────────────────────────────
 
 const MISSION_POOL = [
-  { id: "words_3",  type: "words",  label: "Aprende 3 palabras",   target: 3, reward: { coins: 20, diamonds: 0 } },
-  { id: "words_5",  type: "words",  label: "Aprende 5 palabras",   target: 5, reward: { coins: 35, diamonds: 0 } },
-  { id: "words_8",  type: "words",  label: "Aprende 8 palabras",   target: 8, reward: { coins: 60, diamonds: 0 } },
-  { id: "combo_3",  type: "combo",  label: "Logra un combo de 3+", target: 3, reward: { coins: 30, diamonds: 0 } },
-  { id: "combo_5",  type: "combo",  label: "Logra un combo de 5+", target: 5, reward: { coins: 50, diamonds: 1 } },
-  { id: "streak",   type: "streak", label: "Juega hoy",            target: 1, reward: { coins: 25, diamonds: 0 } },
+  { id: "words_3",  type: "words",  label: "Aprende 3 palabras",   target: 3, reward: { coins: 10, diamonds: 0 } },
+  { id: "words_5",  type: "words",  label: "Aprende 5 palabras",   target: 5, reward: { coins: 18, diamonds: 0 } },
+  { id: "words_8",  type: "words",  label: "Aprende 8 palabras",   target: 8, reward: { coins: 30, diamonds: 0 } },
+  { id: "combo_3",  type: "combo",  label: "Logra un combo de 3+", target: 3, reward: { coins: 15, diamonds: 0 } },
+  { id: "combo_5",  type: "combo",  label: "Logra un combo de 5+", target: 5, reward: { coins: 25, diamonds: 1 } },
+  { id: "streak",   type: "streak", label: "Juega hoy",            target: 1, reward: { coins: 12, diamonds: 0 } },
 ];
 
 /**

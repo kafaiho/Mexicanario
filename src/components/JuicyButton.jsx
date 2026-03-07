@@ -20,7 +20,7 @@ import { playSound } from "../utils/soundManager";
  *   disabled   — desactiva interacción
  *   scaleDown  — escala al presionar (default 0.92)
  */
-export default function JuicyButton({
+const JuicyButton = React.memo(function JuicyButton({
   onPress,
   onPressIn: onPressInProp,
   onPressOut: onPressOutProp,
@@ -93,4 +93,6 @@ export default function JuicyButton({
       </Animated.View>
     </Pressable>
   );
-}
+});
+
+export default JuicyButton;

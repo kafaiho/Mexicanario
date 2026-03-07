@@ -2,8 +2,8 @@
 // Shared between referrals.ts (claimReferral mutation) and friends.ts (registerAccount)
 // Edit ONLY this file to change reward amounts.
 
-export const COINS_REFERRED  = 200;   // coins awarded to the referred user
-export const COINS_REFERRER  = 300;   // base coins awarded to the referrer per new user
+export const COINS_REFERRED  = 100;   // coins awarded to the referred user
+export const COINS_REFERRER  = 200;   // base coins awarded to the referrer per new user
 
 export const REFERRAL_MILESTONES: Array<{ count: number; coins: number; diamonds: number }> = [
   { count: 5,  coins: 500,   diamonds: 2  },

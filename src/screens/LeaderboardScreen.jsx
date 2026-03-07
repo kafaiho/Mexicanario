@@ -40,6 +40,7 @@ const WHEAT2 = '#F5DEB3';
 
 const TABS = [
   { key: "liga",      label: "Liga" },
+  { key: "global",    label: "Global" },
   { key: "mini",      label: "Reto" },
   { key: "historial", label: "Historial" },
 ];
@@ -175,6 +176,7 @@ export default function LeaderboardScreen() {
             joinLeague={joinLeague}
           />
         )}
+        {activeTab === "global" && <GlobalTab userId={userId} />}
         {activeTab === "mini" && <MiniTab />}
         {activeTab === "historial" && <HistorialTab history={leagueHistory} />}
       </ScrollView>
@@ -263,42 +265,79 @@ function LigaTab({ leagueStatus, userId, joinLeague }) {
 
   const players  = leagueStatus.players ?? [];
   const divColor = leagueStatus.divisionInfo?.color ?? GOLD;
+  const myCxp    = leagueStatus.cxpTotal ?? 0;
+  const myZone   = leagueStatus.zone ?? "safe";
 
-  // Nudge message
+  // Nudge message — psychology: near-miss for promotion, loss aversion for demotion
   let nudge = null;
-  if (leagueStatus.rank >= 6 && leagueStatus.rank <= 7) {
-    const rankAbove = players[4];
-    if (rankAbove) {
-      const gap = rankAbove.cxpTotal - leagueStatus.cxpTotal;
-      if (gap > 0) nudge = `¡Solo te faltan ${gap} cXP para subir!`;
+  const promoCount = leagueStatus.promoCount ?? 5;
+  const promoMin   = leagueStatus.promoMinCXP ?? 200;
+  const safeMin    = leagueStatus.safeMinCXP ?? 50;
+  const promoBoundary = leagueStatus.promoBoundaryCxp ?? 0;
+  const safeBoundary  = leagueStatus.safeBoundaryCxp ?? 0;
+
+  if (myZone === "demotion") {
+    // Loss aversion: highlight threat of demotion
+    const gapToSafe = safeBoundary - myCxp;
+    if (gapToSafe > 0) {
+      nudge = { type: "danger", text: `⚠️ Zona de descenso — faltan ${gapToSafe} cXP para estar seguro` };
+    } else if (myCxp < safeMin) {
+      nudge = { type: "danger", text: `⚠️ Necesitas al menos ${safeMin} cXP esta semana para no bajar` };
+    }
+  } else if (myZone === "promotion") {
+    if (myCxp < promoMin) {
+      // In promo zone by rank but not enough XP
+      const gap = promoMin - myCxp;
+      nudge = { type: "info", text: `🔺 ¡Faltan ${gap} cXP para confirmar tu ascenso!` };
+    } else {
+      nudge = { type: "success", text: `🔺 ¡Vas a ascender! Mantén tu posición` };
+    }
+  } else {
+    // Safe zone — near-miss nudge toward promotion
+    const gap = promoBoundary - myCxp;
+    if (gap > 0 && gap <= 80) {
+      nudge = { type: "info", text: `🔺 ¡Solo ${gap} cXP para zona de ascenso!` };
     }
   }
+
+  const DAILY_CAP = 200;
 
   return (
     <View>
       {/* Daily cap bar */}
       <View style={styles.capBar}>
         <Text style={styles.capText}>
-          Hoy: {leagueStatus.cxpToday ?? 0} / 150 cXP
+          Hoy: {leagueStatus.cxpToday ?? 0} / {DAILY_CAP} cXP
         </Text>
         <View style={styles.capTrack}>
           <View
             style={[
               styles.capFill,
               {
-                width: `${Math.min(100, ((leagueStatus.cxpToday ?? 0) / 150) * 100)}%`,
+                width: `${Math.min(100, ((leagueStatus.cxpToday ?? 0) / DAILY_CAP) * 100)}%`,
                 backgroundColor: divColor,
               },
             ]}
           />
-          <View style={[styles.capMarker, { left: "66.6%" }]} />
+          {/* Soft cap marker at 75% (150/200) */}
+          <View style={[styles.capMarker, { left: "75%" }]} />
         </View>
       </View>
 
-      {/* Nudge */}
+      {/* Nudge — psychology: danger for demotion (loss aversion), success for promotion */}
       {nudge && (
-        <View style={styles.nudge}>
-          <Text style={styles.nudgeText}>{nudge}</Text>
+        <View style={[
+          styles.nudge,
+          nudge.type === "danger"  && { backgroundColor: "#FDECEA", borderLeftColor: "#C0392B" },
+          nudge.type === "success" && { backgroundColor: "#EDF7F0", borderLeftColor: "#27AE60" },
+          nudge.type === "info"    && { backgroundColor: "#EBF5FB", borderLeftColor: "#2980B9" },
+        ]}>
+          <Text style={[
+            styles.nudgeText,
+            nudge.type === "danger"  && { color: "#C0392B" },
+            nudge.type === "success" && { color: "#27AE60" },
+            nudge.type === "info"    && { color: "#2980B9" },
+          ]}>{nudge.text}</Text>
         </View>
       )}
 
@@ -316,6 +355,84 @@ function LigaTab({ leagueStatus, userId, joinLeague }) {
           {renderZonedList(players)}
         </View>
       )}
+    </View>
+  );
+}
+
+// ── Global Tab ────────────────────────────────────────────────────────────────
+
+function GlobalTab({ userId }) {
+  const globalData = useQuery(
+    api.users.getGlobalLeaderboard,
+    userId ? { userId } : "skip"
+  );
+
+  if (!globalData) {
+    return (
+      <View style={styles.emptyState}>
+        <ActivityIndicator size="large" color={AMBER} />
+      </View>
+    );
+  }
+
+  const MEDAL = ["🥇", "🥈", "🥉"];
+
+  return (
+    <View>
+      {/* My rank card */}
+      {globalData.myRank && globalData.myEntry && (
+        <View style={styles.globalMyCard}>
+          <Text style={styles.globalMyLabel}>Tu posición</Text>
+          <View style={styles.globalMyRow}>
+            <Text style={styles.globalMyRank}>#{globalData.myRank}</Text>
+            <Text style={styles.globalMyDot}> · </Text>
+            <Text style={styles.globalMyScore}>{globalData.myEntry.score.toLocaleString()} pts</Text>
+          </View>
+          <Text style={styles.globalMyTotal}>
+            de {globalData.totalPlayers.toLocaleString()} jugadores
+          </Text>
+        </View>
+      )}
+
+      {/* Leaderboard table */}
+      <View style={styles.tableCard}>
+        <View style={styles.colHeader}>
+          <Text style={[styles.colHdrText, { width: width * 0.10, textAlign: "center" }]}>#</Text>
+          <View style={{ width: width * 0.09, marginRight: width * 0.025 }} />
+          <Text style={[styles.colHdrText, { flex: 1 }]}>JUGADOR</Text>
+          <Text style={[styles.colHdrText, { minWidth: width * 0.18, textAlign: "right" }]}>PUNTOS</Text>
+        </View>
+        <View style={styles.colHdrSep} />
+        {globalData.leaderboard.map((player, idx) => {
+          const isMe = player.userId === userId;
+          return (
+            <View
+              key={player.userId}
+              style={[
+                styles.globalRow,
+                isMe && styles.globalRowMe,
+                idx < globalData.leaderboard.length - 1 && styles.globalRowBorder,
+              ]}
+            >
+              <Text style={[styles.globalRankText, isMe && { color: AMBER }]}>
+                {idx < 3 ? MEDAL[idx] : `${idx + 1}`}
+              </Text>
+              <View style={styles.globalAvatar}>
+                <Text style={styles.globalAvatarText}>{player.avatar}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.globalName, isMe && { color: AMBER }]} numberOfLines={1}>
+                  {player.name}
+                </Text>
+                <Text style={styles.globalLevel}>Nivel {player.level}</Text>
+              </View>
+              <Text style={[styles.globalScore, isMe && { color: AMBER }]}>
+                {player.score.toLocaleString()}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -669,6 +786,92 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.body,
     fontSize: width * 0.032,
     color: BROWN,
+  },
+
+  // ── Global ──
+  globalMyCard: {
+    backgroundColor: WHEAT,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "rgba(210,105,30,0.45)",
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 4,
+  },
+  globalMyLabel: {
+    fontFamily: FONTS.body,
+    fontSize: width * 0.03,
+    color: "#A0714F",
+  },
+  globalMyRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  globalMyRank: {
+    fontFamily: FONTS.display,
+    fontSize: width * 0.07,
+    color: BROWN,
+  },
+  globalMyDot: { color: "#A0714F", fontSize: width * 0.04 },
+  globalMyScore: {
+    fontFamily: FONTS.display,
+    fontSize: width * 0.055,
+    color: AMBER,
+  },
+  globalMyTotal: {
+    fontFamily: FONTS.body,
+    fontSize: width * 0.03,
+    color: "#A0714F",
+  },
+  globalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  globalRowMe: {
+    backgroundColor: "rgba(248,190,23,0.12)",
+  },
+  globalRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(210,105,30,0.15)",
+  },
+  globalRankText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: width * 0.04,
+    color: BROWN,
+    width: width * 0.08,
+    textAlign: "center",
+  },
+  globalAvatar: {
+    width: width * 0.09,
+    height: width * 0.09,
+    borderRadius: width * 0.045,
+    backgroundColor: "#FFF5E6",
+    borderWidth: 1.5,
+    borderColor: "rgba(139,69,19,0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  globalAvatarText: { fontSize: width * 0.045 },
+  globalName: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: width * 0.034,
+    color: BROWN,
+  },
+  globalLevel: {
+    fontFamily: FONTS.body,
+    fontSize: width * 0.026,
+    color: "#A0714F",
+  },
+  globalScore: {
+    fontFamily: FONTS.display,
+    fontSize: width * 0.038,
+    color: BROWN,
+    minWidth: width * 0.16,
+    textAlign: "right",
   },
 
   // ── History ──

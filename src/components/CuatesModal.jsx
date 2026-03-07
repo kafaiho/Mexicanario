@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,38 +20,40 @@ import { FONTS } from "../theme/designTokens";
 
 const { width, height } = Dimensions.get("window");
 
-const BROWN  = "#8B4513";
-const AMBER  = "#D2691E";
-const GOLD   = "#F8BE17";
-const WHEAT  = "#FFE4B5";
+const BROWN = "#8B4513";
+const AMBER = "#D2691E";
+const GOLD = "#F8BE17";
+const WHEAT = "#FFE4B5";
 const WHEAT2 = "#F5DEB3";
-const RED    = "#C0392B";
-const GREEN  = "#27AE60";
+const RED = "#C0392B";
+const GREEN = "#27AE60";
 
 // Pantallas del flujo
-const S_LOADING  = "loading";
-const S_AUTH     = "auth";      // no tiene email → registro / login
-const S_REWARD   = "reward";    // pantalla de recompensa post-registro
+const S_LOADING = "loading";
+const S_AUTH = "auth";      // no tiene email → registro / login
+const S_REWARD = "reward";    // pantalla de recompensa post-registro
 const S_USERNAME = "username";  // tiene email pero no username
-const S_HOME     = "home";      // listo
+const S_HOME = "home";      // listo
 
 const INVITE_MSG =
   "¡Ey cuate! Te invito a jugar Mexicanario, el juego para aprender el español de México. " +
   "¡Está de pelos, descárgalo ya! 🌮🇲🇽";
 
-export default function CuatesModal({ visible, onClose }) {
-  const { userId, user, restoreAccount } = useAuth();
+export default function CuatesModal({ visible, onClose, onOpenProfile }) {
+  const { userId, user, restoreAccount, saveCredentials } = useAuth();
 
   // Tabs de autenticación
-  const [authTab,  setAuthTab]  = useState("login");  // "login" | "register"
+  const [authTab, setAuthTab] = useState("login");  // "login" | "register" | "forgot"
 
   // Campos de formulario
-  const [email,     setEmail]     = useState("");
-  const [password,  setPassword]  = useState("");
-  const [username,  setUsername]  = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetStep, setResetStep] = useState(1); // 1 = pedir correo, 2 = usar código
 
   // Búsqueda
-  const [searchInput,     setSearchInput]     = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Tab del home
@@ -63,9 +65,11 @@ export default function CuatesModal({ visible, onClose }) {
   const [busy, setBusy] = useState(false);
 
   // ── Mutaciones Convex ───────────────────────────────────────────────────────
-  const registerAccount = useMutation(api.friends.registerAccount);
-  const loginWithEmail  = useMutation(api.friends.loginWithEmail);
-  const setUsernameM    = useMutation(api.friends.setUsername);
+  const registerAccount = useAction(api.friends.registerAccount);
+  const loginWithEmail = useMutation(api.friends.loginWithEmail);
+  const setUsernameM = useMutation(api.friends.setUsername);
+  const requestReset = useAction(api.friends.requestPasswordReset);
+  const resetPassword = useMutation(api.friends.resetPassword);
 
   // ── Queries reactivas ───────────────────────────────────────────────────────
   const checkUsername = useQuery(
@@ -94,6 +98,8 @@ export default function CuatesModal({ visible, onClose }) {
     setSearchInput("");
     setDebouncedSearch("");
     setAuthTab("login");
+    setResetCode("");
+    setResetStep(1);
     setHomeTab("invite");
     setReward(null);
     onClose();
@@ -115,7 +121,7 @@ export default function CuatesModal({ visible, onClose }) {
 
   // ── Acciones ───────────────────────────────────────────────────────────────
   async function handleRegister() {
-    const trimEmail    = email.trim();
+    const trimEmail = email.trim();
     const trimUsername = username.trim();
     if (!trimEmail || !password || !trimUsername) {
       Alert.alert("¡Falta algo!", "Llena todos los campos, cuate. 🌮");
@@ -129,7 +135,7 @@ export default function CuatesModal({ visible, onClose }) {
     let pendingRef = null;
     try {
       pendingRef = await AsyncStorage.getItem("@mexicanario:pendingRef");
-    } catch {}
+    } catch { }
     setBusy(true);
     try {
       const res = await registerAccount({
@@ -139,8 +145,10 @@ export default function CuatesModal({ visible, onClose }) {
         username: trimUsername,
         referrerUsername: pendingRef ?? undefined,
       });
+      // Save credentials for auto-restore on next app open
+      await saveCredentials(trimEmail, password);
       // Clear the pending ref after use
-      AsyncStorage.removeItem("@mexicanario:pendingRef").catch(() => {});
+      AsyncStorage.removeItem("@mexicanario:pendingRef").catch(() => { });
       if (res?.referral?.coinsReferred) {
         Alert.alert(
           "¡Bienvenido! 🎉",
@@ -151,7 +159,7 @@ export default function CuatesModal({ visible, onClose }) {
         setReward({ coins: res.coinsAdded, diamonds: res.diamondsAdded });
       }
     } catch (e) {
-      Alert.alert("¡Aguas!", e.message ?? "No se pudo crear la cuenta.");
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "No se pudo crear la cuenta.");
     } finally {
       setBusy(false);
     }
@@ -167,10 +175,52 @@ export default function CuatesModal({ visible, onClose }) {
     try {
       const res = await loginWithEmail({ email: trimEmail, password });
       await restoreAccount(res.userId);
+      // Save credentials for auto-restore on next app open
+      await saveCredentials(trimEmail, password);
       setEmail("");
       setPassword("");
     } catch (e) {
-      Alert.alert("¡Aguas!", e.message ?? "No se pudo entrar.");
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "No se pudo entrar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRequestReset() {
+    const trimEmail = email.trim();
+    if (!trimEmail) {
+      Alert.alert("¡Falta algo!", "Escribe tu correo para enviarte el código.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await requestReset({ email: trimEmail });
+      Alert.alert("¡Enviado! 📩", "Revisa tu correo (busca también en spam). Tienes 15 minutos para usar el código.");
+      setResetStep(2);
+    } catch (e) {
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al enviar el correo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    const trimEmail = email.trim();
+    const trimCode = resetCode.trim();
+    if (!trimEmail || !trimCode || !password) {
+      Alert.alert("¡Falta algo!", "Llena todos los campos.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await resetPassword({ email: trimEmail, code: trimCode, newPassword: password });
+      Alert.alert("¡Éxito! 🎉", "Contraseña cambiada. Ya puedes entrar.");
+      setAuthTab("login");
+      setResetStep(1);
+      setResetCode("");
+      setPassword("");
+    } catch (e) {
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al restablecer.");
     } finally {
       setBusy(false);
     }
@@ -184,7 +234,7 @@ export default function CuatesModal({ visible, onClose }) {
       await setUsernameM({ userId, username: username.trim() });
       setUsername("");
     } catch (e) {
-      Alert.alert("¡Aguas!", e.message ?? "Error al guardar el nombre.");
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al guardar el nombre.");
     } finally {
       setBusy(false);
     }
@@ -318,11 +368,14 @@ export default function CuatesModal({ visible, onClose }) {
                       : <Text style={s.actionBtnText}>Entrar 🌮</Text>
                     }
                   </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setAuthTab("forgot")} style={[s.switchLink, { paddingVertical: 4 }]}>
+                    <Text style={[s.switchLinkText, { color: BROWN, opacity: 0.8 }]}>¿Olvidaste tu contraseña?</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => setAuthTab("register")} style={s.switchLink}>
                     <Text style={s.switchLinkText}>¿No tienes cuenta? Créala aquí</Text>
                   </TouchableOpacity>
                 </>
-              ) : (
+              ) : authTab === "register" ? (
                 <>
                   <TextInput
                     style={s.input}
@@ -370,7 +423,62 @@ export default function CuatesModal({ visible, onClose }) {
                     <Text style={s.switchLinkText}>¿Ya tienes cuenta? Entra aquí</Text>
                   </TouchableOpacity>
                 </>
-              )}
+              ) : authTab === "forgot" ? (
+                <>
+                  <Text style={[s.subtitle, { marginTop: -10, marginBottom: 16 }]}>
+                    Recuperación de contraseña
+                  </Text>
+                  {resetStep === 1 ? (
+                    <>
+                      <TextInput
+                        style={s.input}
+                        placeholder="Tu correo electrónico"
+                        placeholderTextColor="#A0714F"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        value={email}
+                        onChangeText={setEmail}
+                      />
+                      <TouchableOpacity style={s.actionBtn} onPress={handleRequestReset} disabled={busy}>
+                        {busy
+                          ? <ActivityIndicator color={BROWN} />
+                          : <Text style={s.actionBtnText}>Enviar código 📩</Text>
+                        }
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={s.input}
+                        placeholder="Código de 6 dígitos"
+                        placeholderTextColor="#A0714F"
+                        keyboardType="number-pad"
+                        value={resetCode}
+                        onChangeText={setResetCode}
+                        maxLength={6}
+                      />
+                      <TextInput
+                        style={s.input}
+                        placeholder="Nueva contraseña (mín. 6)"
+                        placeholderTextColor="#A0714F"
+                        secureTextEntry
+                        value={password}
+                        onChangeText={setPassword}
+                      />
+                      <TouchableOpacity style={s.actionBtn} onPress={handleResetPassword} disabled={busy}>
+                        {busy
+                          ? <ActivityIndicator color={BROWN} />
+                          : <Text style={s.actionBtnText}>Actualizar contraseña 🔑</Text>
+                        }
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  <TouchableOpacity onPress={() => { setAuthTab("login"); setResetStep(1); }} style={s.switchLink}>
+                    <Text style={s.switchLinkText}>Volver a Entrar</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
             </ScrollView>
           )}
 
@@ -416,11 +524,11 @@ export default function CuatesModal({ visible, onClose }) {
           ════════════════════════════════════════════════════════════════════ */}
           {screen === S_HOME && (
             <View style={{ flex: 1 }}>
-              {/* Mi nombre */}
-              <View style={s.myPill}>
+              {/* Mi nombre — tap abre ProfileScreen */}
+              <TouchableOpacity style={s.myPill} onPress={() => onOpenProfile?.()}>
                 <Text style={s.myPillLabel}>Tu nombre:</Text>
                 <Text style={s.myPillValue}>@{user?.username}</Text>
-              </View>
+              </TouchableOpacity>
 
               {/* Tabs Invitar / Buscar */}
               <View style={s.tabRow}>
@@ -725,8 +833,8 @@ const s = StyleSheet.create({
     marginBottom: 14,
     alignItems: "center",
   },
-  rewardItem:   { alignItems: "center", gap: 4 },
-  rewardEmoji:  { fontSize: width * 0.11 },
+  rewardItem: { alignItems: "center", gap: 4 },
+  rewardEmoji: { fontSize: width * 0.11 },
   rewardAmount: {
     fontFamily: FONTS.display,
     fontSize: width * 0.08,

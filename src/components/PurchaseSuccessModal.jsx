@@ -25,7 +25,7 @@ const ACTION_BORDER = "#C8950A";
 const ACTION_TEXT = "#523600";
 
 const MESSAGES = [
-    "¡Te rifaste compa! Te quiero un chingo. 🥺❤️",
+    "¡Te rifaste compa! Te quiero un montón. 🥺❤️",
     "¡Qué chulada! Eres el mejor humano del mundo mundial. 🥰🌮",
     "¡Ay güey, qué rico! Prometo portarme bién. 🐶✨",
     "¡Gracias jefecito/a! Mi corazoncito late a mil por hora. 💓",

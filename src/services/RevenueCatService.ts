@@ -21,8 +21,8 @@ import { Alert, Platform } from "react-native";
 // ─── API Keys ─────────────────────────────────────────────────────────────────
 // Get your API keys from: RevenueCat Dashboard → Project → API Keys
 // Use separate keys for iOS and Android (same test key for sandbox testing).
-const REVENUECAT_IOS_API_KEY     = "test_cUXIUWToWAjnFinMclQnfgmEjzH";
-const REVENUECAT_ANDROID_API_KEY = "test_cUXIUWToWAjnFinMclQnfgmEjzH";
+const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_RC_IOS_KEY || "REPLACE_WITH_IOS_PRODUCTION_KEY";
+const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_RC_ANDROID_KEY || "goog_mnBCWqnSmPrDNzBwdDHxKFRMRAk";
 
 const API_KEY =
   Platform.OS === "ios" ? REVENUECAT_IOS_API_KEY : REVENUECAT_ANDROID_API_KEY;
@@ -39,27 +39,27 @@ export const ENTITLEMENT_PLUS = "Mexicanario Pro";
  * Must match the product IDs created in Google Play Console / App Store Connect.
  */
 export const RC_PRODUCT_IDS: Record<string, string> = {
-  coins_500:    "mx_coins_500",
-  coins_1200:   "mx_coins_1200",
-  coins_2000:   "mx_coins_2000",
+  coins_500: "mx_coins_500",
+  coins_1200: "mx_coins_1200",
+  coins_2000: "mx_coins_2000",
   diamonds_100: "mx_diamonds_100",
   diamonds_300: "mx_diamonds_300",
   diamonds_800: "mx_diamonds_800",
-  pass_mexica:  "mx_season_pass",
+  pass_mexica: "mx_season_pass",
   // Subscription & consumable product IDs (match your store listings)
-  monthly:      "monthly",
-  consumable:   "consumable",
+  monthly: "monthly",
+  consumable: "consumable",
 };
 
 /** What each consumable IAP grants (mirrored in convex/shop.ts IAP_ITEMS). */
 export const IAP_GRANTS: Record<string, { coins?: number; diamonds?: number }> = {
-  coins_500:    { coins: 500   },
-  coins_1200:   { coins: 1200  },
-  coins_2000:   { coins: 2000  },
+  coins_500: { coins: 500 },
+  coins_1200: { coins: 1200 },
+  coins_2000: { coins: 2000 },
   diamonds_100: { diamonds: 100 },
   diamonds_300: { diamonds: 300 },
   diamonds_800: { diamonds: 800 },
-  pass_mexica:  { coins: 1200, diamonds: 17 },
+  pass_mexica: { coins: 1200, diamonds: 17 },
 };
 
 // ─── SDK lazy-load ────────────────────────────────────────────────────────────
@@ -72,11 +72,11 @@ let RevenueCatUI: any = null;
 // PAYWALL_RESULT string enum — initialize with string values so comparisons
 // work even if the module isn't loaded (avoids undefined === undefined traps).
 export const PAYWALL_RESULT = {
-  PURCHASED:     "PURCHASED",
-  RESTORED:      "RESTORED",
-  CANCELLED:     "CANCELLED",
+  PURCHASED: "PURCHASED",
+  RESTORED: "RESTORED",
+  CANCELLED: "CANCELLED",
   NOT_PRESENTED: "NOT_PRESENTED",
-  ERROR:         "ERROR",
+  ERROR: "ERROR",
 } as const;
 
 export type PaywallResultValue = typeof PAYWALL_RESULT[keyof typeof PAYWALL_RESULT];
@@ -175,7 +175,7 @@ export async function checkMexicanarioProEntitlement(): Promise<MexPlusEntitleme
 export function addCustomerInfoListener(
   callback: (entitlement: MexPlusEntitlement) => void
 ): () => void {
-  if (!isConfigured() || !Purchases.addCustomerInfoUpdateListener) return () => {};
+  if (!isConfigured() || !Purchases.addCustomerInfoUpdateListener) return () => { };
 
   const handler = (info: any) => {
     const entitlement = info?.entitlements?.active?.[ENTITLEMENT_PLUS];
@@ -229,7 +229,7 @@ export async function presentMexicanarioPlusPaywall(): Promise<PaywallOutcome> {
     // Fetch fresh entitlement after any successful interaction
     const shouldFetch =
       result === PAYWALL_RESULT.PURCHASED ||
-      result === PAYWALL_RESULT.RESTORED  ||
+      result === PAYWALL_RESULT.RESTORED ||
       result === PAYWALL_RESULT.NOT_PRESENTED; // already active
 
     const entitlement = shouldFetch

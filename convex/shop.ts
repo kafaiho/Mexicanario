@@ -1,39 +1,36 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { ensureAdultPack } from "./seedAdultWords";
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 // Items that can be bought with coins or diamonds (not real money)
 export const COIN_ITEMS: Record<string, { label: string; currency: "coins" | "diamonds"; price: number; category: string }> = {
-  hint_x5:            { label: "Pistas x5",             currency: "coins",    price: 100,  category: "powerups" },
-  reveal_x3:          { label: "Revelar x3",            currency: "coins",    price: 200,  category: "powerups" },
-  complete_x1:        { label: "Completar x1",          currency: "coins",    price: 400,  category: "powerups" },
-  synonym_x5:         { label: "Pista frase x5",        currency: "coins",    price: 150,  category: "powerups" },
-  pet_food_x5:        { label: "Comida x5",             currency: "coins",    price: 80,   category: "mascota"  },
-  pet_toy:            { label: "Juguete",                currency: "diamonds", price: 3,    category: "mascota"  },
-  pet_candy:          { label: "Dulce especial",        currency: "diamonds", price: 5,    category: "mascota"  },
-  streak_freeze_coins:{ label: "Protector de Racha",    currency: "coins",    price: 400,  category: "streak"   },
-  skin_mariachi:      { label: "Traje de Mariachi",     currency: "coins",    price: 1500, category: "skins"    },
-  skin_charro:        { label: "Charro de Jalisco",     currency: "coins",    price: 2000, category: "skins"    },
-  skin_lucha:         { label: "Luchador Enmascarado",  currency: "coins",    price: 2500, category: "skins"    },
-  skin_catrina:       { label: "La Catrina",            currency: "coins",    price: 3500, category: "skins"    },
-  skin_azteca:        { label: "Guerrero Azteca",       currency: "coins",    price: 5000, category: "skins"    },
-  content_insultos:   { label: "Insultos Finos",        currency: "coins",    price: 1000, category: "adulto"   },
-  content_suegra:     { label: "Diccionario de la Suegra", currency: "coins", price: 1000, category: "adulto"   },
+  hint_x5: { label: "Pistas x5", currency: "coins", price: 100, category: "powerups" },
+  reveal_x3: { label: "Revelar x3", currency: "coins", price: 200, category: "powerups" },
+  complete_x1: { label: "Completar x1", currency: "coins", price: 400, category: "powerups" },
+  synonym_x5: { label: "Pista frase x5", currency: "coins", price: 150, category: "powerups" },
+  pet_food_x5: { label: "Comida x5", currency: "coins", price: 80, category: "mascota" },
+  pet_toy: { label: "Juguete", currency: "diamonds", price: 3, category: "mascota" },
+  pet_candy: { label: "Dulce especial", currency: "diamonds", price: 5, category: "mascota" },
+  streak_freeze_coins: { label: "Protector de Racha", currency: "coins", price: 400, category: "streak" },
+  skin_mariachi: { label: "Traje de Mariachi", currency: "coins", price: 1500, category: "skins" },
+  skin_charro: { label: "Charro de Jalisco", currency: "coins", price: 2000, category: "skins" },
+  skin_lucha: { label: "Luchador Enmascarado", currency: "coins", price: 2500, category: "skins" },
+  skin_catrina: { label: "La Catrina", currency: "coins", price: 3500, category: "skins" },
+  skin_azteca: { label: "Guerrero Azteca", currency: "coins", price: 5000, category: "skins" },
 };
 
 // IAP products (real money) — RevenueCat product IDs
 export const IAP_ITEMS: Record<string, { label: string; currency: "real"; coins?: number; diamonds?: number; rcProductId: string }> = {
-  coins_500:    { label: "500 Monedas",    currency: "real", coins: 500,    rcProductId: "mx_coins_500"    },
-  coins_1200:   { label: "1200 Monedas",   currency: "real", coins: 1200,   rcProductId: "mx_coins_1200"   },
-  coins_2000:   { label: "2000 Monedas",   currency: "real", coins: 2000,   rcProductId: "mx_coins_2000"   },
-  diamonds_100: { label: "100 Diamantes",  currency: "real", diamonds: 100, rcProductId: "mx_diamonds_100" },
-  diamonds_300: { label: "300 Diamantes",  currency: "real", diamonds: 300, rcProductId: "mx_diamonds_300" },
-  diamonds_800: { label: "800 Diamantes",  currency: "real", diamonds: 800, rcProductId: "mx_diamonds_800" },
-  pass_mexica:  { label: "Pase Mexica",    currency: "real", coins: 1200, diamonds: 17, rcProductId: "mx_season_pass" },
+  coins_500: { label: "500 Monedas", currency: "real", coins: 500, rcProductId: "mx_coins_500" },
+  coins_1200: { label: "1200 Monedas", currency: "real", coins: 1200, rcProductId: "mx_coins_1200" },
+  coins_2000: { label: "2000 Monedas", currency: "real", coins: 2000, rcProductId: "mx_coins_2000" },
+  diamonds_100: { label: "100 Diamantes", currency: "real", diamonds: 100, rcProductId: "mx_diamonds_100" },
+  diamonds_300: { label: "300 Diamantes", currency: "real", diamonds: 300, rcProductId: "mx_diamonds_300" },
+  diamonds_800: { label: "800 Diamantes", currency: "real", diamonds: 800, rcProductId: "mx_diamonds_800" },
+  pass_mexica: { label: "Pase Mexica", currency: "real", coins: 1200, diamonds: 17, rcProductId: "mx_season_pass" },
 };
 
-const FREE_COINS_AMOUNT = 10;
+const FREE_COINS_AMOUNT = 15;
 const FREE_COINS_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -65,10 +62,10 @@ export const getShopState = query({
       streakFreezeCount: (user as any).streakFreezeCount ?? 0,
       activePass: activePass
         ? {
-            passId: activePass.passId,
-            expiresAt: activePass.expiresAt,
-            rewardsClaimed: activePass.rewardsClaimed,
-          }
+          passId: activePass.passId,
+          expiresAt: activePass.expiresAt,
+          rewardsClaimed: activePass.rewardsClaimed,
+        }
         : null,
     };
   },
@@ -133,10 +130,10 @@ export const buyWithCoins = mutation({
     if (item.category === "powerups") {
       const currentPowerups = (user as any).powerups ?? {};
       const inventoryKey: Record<string, string> = {
-        hint_x5:     "hints",
-        reveal_x3:   "hints",   // reuse hints slot for reveal
+        hint_x5: "hints",
+        reveal_x3: "hints",   // reuse hints slot for reveal
         complete_x1: "completes",
-        synonym_x5:  "synonyms",
+        synonym_x5: "synonyms",
       };
       const field = inventoryKey[args.itemId];
       const qty: Record<string, number> = {
@@ -158,15 +155,6 @@ export const buyWithCoins = mutation({
       const currentSkins: string[] = (user as any).purchasedSkins ?? [];
       if (!currentSkins.includes(args.itemId)) {
         await ctx.db.patch(args.userId, { purchasedSkins: [...currentSkins, args.itemId] } as any);
-      }
-    } else if (item.category === "adulto") {
-      // Auto-sembrar palabras del pack si aún no existen en la BD
-      const pack = args.itemId === "content_insultos" ? "insultos" : "suegra";
-      await ensureAdultPack(ctx, pack);
-      // Unlock adult content category
-      const currentUnlocked: string[] = (user as any).adultContentUnlocked ?? [];
-      if (!currentUnlocked.includes(args.itemId)) {
-        await ctx.db.patch(args.userId, { adultContentUnlocked: [...currentUnlocked, args.itemId] } as any);
       }
     }
 
@@ -198,7 +186,25 @@ export const applyIAPPurchase = mutation({
 
     const now = Date.now();
     const patch: Record<string, number> = {};
-    if (item.coins) patch.coins = user.coins + item.coins;
+
+    // ── Bonus por código de creador (5% extra en varos) ──────────────────────
+    let bonusCoins = 0;
+    const creatorCode = (user as any).creatorCode as string | undefined;
+    if (creatorCode && item.coins) {
+      const codeDoc = await ctx.db
+        .query("referralCodes")
+        .withIndex("by_code", (q: any) => q.eq("code", creatorCode))
+        .first();
+      if (codeDoc && codeDoc.active) {
+        bonusCoins = Math.floor(item.coins * (codeDoc.discountPct / 100));
+        // Registrar compra atribuida al creador
+        await ctx.db.patch(codeDoc._id, {
+          totalPurchases: codeDoc.totalPurchases + 1,
+        });
+      }
+    }
+
+    if (item.coins) patch.coins = user.coins + item.coins + bonusCoins;
     if (item.diamonds) patch.diamonds = user.diamonds + item.diamonds;
 
     await ctx.db.patch(args.userId, patch as any);
@@ -207,7 +213,7 @@ export const applyIAPPurchase = mutation({
       userId: args.userId,
       itemId: args.itemId,
       type: "iap",
-      amount: (item.coins ?? 0) + (item.diamonds ?? 0),
+      amount: (item.coins ?? 0) + bonusCoins + (item.diamonds ?? 0),
       purchasedAt: now,
       receiptToken: args.receiptToken,
     });
@@ -237,7 +243,13 @@ export const applyIAPPurchase = mutation({
       });
     }
 
-    return { success: true, coins: patch.coins ?? user.coins, diamonds: patch.diamonds ?? user.diamonds };
+    return {
+      success: true,
+      coins: patch.coins ?? user.coins,
+      diamonds: patch.diamonds ?? user.diamonds,
+      coinsGranted: item.coins ? item.coins + bonusCoins : 0,
+      diamondsGranted: item.diamonds ?? 0,
+    };
   },
 });
 
@@ -272,7 +284,7 @@ export const usePowerup = mutation({
  */
 export const syncMexPlusEntitlement = mutation({
   args: {
-    userId:    v.id("users"),
+    userId: v.id("users"),
     expiresAt: v.optional(v.number()), // epoch ms; omit or 0 → not active
   },
   handler: async (ctx, args) => {
@@ -283,8 +295,8 @@ export const syncMexPlusEntitlement = mutation({
   },
 });
 
-// ─── Gift reward (every 4 tacos) ──────────────────────────────────────────────
-const TACOS_PER_GIFT = 4;
+// ─── Gift reward (every 12 tacos, consumed on claim) ─────────────────────────
+const TACOS_PER_GIFT = 12;
 const GIFT_REWARD_COINS = 100;
 
 export const claimGiftReward = mutation({
@@ -294,25 +306,24 @@ export const claimGiftReward = mutation({
     if (!user) throw new Error("Usuario no encontrado");
 
     const tacos = (user as any).tacos ?? 0;
-    const lastClaimed = (user as any).lastGiftClaimed ?? 0;
-    const nextRewardAt = lastClaimed + TACOS_PER_GIFT;
 
-    if (tacos < nextRewardAt) {
-      throw new Error(`Necesitas ${nextRewardAt - tacos} tacos mas`);
+    if (tacos < TACOS_PER_GIFT) {
+      throw new Error(`Necesitas ${TACOS_PER_GIFT - tacos} tacos mas`);
     }
 
-    // Give coins and update lastGiftClaimed
+    // Give coins and deduct tacos
     const newCoins = (user.coins || 0) + GIFT_REWARD_COINS;
+    const newTacos = tacos - TACOS_PER_GIFT;
     await ctx.db.patch(args.userId, {
       coins: newCoins,
-      lastGiftClaimed: nextRewardAt,
+      tacos: newTacos,
     } as any);
 
     return {
       success: true,
       coinsAwarded: GIFT_REWARD_COINS,
       newCoins,
-      nextRewardAt: nextRewardAt + TACOS_PER_GIFT,
+      tacosRemaining: newTacos,
     };
   },
 });

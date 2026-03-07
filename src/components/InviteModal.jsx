@@ -111,10 +111,10 @@ export default function InviteModal({ visible, onClose }) {
           {/* ── Recompensa info ── */}
           <View style={s.rewardRow}>
             <View style={s.rewardPill}>
-              <Text style={s.rewardPillText}>Tú ganas: +300 🪙 por cuate</Text>
+              <Text style={s.rewardPillText}>Tú ganas: +200 🪙 por cuate</Text>
             </View>
             <View style={[s.rewardPill, { backgroundColor: "#E8F5E9" }]}>
-              <Text style={[s.rewardPillText, { color: "#2E7D32" }]}>Tu cuate: +200 🪙</Text>
+              <Text style={[s.rewardPillText, { color: "#2E7D32" }]}>Tu cuate: +100 🪙</Text>
             </View>
           </View>
 

@@ -37,4 +37,10 @@ yarn-error.*
 *.tsbuildinfo
 
 /android
-/ios
+/ios.env
+
+# Temp files
+allwords_temp.json
+analyze_modismos*.js
+test_gemini*.js
+cats.json

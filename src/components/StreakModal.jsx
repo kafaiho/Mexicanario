@@ -1,15 +1,19 @@
 import { useMutation, useQuery } from "convex/react";
+import * as Sharing from "expo-sharing";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
   Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { captureRef } from "react-native-view-shot";
+import StreakShareCard from "./StreakShareCard";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { comboBurst, notifySuccess, tapLight } from "../services/haptics";
@@ -55,6 +59,7 @@ export default function StreakModal({ visible, onClose }) {
   const [tapBubble, setTapBubble] = useState(null);    // { msg, tapsLeft }
   const fireScale = useRef(new Animated.Value(1)).current;
   const mascotScale = useRef(new Animated.Value(1)).current;
+  const streakShareRef = useRef(null);
   const mascotFloat = useRef(new Animated.Value(0)).current;  // breathing Y
   const mascotBreathe = useRef(new Animated.Value(1)).current; // breathing scale
   const bubbleTimer = useRef(null);
@@ -120,6 +125,13 @@ export default function StreakModal({ visible, onClose }) {
   const tapsToday = lastTapDate === today ? tapsTodayCount : 0;
   const tapsLeft = Math.max(0, 10 - tapsToday);
 
+  const streak = streakData?.currentStreak ?? 0;
+  const maxStreak = streakData?.maxStreak ?? 0;
+  const weekDays = streakData?.weekDays ?? [];
+  const activeGoal = streakData?.goalDays ?? 0;
+  const claimedMilestones = streakData?.claimedMilestones ?? [];
+  const freezeCount = streakData?.streakFreezeCount ?? 0;
+
   // ── Greeting message based on streak ──────────────────────────────────────
   const greetMsg = (() => {
     if (!petState?.hasPet) return null;
@@ -161,13 +173,6 @@ export default function StreakModal({ visible, onClose }) {
     bubbleTimer.current = setTimeout(() => setTapBubble(null), 2000);
   };
 
-  const streak = streakData?.currentStreak ?? 0;
-  const maxStreak = streakData?.maxStreak ?? 0;
-  const weekDays = streakData?.weekDays ?? [];
-  const activeGoal = streakData?.goalDays ?? 0;
-  const claimedMilestones = streakData?.claimedMilestones ?? [];
-  const freezeCount = streakData?.streakFreezeCount ?? 0;
-
   const handleCommitGoal = async () => {
     if (!selectedGoal || !userId) return;
     notifySuccess();
@@ -189,6 +194,21 @@ export default function StreakModal({ visible, onClose }) {
       console.log("Error claiming milestone:", e);
     }
     setClaimingMilestone(null);
+  };
+
+  const handleShareStreak = async () => {
+    try {
+      const uri = await captureRef(streakShareRef, { format: "png", quality: 0.92 });
+      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "¡Comparte tu racha!" });
+    } catch (e) {
+      try {
+        await Share.share({
+          message: `¡Llevo ${streak} días aprendiendo mexicanismos en Mexicanario! 🔥🇲🇽 mexicanario.app`,
+        });
+      } catch (err) {
+        console.error("Share streak error:", err);
+      }
+    }
   };
 
   return (
@@ -261,6 +281,11 @@ export default function StreakModal({ visible, onClose }) {
             <Text style={styles.streakSub}>
               ¡Tu mascota evoluciona con tu racha!
             </Text>
+
+            {/* ── Share streak button ── */}
+            <TouchableOpacity style={styles.shareStreakBtn} onPress={handleShareStreak}>
+              <Text style={styles.shareStreakBtnText}>📤 Compartir racha</Text>
+            </TouchableOpacity>
 
             {/* ── Greeting from mascot ── */}
             {greetMsg && (
@@ -413,6 +438,15 @@ export default function StreakModal({ visible, onClose }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* StreakShareCard — rendered offscreen for image capture, never visible to user */}
+      <StreakShareCard
+        ref={streakShareRef}
+        streak={streak}
+        petType={petType}
+        stage={stage}
+        style={{ position: "absolute", left: -9999, top: 0 }}
+      />
     </Modal>
   );
 }
@@ -747,6 +781,23 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: width * 0.03,
+  },
+
+  // Share streak button
+  shareStreakBtn: {
+    backgroundColor: "rgba(211,107,30,0.15)",
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#D36B1E",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  shareStreakBtnText: {
+    color: "#D36B1E",
+    fontSize: width * 0.036,
+    fontWeight: "700",
+    textAlign: "center",
   },
 
   // Close

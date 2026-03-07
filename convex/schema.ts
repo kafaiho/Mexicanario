@@ -99,11 +99,13 @@ export default defineSchema({
     // ── Mexicanario Plus subscription ───────────────────────────────────────
     mexPlusExpiresAt: v.optional(v.number()),    // epoch ms expiry; active when > Date.now()
     // ── Sistema de referidos ─────────────────────────────────────────────────────
-    referredBy:    v.optional(v.id("users")), // quién me invitó (solo 1 vez)
+    referredBy: v.optional(v.id("users")), // quién me invitó (solo 1 vez)
     referralCount: v.optional(v.number()),    // total de cuates que han entrado por mi link
     // ── Cuates / social ─────────────────────────────────────────────────────
     username: v.optional(v.string()),            // nombre único elegido por el jugador
     passwordHash: v.optional(v.string()),        // SHA-256 de la contraseña (hex)
+    // ── Compartir con cuates (daily share reward) ──────────────────────────────
+    lastShareRewardDate: v.optional(v.string()),   // "YYYY-MM-DD" — una recompensa por día
     // ── Skins & contenido desbloqueado ───────────────────────────────────────
     purchasedSkins: v.optional(v.array(v.string())),         // IDs de skins compradas con monedas
     adultContentUnlocked: v.optional(v.array(v.string())),   // IDs de paquetes de contenido adulto desbloqueados
@@ -114,7 +116,8 @@ export default defineSchema({
     .index("by_googleId", ["googleId"])
     .index("by_appleId", ["appleId"])
     .index("by_email", ["email"])
-    .index("by_username", ["username"]),
+    .index("by_username", ["username"])
+    .index("by_tacos", ["tacos"]),
 
   // Colections for the game
   collections: defineTable({
@@ -336,6 +339,13 @@ export default defineSchema({
     .index("by_daily", ["dailyDate", "dailyBest"])
     .index("by_weekly", ["weeklyStr", "weeklyBest"]),
 
+  // ── Password Reset (Recuperación) ───────────────────────────────────────────
+  passwordResets: defineTable({
+    email: v.string(),
+    code: v.string(),
+    expiresAt: v.number(),
+  }).index("by_email", ["email"]),
+
   // ── Sistema de cuates (amigos) ────────────────────────────────────────────
   friendships: defineTable({
     userId: v.id("users"),    // quien agregó
@@ -370,15 +380,44 @@ export default defineSchema({
     totalPurchases: v.number(),   // compras IAP atribuidas (para analytics del creador)
   }).index("by_code", ["code"]),
 
+  // ── Curador de Contenido: staging table ──────────────────────────────────────
+  // Palabras candidatas generadas por el agente IA, pendientes de aprobación humana.
+  wordCandidates: defineTable({
+    word: v.string(),
+    meaning: v.string(),
+    example: v.string(),
+    region: v.string(),
+    category: v.string(),
+    difficulty: v.number(),          // 1 | 2 | 3
+    source: v.string(),          // "seed" | "trend" | "manual"
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+    ),
+    ipFlag: v.optional(v.string()), // razón de alerta legal si aplica
+    createdAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_status_created", ["status", "createdAt"]),
+
   // ── Referidos (Invita y Gana) ─────────────────────────────────────────────────
   referrals: defineTable({
-    referrerId:     v.id("users"),
-    referredId:     v.id("users"),
-    createdAt:      v.number(),
-    coinsReferrer:  v.number(),
-    coinsReferred:  v.number(),
+    referrerId: v.id("users"),
+    referredId: v.id("users"),
+    createdAt: v.number(),
+    coinsReferrer: v.number(),
+    coinsReferred: v.number(),
     milestoneBonus: v.optional(v.boolean()),
   })
     .index("by_referrer", ["referrerId"])
-    .index("by_referred",  ["referredId"]),
+    .index("by_referred", ["referredId"]),
+
+  // ── Configuración remota de la app (singleton) ────────────────────────────
+  appConfig: defineTable({
+    minAndroidVersionCode: v.number(),  // versionCode mínimo requerido en Android
+    minIosVersion: v.string(),  // versión mínima en iOS (e.g. "1.2.2")
+    forceUpdate: v.boolean(), // si true, el modal NO es dismissable
+    updateMessage: v.optional(v.string()), // mensaje personalizado en el modal
+  }),
 });

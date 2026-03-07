@@ -18,8 +18,10 @@ import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import useCoinFly from '../hooks/useCoinFly';
 import useDiamondFly from '../hooks/useDiamondFly';
+import { useRewardedAd } from '../hooks/useRewardedAd';
+import { presentMexicanarioPlusPaywall } from '../services/RevenueCatService';
+import { hasPermission, scheduleWheelReady } from '../services/notificationService';
 import { playSound } from '../utils/soundManager';
-import { scheduleWheelReady, hasPermission } from '../services/notificationService';
 import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from '../utils/tabletSetup';
 import CoinFlyOverlay from './CoinFlyOverlay';
 import DiamondFlyOverlay from './DiamondFlyOverlay';
@@ -72,10 +74,11 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
   const spinAnim = useRef(new Animated.Value(0)).current;
   const currentDeg = useRef(0); // tracks real current rotation degree
 
+  const { ready: adReady, showAd } = useRewardedAd();
   const [spinning, setSpinning] = useState(false);
   const [prize, setPrize] = useState(null);   // segment index when done
   const [cooldownMs, setCooldownMs] = useState(0);
-  const [adAvailable, setAdAvailable] = useState(true);   // second spin via ad
+  const [adUsedThisSession, setAdUsedThisSession] = useState(false);
   const tickRef = useRef(null);
 
   // Load cooldown on open
@@ -113,9 +116,10 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
     setPrize(null);
 
     // Angle where this segment's center ends up at the top
-    // Current degree offset + full rotations + target segment angle + small jitter
+    // Because the wheel rotates clockwise (+deg), the slice that ends up at the top
+    // is actually the one going backwards from 360.
     const jitter = (Math.random() - 0.5) * (SEGMENT_ANGLE * 0.5); // ± half segment
-    const targetDelta = SPIN_ROTATIONS * 360 + segmentIndex * SEGMENT_ANGLE + jitter;
+    const targetDelta = SPIN_ROTATIONS * 360 + (360 - segmentIndex * SEGMENT_ANGLE) + jitter;
     const newDeg = currentDeg.current + targetDelta;
 
     spinAnim.setValue(currentDeg.current);
@@ -176,22 +180,19 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
     setCooldownMs(COOLDOWN_MS);
     startTick();
     // Notificar cuando la ruleta esté lista de nuevo
-    if (await hasPermission()) scheduleWheelReady().catch(() => {});
+    if (await hasPermission()) scheduleWheelReady().catch(() => { });
   }
 
   function handleAdSpin() {
-    if (spinning || !adAvailable) return;
-    // In a real app, show an ad here. For now, allow one extra spin per session.
-    setAdAvailable(false);
-    Alert.alert('📺 Anuncio', '¡Gracias por ver el anuncio! Aquí va tu giro extra.', [
-      {
-        text: '¡Girar!',
-        onPress: () => {
-          const idx = Math.floor(Math.random() * NUM_SEGMENTS);
-          spin(idx);
-        },
-      },
-    ]);
+    if (spinning || adUsedThisSession) return;
+    const idx = Math.floor(Math.random() * NUM_SEGMENTS);
+    const shown = showAd(() => {
+      setAdUsedThisSession(true);
+      spin(idx);
+    });
+    if (!shown) {
+      Alert.alert('📺 Anuncio no disponible', 'El anuncio aún no cargó. Inténtalo en un momento.', [{ text: 'OK' }]);
+    }
   }
 
   function handleClose() {
@@ -268,10 +269,24 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
               )}
             </TouchableOpacity>
 
+            {/* Ad spin button — visible solo cuando hay cooldown y el anuncio está listo */}
+            {cooldownMs > 0 && !adUsedThisSession && (
+              <TouchableOpacity
+                style={[styles.adButton, { backgroundColor: adReady ? '#1a7a3c' : '#555', marginBottom: 8 }]}
+                onPress={handleAdSpin}
+                disabled={!adReady || spinning}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.adButtonText}>
+                  {adReady ? '📺 Ver anuncio — giro extra' : '⏳ Cargando anuncio...'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {/* Mexicanario Plus button */}
             <TouchableOpacity
               style={styles.adButton}
-              onPress={() => { onClose(); onOpenShop?.(); }}
+              onPress={() => { onClose(); presentMexicanarioPlusPaywall(); }}
               activeOpacity={0.8}
             >
               <Text style={styles.adButtonText}>⭐ Mexicanario Plus — $4.99 USD/mes</Text>

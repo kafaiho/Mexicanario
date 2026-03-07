@@ -29,7 +29,7 @@ import { playPetSound } from "../utils/soundManager";
 import ShopScreen from "./ShopScreen";
 
 const { width, height } = Dimensions.get("window");
-const MASCOT_SIZE = Math.min(width * 0.82, 340);
+const MASCOT_SIZE = Math.min(width * 0.42, 180);
 
 // ─── Tap phrases ─────────────────────────────────────────────────────────────
 const TAP_PHRASES = [
@@ -736,7 +736,7 @@ export default function MascotaScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1, backgroundColor: "#7FAAB8" },
   scroll: { paddingHorizontal: 16, paddingTop: height * 0.16, alignItems: "center" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4E2CD" },
   emptyText: { color: "#5C3A21", fontSize: 16, textAlign: "center" },
@@ -855,6 +855,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
     alignItems: "center",
+    backgroundColor: "rgba(244,226,205,0.85)",
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
   },
   switcherTitle: {
     color: "#5C3A21",
@@ -993,7 +997,7 @@ const styles = StyleSheet.create({
   switchModalBtnCancelText: { color: "#B38E6A", fontSize: 13, fontWeight: "600" },
 
   // ── Shop Section ──
-  shopSection: { marginTop: 24, paddingHorizontal: 16, width: "100%", maxWidth: 500 },
+  shopSection: { marginTop: 24, paddingHorizontal: 16, paddingVertical: 16, width: "100%", maxWidth: 500, backgroundColor: "rgba(244,226,205,0.85)", borderRadius: 18 },
   shopTitle: { color: "#5C3A21", fontSize: 22, fontWeight: "800", marginBottom: 4 },
   shopSub: { color: "#A0541A", fontSize: 14, marginBottom: 16 },
   itemRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },

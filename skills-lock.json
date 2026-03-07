@@ -71,6 +71,11 @@
       "sourceType": "github",
       "computedHash": "93a837ba79c3c3f0b3e503fd9d8b54c638337d73d200c1af3bca9607264bf0e0"
     },
+    "seo-audit": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "computedHash": "941f6f4db0f79248f6480256cf1838ed19bc1a0d70f499bb756f491142625cb4"
+    },
     "subagent-driven-development": {
       "source": "obra/superpowers",
       "sourceType": "github",

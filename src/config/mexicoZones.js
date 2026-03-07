@@ -5,13 +5,15 @@
  * color  → color principal del tile (completado / banner)
  * dark   → sombra inferior del tile estilo Mario
  * light  → fondo suave de la etiqueta de nivel
+ *
+ * Zone bounds are computed dynamically based on totalLevels so all zones
+ * scale automatically as new words are added.
  */
 
 export const MEXICO_ZONES = [
   {
     id: 'cdmx',
     name: 'Carreteras de CDMX',
-    levels: [1, 10],
     emoji: '🏙️',
     // Rosa Mexicana — Frida Kahlo, mercados, lucha libre
     color: '#C0185A',
@@ -22,7 +24,6 @@ export const MEXICO_ZONES = [
   {
     id: 'oaxaca',
     name: 'Sabores de Oaxaca',
-    levels: [11, 20],
     emoji: '🫙',
     // Grana Cochinilla — tinte prehispánico de insecto (rojo carmín)
     color: '#9C2542',
@@ -33,7 +34,6 @@ export const MEXICO_ZONES = [
   {
     id: 'jalisco',
     name: 'Tierra de Mariachi',
-    levels: [21, 30],
     emoji: '🎺',
     // Rojo Tequila — mariachi, jarabe tapatío, bandera
     color: '#C0392B',
@@ -44,7 +44,6 @@ export const MEXICO_ZONES = [
   {
     id: 'yucatan',
     name: 'Misterios del Mayab',
-    levels: [31, 40],
     emoji: '🌴',
     // Jade Maya — cenotes, jadeíta, pirámides
     color: '#00897B',
@@ -55,7 +54,6 @@ export const MEXICO_ZONES = [
   {
     id: 'veracruz',
     name: 'Puerto y Son Jarocho',
-    levels: [41, 50],
     emoji: '⚓',
     // Azul Golfo — mar, danzón, jarana veracruzana
     color: '#1565C0',
@@ -66,7 +64,6 @@ export const MEXICO_ZONES = [
   {
     id: 'sinaloa',
     name: 'El Norte Bravo',
-    levels: [51, 60],
     emoji: '🤠',
     // Dorado Norteño — banda, corridos, costas del Pacífico
     color: '#C9A227',
@@ -77,7 +74,6 @@ export const MEXICO_ZONES = [
   {
     id: 'puebla',
     name: 'Mole y Talavera',
-    levels: [61, 70],
     emoji: '🎭',
     // Azul Talavera — cerámica, azulejos, chiles en nogada
     color: '#4527A0',
@@ -88,7 +84,6 @@ export const MEXICO_ZONES = [
   {
     id: 'guerrero',
     name: 'Costa y Tierra Caliente',
-    levels: [71, 80],
     emoji: '🌊',
     // Turquesa Pacífico — lacas de Olinalá, Acapulco, máscaras
     color: '#00ACC1',
@@ -99,7 +94,6 @@ export const MEXICO_ZONES = [
   {
     id: 'chiapas',
     name: 'Selva y Maravillas',
-    levels: [81, 90],
     emoji: '🦜',
     // Verde Selva — Lacandona, quetzal, Palenque
     color: '#2E7D32',
@@ -110,7 +104,6 @@ export const MEXICO_ZONES = [
   {
     id: 'coahuila',
     name: 'Desierto y Frontera',
-    levels: [91, 100],
     emoji: '🌵',
     // Terracota Desierto — nopal, agave, frontera norteña
     color: '#BF360C',
@@ -121,7 +114,6 @@ export const MEXICO_ZONES = [
   {
     id: 'michoacan',
     name: 'Monarcas y Tradición',
-    levels: [101, 110],
     emoji: '🦋',
     // Naranja Monarca — mariposas, cobre de Santa Clara, uchepos
     color: '#E65100',
@@ -132,7 +124,6 @@ export const MEXICO_ZONES = [
   {
     id: 'legendario',
     name: 'México Legendario',
-    levels: [111, 9999],
     emoji: '🦅',
     // Oro Azteca — Tenochtitlán, Quetzalcóatl, leyendas
     color: '#B8860B',
@@ -142,37 +133,68 @@ export const MEXICO_ZONES = [
   },
 ];
 
+const ZONE_COUNT = MEXICO_ZONES.length;
+
 /**
- * Returns the zone object for a given level number.
+ * Computes [start, end] (1-based inclusive) for zone at `zoneIndex`.
+ * Each zone gets floor(totalLevels/12) levels; remainder distributed to first N zones.
  */
-export function getZone(level) {
-  return (
-    MEXICO_ZONES.find((z) => level >= z.levels[0] && level <= z.levels[1]) ??
-    MEXICO_ZONES[0]
-  );
+function zoneBounds(zoneIndex, totalLevels) {
+  const total = Math.max(totalLevels, 1);
+  const base = Math.floor(total / ZONE_COUNT);
+  const remainder = total % ZONE_COUNT;
+  const start = zoneIndex * base + Math.min(zoneIndex, remainder) + 1;
+  const size = base + (zoneIndex < remainder ? 1 : 0);
+  return [start, start + size - 1];
+}
+
+/**
+ * Returns the zone object (with computed `levels: [start, end]`) for a given level number.
+ */
+export function getZone(level, totalLevels) {
+  for (let i = 0; i < ZONE_COUNT; i++) {
+    const bounds = zoneBounds(i, totalLevels);
+    if (level >= bounds[0] && level <= bounds[1]) {
+      return { ...MEXICO_ZONES[i], levels: bounds };
+    }
+  }
+  // Fallback: last zone
+  const lastBounds = zoneBounds(ZONE_COUNT - 1, totalLevels);
+  return { ...MEXICO_ZONES[ZONE_COUNT - 1], levels: lastBounds };
 }
 
 /**
  * Returns how many levels the user has completed within the current zone.
  */
-export function getZoneProgress(level) {
-  const zone = getZone(level);
-  const zoneSize = zone.levels[1] === 9999 ? 10 : zone.levels[1] - zone.levels[0] + 1;
+export function getZoneProgress(level, totalLevels) {
+  const zone = getZone(level, totalLevels);
+  const zoneSize = zone.levels[1] - zone.levels[0] + 1;
   return Math.min(level - zone.levels[0] + 1, zoneSize);
 }
 
 /**
  * Returns true when `level` is the FIRST level of a new zone.
  */
-export function isZoneStart(level) {
-  return MEXICO_ZONES.some((z) => z.levels[0] === level);
+export function isZoneStart(level, totalLevels) {
+  for (let i = 0; i < ZONE_COUNT; i++) {
+    if (zoneBounds(i, totalLevels)[0] === level) return true;
+  }
+  return false;
 }
 
 /**
  * Returns the next zone after the one containing `level`, or null if at the last.
  */
-export function getNextZone(level) {
-  const currentZone = getZone(level);
-  const idx = MEXICO_ZONES.indexOf(currentZone);
-  return idx < MEXICO_ZONES.length - 1 ? MEXICO_ZONES[idx + 1] : null;
+export function getNextZone(level, totalLevels) {
+  for (let i = 0; i < ZONE_COUNT; i++) {
+    const bounds = zoneBounds(i, totalLevels);
+    if (level >= bounds[0] && level <= bounds[1]) {
+      if (i < ZONE_COUNT - 1) {
+        const nextBounds = zoneBounds(i + 1, totalLevels);
+        return { ...MEXICO_ZONES[i + 1], levels: nextBounds };
+      }
+      return null;
+    }
+  }
+  return null;
 }

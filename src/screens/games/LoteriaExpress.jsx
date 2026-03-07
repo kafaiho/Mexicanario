@@ -310,7 +310,7 @@ export default function LoteriaExpress({ visible, onClose }) {
           <View style={styles.centerBox}>
             <Text style={styles.bigEmoji}>🎉</Text>
             <Text style={styles.resultTitle}>¡Lotería!</Text>
-            <Text style={styles.resultSub}>¡Completaste el tablero, mero chingón!</Text>
+            <Text style={styles.resultSub}>¡Completaste el tablero, mero crack!</Text>
             <TouchableOpacity style={styles.startBtn} onPress={startGame}>
               <Text style={styles.startTxt}>Jugar de nuevo</Text>
             </TouchableOpacity>

@@ -30,7 +30,7 @@ export default function useCoinFly() {
       delay: i * 130,
       cpY: Math.min(fromY, toY) - 130 - Math.random() * 50,
       cpX: (fromX + toX) / 2 + (Math.random() - 0.5) * 70,
-      duration: 1100 + Math.random() * 400,
+      duration: 400 + Math.random() * 100,
     }));
 
     setFlyCoins((prev) => [...prev, ...newCoins]);

@@ -32,11 +32,11 @@ export const getCurrentLevel = query({
       if (!level1) {
         return {
           level: 1,
-          word: "Default",
-          meaning: "Default meaning",
-          example: "Default example",
-          region: "Default region",
-          reward: { coins: 50, diamonds: 1 },
+          word: "",
+          meaning: "",
+          example: "",
+          region: "",
+          reward: { coins: 2, diamonds: 0 },
           isLastLevel: false,
           isDefaultLevel: true,
         };
@@ -45,10 +45,10 @@ export const getCurrentLevel = query({
       const word = await ctx.db.get(level1.wordId);
       return {
         level: 1,
-        word: normalizeWord(word?.word || "Default"),
-        meaning: word?.meaning || "Default meaning",
-        example: word?.example || "Default example",
-        region: word?.region || "Default region",
+        word: normalizeWord(word?.word || ""),
+        meaning: word?.meaning || "",
+        example: word?.example || "",
+        region: word?.region || "",
         reward: level1.reward,
         isLastLevel: false,
         isDefaultLevel: true,
@@ -66,11 +66,11 @@ export const getCurrentLevel = query({
       if (!level1) {
         return {
           level: 1,
-          word: "Default",
-          meaning: "Default meaning",
-          example: "Default example",
-          region: "Default region",
-          reward: { coins: 50, diamonds: 1 },
+          word: "",
+          meaning: "",
+          example: "",
+          region: "",
+          reward: { coins: 2, diamonds: 0 },
           isLastLevel: false,
           isDefaultLevel: true,
         };
@@ -79,10 +79,10 @@ export const getCurrentLevel = query({
       const word = await ctx.db.get(level1.wordId);
       return {
         level: 1,
-        word: normalizeWord(word?.word || "Default"),
-        meaning: word?.meaning || "Default meaning",
-        example: word?.example || "Default example",
-        region: word?.region || "Default region",
+        word: normalizeWord(word?.word || ""),
+        meaning: word?.meaning || "",
+        example: word?.example || "",
+        region: word?.region || "",
         reward: level1.reward,
         isLastLevel: false,
         isDefaultLevel: true,
@@ -97,13 +97,13 @@ export const getCurrentLevel = query({
     if (allLevels.length === 0) {
       return {
         level: 1,
-        word: "Default",
-        meaning: "Default meaning",
-        example: "Default example",
-        region: "Default region",
-        reward: { coins: 50, diamonds: 1 },
+        word: "",
+        meaning: "",
+        example: "",
+        region: "",
+        reward: { coins: 2, diamonds: 0 },
         isLastLevel: true,
-        isDefaultLevel: false,
+        isDefaultLevel: true,
       };
     }
 
@@ -120,42 +120,25 @@ export const getCurrentLevel = query({
     if (!levelConfig) {
       return {
         level: clampedLevel,
-        word: "Default",
-        meaning: "Default meaning",
-        example: "Default example",
-        region: "Default region",
-        reward: { coins: 50, diamonds: 1 },
+        word: "",
+        meaning: "",
+        example: "",
+        region: "",
+        reward: { coins: 2, diamonds: 0 },
         isLastLevel: true,
-        isDefaultLevel: false,
+        isDefaultLevel: true,
       };
     }
 
     const word = await ctx.db.get(levelConfig.wordId as Id<"words">);
 
-    // ── Adult content gate ───────────────────────────────────────────────────
-    if ((word as any)?.category === "adulto") {
-      const unlocked: string[] = (user as any).adultContentUnlocked ?? [];
-      const packId = `content_${(word as any)?.pack ?? "insultos"}`;
-      if (!unlocked.includes(packId)) {
-        return {
-          level: clampedLevel,
-          word: "BLOQUEADO",
-          meaning: "Pack de contenido +18 no desbloqueado.",
-          example: "Ve a la tienda para desbloquear este pack.",
-          region: "México",
-          reward: { coins: 0, diamonds: 0 },
-          isLastLevel: false,
-          isDefaultLevel: false,
-        };
-      }
-    }
-
     return {
       level: clampedLevel,
-      word: word?.word || "Default",
-      meaning: word?.meaning || "Default meaning",
-      example: word?.example || "Default example",
-      region: word?.region || "Default region",
+      wordId: levelConfig.wordId,
+      word: word?.word || "",
+      meaning: word?.meaning || "",
+      example: word?.example || "",
+      region: word?.region || "",
       reward: levelConfig.reward,
       isLastLevel: clampedLevel >= maxLevel,
       isDefaultLevel: false,
@@ -274,8 +257,101 @@ export const addXp = mutation({
   },
 });
 
-// ─── Delete Account (Apple App Store required) ────────────────────────────────
-// Permanently removes all data for a user across every table.
+// ─── Global Rank (combined score) ────────────────────────────────────────────
+export const getGlobalRank = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const allUsers = await ctx.db.query("users").collect();
+
+    const scored = allUsers.map((u) => {
+      const score =
+        (u.xp ?? 0) +
+        ((u.currentLevel ?? 1) * 10) +
+        ((u.playStreakMax ?? 0) * 5) +
+        ((u.leagueTrophies ?? 0) * 50) +
+        ((u.perfectLevels ?? 0) * 3);
+      return { id: u._id, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const totalPlayers = scored.length;
+    const idx = scored.findIndex((s) => s.id === args.userId);
+    const globalRank = idx === -1 ? totalPlayers : idx + 1;
+    const userScore = idx === -1 ? 0 : scored[idx].score;
+    const percentile =
+      totalPlayers <= 1 ? 1 : Math.max(1, Math.round((globalRank / totalPlayers) * 100));
+
+    return { globalRank, totalPlayers, percentile, score: userScore };
+  },
+});
+
+// ─── Global Leaderboard (top 50) ────────────────────────────────────────────
+export const getGlobalLeaderboard = query({
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const allUsers = await ctx.db.query("users").collect();
+
+    const scored = allUsers
+      .filter((u) => (u.xp ?? 0) > 0 || (u.currentLevel ?? 1) > 1)
+      .map((u) => {
+        const score =
+          (u.xp ?? 0) +
+          ((u.currentLevel ?? 1) * 10) +
+          ((u.playStreakMax ?? 0) * 5) +
+          ((u.leagueTrophies ?? 0) * 50) +
+          ((u.perfectLevels ?? 0) * 3);
+        return {
+          userId: u._id as string,
+          name: u.username ?? u.name ?? "Jugador",
+          avatar: u.avatar ?? "🌮",
+          level: u.currentLevel ?? 1,
+          xp: u.xp ?? 0,
+          score,
+        };
+      });
+
+    scored.sort((a, b) => b.score - a.score);
+    const top50 = scored.slice(0, 50);
+
+    // Find caller's position
+    let myRank = null;
+    let myEntry = null;
+    if (args.userId) {
+      const uid = args.userId as string;
+      const idx = scored.findIndex((s) => s.userId === uid);
+      if (idx !== -1) {
+        myRank = idx + 1;
+        myEntry = scored[idx];
+      }
+    }
+
+    return { leaderboard: top50, totalPlayers: scored.length, myRank, myEntry };
+  },
+});
+
+// ─── Claim share reward (once per day) ──────────────────────────────────────
+export const claimShareReward = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+    if (user.lastShareRewardDate === today) {
+      return { success: false, alreadyClaimed: true };
+    }
+
+    await ctx.db.patch(args.userId, {
+      coins: (user.coins || 0) + 50,
+      lastShareRewardDate: today,
+    });
+
+    return { success: true, alreadyClaimed: false };
+  },
+});
+
 export const deleteAccount = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {

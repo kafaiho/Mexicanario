@@ -11,9 +11,8 @@ import {
 import usePetStore, { getStage } from '../../store/usePetStore';
 import { TABLET_MODE } from '../../utils/tabletSetup';
 import PetCompanion from './index';
-import { STAGE_SIZES } from './petAssets';
 
-const KEYBOARD_ZONE_H = TABLET_MODE ? 320 : 280; // height from bottom that counts as "keyboard"
+const KEYBOARD_ZONE_H = TABLET_MODE ? 460 : 280; // height from bottom that counts as "keyboard"
 const SIDE_MARGIN = 10; // px from each edge
 
 function getScreenDims() {
@@ -403,6 +402,13 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   // Game events (correct answer, hints) push a bubble from GameplayScreen
   useEffect(() => {
     if (!gameBubble) return;
+    // Compute position above current pet location
+    const petX = pan.x._value;
+    const petY = pan.y._value;
+    const sw = dimsRef.current.w;
+    const bx = Math.max(5, Math.min(petX - 75, sw - 185));
+    const by = Math.max(60, petY - 65);
+    setBubblePos({ x: bx, y: by });
     setBubble(gameBubble);
     clearTimeout(bubbleTimer.current);
     bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
@@ -473,7 +479,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     lastIdxRef.current = { ...lastIdxRef.current, [dir]: phraseIdx };
     const sw = dimsRef.current.w;
     const bx = petX != null ? Math.max(5, Math.min(petX - 75, sw - 185)) : 5;
-    const by = petY != null ? Math.max(60, petY - 72) : 60;
+    // position right above the pet
+    const by = petY != null ? Math.max(10, petY - 60) : 60;
     setBubblePos({ x: bx, y: by });
     setBubble(phrase);
     clearTimeout(bubbleTimer.current);
@@ -483,10 +490,10 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   const shakeIt = useCallback(() => {
     shakeAnim.setValue(0);
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue:  7, duration: 55, useNativeDriver: false }),
+      Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: false }),
       Animated.timing(shakeAnim, { toValue: -7, duration: 55, useNativeDriver: false }),
-      Animated.timing(shakeAnim, { toValue:  4, duration: 45, useNativeDriver: false }),
-      Animated.timing(shakeAnim, { toValue:  0, duration: 45, useNativeDriver: false }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 45, useNativeDriver: false }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 45, useNativeDriver: false }),
     ]).start();
   }, []);
 
@@ -507,7 +514,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         tension: 80,
         useNativeDriver: false,
       }).start();
-    } catch {}
+    } catch { }
   }, []);
 
   const panResponder = useRef(
@@ -518,7 +525,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       // Never let a parent component terminate our drag once it starts
       onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
-        try { pan.flattenOffset(); } catch {}
+        try { pan.flattenOffset(); } catch { }
         activeZoneRef.current = null;
       },
       onPanResponderGrant: () => {
@@ -552,8 +559,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
         // ── Real-time zone feedback ──
         const hitBottom = rawY > h - KEYBOARD_ZONE_H - sz;
-        const hitTop    = rawY < topBarBottom;
-        const hitSide   = rawX < 0 || rawX + sz > w;
+        const hitTop = rawY < topBarBottom;
+        const hitSide = rawX < 0 || rawX + sz > w;
 
         if (hitBottom && activeZoneRef.current !== 'bottom') {
           activeZoneRef.current = 'bottom';
@@ -580,8 +587,9 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         const isTap = dist < 12 && elapsed < 500;
 
         if (isTap) {
-          // ── Tap: show phrase + scale pulse ──
+          // ── Tap: show random phrase + scale pulse ──
           showBubble('tap', pan.x._value, pan.y._value);
+
           Animated.sequence([
             Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: false }),
             Animated.spring(tapAnim, { toValue: 1, friction: 4, tension: 200, useNativeDriver: false }),
@@ -599,9 +607,9 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
         const inKeyboardZone = finalY > h - KEYBOARD_ZONE_H - sz;
         // aboveTopBar: also catches the clamped case where user pushed pet into top zone
-        const aboveTopBar    = finalY < topBarBottom || topZoneHitRef.current;
-        const tooFarLeft     = finalX < w * 0.08;
-        const tooFarRight    = finalX + sz > w * 0.92;
+        const aboveTopBar = finalY < topBarBottom || topZoneHitRef.current;
+        const tooFarLeft = finalX < w * 0.08;
+        const tooFarRight = finalX + sz > w * 0.92;
 
         if (inKeyboardZone || aboveTopBar || tooFarLeft || tooFarRight) {
           bounceHome();
@@ -641,7 +649,10 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       {bubble && (
         <View
           pointerEvents="none"
-          style={[styles.bubble, { top: bubblePos.y, left: bubblePos.x }]}
+          style={[
+            styles.bubble,
+            bubblePos && bubblePos.x !== undefined ? { top: bubblePos.y, left: bubblePos.x } : { top: pan.y._value - 60, left: pan.x._value - 50 }
+          ]}
         >
           <Text style={styles.bubbleText}>{bubble}</Text>
         </View>

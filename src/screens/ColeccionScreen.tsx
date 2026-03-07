@@ -1,8 +1,8 @@
 import { useQuery } from "convex/react";
-import React, { useState } from "react";
-import { tapMedium } from "../services/haptics";
+import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Image,
   ImageBackground,
@@ -17,45 +17,87 @@ import {
 import { api } from "../../convex/_generated/api";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
+import { tapMedium } from "../services/haptics";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
+import { normalizeText } from "../utils/textUtils";
 
-const BROWN  = "#8B4513";
+const BROWN = "#8B4513";
 const ORANGE = "#FF6B35";
-const AMBER  = "#D2691E";
-const GOLD   = "#F8BE17";
-const WHEAT  = "#FFE4B5";
+const AMBER = "#D2691E";
+const GOLD = "#F8BE17";
+const WHEAT = "#FFE4B5";
 
-// ── Imágenes AI por categoría ─────────────────────────────────────────────────
+// ── Imágenes AI por colección ─────────────────────────────────────────────────
+// Mapea tanto nombres canónicos como cortos para máxima compatibilidad
+const _IMG = {
+  expresiones:    require("../../assets/images/collections/expresiones.png"),
+  comida:         require("../../assets/images/collections/comida.png"),
+  juegos:         require("../../assets/images/collections/juegos.png"),
+  bebida:         require("../../assets/images/collections/bebida.png"),
+  refranes:       require("../../assets/images/collections/refranes.png"),
+  animales:       require("../../assets/images/collections/animales.png"),
+  plantas:        require("../../assets/images/collections/plantas.png"),
+  tradiciones:    require("../../assets/images/collections/tradiciones.png"),
+  musica:         require("../../assets/images/collections/musica.png"),
+  historia:       require("../../assets/images/collections/historia.png"),
+  picaresca:      require("../../assets/images/collections/picaresca.png"),
+  cultura:        require("../../assets/images/collections/cultura_popular.png"),
+  monumentos:     require("../../assets/images/collections/monumentos.png"),
+  leyendas:       require("../../assets/images/collections/leyendas.png"),
+  digital:        require("../../assets/images/collections/mundo_digital.png"),
+  vida:           require("../../assets/images/collections/vida_cotidiana.png"),
+  remedios:       require("../../assets/images/collections/remedios.png"),
+  artesanias:     require("../../assets/images/collections/artesanias.png"),
+  deportes:       require("../../assets/images/collections/deportes.png"),
+};
 const CATEGORY_IMAGE_MAP: Record<string, any> = {
-  "Expresiones":       require("../../assets/images/collections/expresiones.png"),
-  "Picaresca":         require("../../assets/images/collections/picaresca.png"),
-  "Tipos Sociales":    require("../../assets/images/collections/tipos_sociales.png"),
-  "Verbos del Barrio": require("../../assets/images/collections/verbos_barrio.png"),
-  "Comida":            require("../../assets/images/collections/comida.png"),
-  "Bebida":            require("../../assets/images/collections/bebida.png"),
-  "Animales":          require("../../assets/images/collections/animales.png"),
-  "Historia":          require("../../assets/images/collections/historia.png"),
-  "Música":            require("../../assets/images/collections/musica.png"),
-  "Juegos":            require("../../assets/images/collections/juegos.png"),
-  "Tradiciones":       require("../../assets/images/collections/tradiciones.png"),
-  "Plantas":           require("../../assets/images/collections/plantas.png"),
-  "Monumentos":        require("../../assets/images/collections/monumentos.png"),
-  "Artistas":          require("../../assets/images/collections/artistas.png"),
-  "Streamers":         require("../../assets/images/collections/streamers.png"),
-  "Músicos":           require("../../assets/images/collections/musicos_digital.png"),
-  "Futbolistas":       require("../../assets/images/collections/futbolistas.png"),
-  "Jerga Digital":     require("../../assets/images/collections/jerga_digital.png"),
-  "Regionalismos":     require("../../assets/images/collections/regionalismos.png"),
-  "Leyendas":          require("../../assets/images/collections/leyendas.png"),
+  // Nombres canónicos completos
+  "Expresiones y Modismos": _IMG.expresiones,
+  "Comida Mexicana":        _IMG.comida,
+  "Juegos y Niñez":         _IMG.juegos,
+  "Bebidas":                _IMG.bebida,
+  "Refranes y Dichos":      _IMG.refranes,
+  "Animales de México":     _IMG.animales,
+  "Flora Mexicana":         _IMG.plantas,
+  "Tradiciones y Fiestas":  _IMG.tradiciones,
+  "Música y Artistas":      _IMG.musica,
+  "Historia de México":     _IMG.historia,
+  "Albures y Picaresca":    _IMG.picaresca,
+  "Cultura Popular":        _IMG.cultura,
+  "Monumentos y Lugares":   _IMG.monumentos,
+  "Leyendas y Mitos":       _IMG.leyendas,
+  "Mundo Digital":          _IMG.digital,
+  // Nombres cortos (compatibilidad con DB antigua)
+  "Modismos":    _IMG.expresiones,
+  "Comida":      _IMG.comida,
+  "Juegos":      _IMG.juegos,
+  "Bebida":      _IMG.bebida,
+  "Refranes":    _IMG.refranes,
+  "Animales":    _IMG.animales,
+  "Plantas":     _IMG.plantas,
+  "Tradiciones": _IMG.tradiciones,
+  "Música":      _IMG.musica,
+  "Artistas":    _IMG.musica,
+  "Historia":    _IMG.historia,
+  "Albures":     _IMG.picaresca,
+  "Monumentos":  _IMG.monumentos,
+  "Leyendas":    _IMG.leyendas,
+  "Digital":     _IMG.digital,
+  "Jerga":       _IMG.expresiones,
+  // 4 categorías nuevas
+  "Vida Cotidiana":       _IMG.vida,
+  "Remedios Caseros":     _IMG.remedios,
+  "Artesanías de México": _IMG.artesanias,
+  "Deportes Mexicanos":   _IMG.deportes,
 };
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
 
 // Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
-const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
-const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
+const TOP_SAFE = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
+const TOP_BAR_H = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
 const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 48 : 14));
 
 // Emoji referencial único por palabra mexicana
@@ -143,19 +185,82 @@ const WORD_EMOJI_MAP: Record<string, string> = {
   "porfirio díaz": "🎩", "constitución 1917": "📜",
   "olmecas": "🗿", "mayas": "📅", "mexicas": "🦅",
   "zapotecas": "🏺", "mixtecos": "📿", "toltecas": "🏛️",
+  // ── COMIDA (nuevas) ───────────────────────────────────────
+  "sope": "🫓", "carnitas": "🍖", "birria": "🍲", "barbacoa": "🥩",
+  "menudo": "🍲", "flautas": "🌮", "quesadilla": "🧀", "guacamole": "🥑",
+  "tostada": "🫓", "enchiladas verdes": "🌶️", "pipián": "🫕",
+  "caldo de res": "🍲", "gordita": "🫔", "huitlacoche": "🍄",
+  "tasajo": "🥩", "cecina": "🥩", "rajas con crema": "🌶️",
+  "marquesita": "🧇", "poc chuc": "🍖", "chorizo mexicano": "🌭",
+  "mangonada": "🥭", "nieves de garrafa": "🍦", "capirotada": "🍞",
+  "discada norteña": "🫕", "salsa verde": "🌶️", "pico de gallo": "🍅",
+  "longaniza": "🌭", "papadzul": "🫔",
+  // ── BEBIDA (nuevas) ───────────────────────────────────────
+  "jamaica": "🌺", "michelada": "🍺", "tejuino": "🍋",
+  // ── JUEGOS (nuevas) ───────────────────────────────────────
+  "papalote": "🪁", "yoyo": "🪀", "matatena": "🪨", "conquián": "🃏",
+  "brincar la cuerda": "🪢", "quemados": "🏐", "kermés": "🎪",
+  "el avión": "🏃", "carrera de sacos": "🏃", "tazos": "💿",
+  "rompecabezas": "🧩", "avioncito de papel": "✈️",
+  // ── ANIMALES (nuevas) ─────────────────────────────────────
+  "quetzal": "🦜", "mariposa monarca": "🦋", "tecolote": "🦉",
+  "tapir mexicano": "🦏", "mono araña": "🐒", "cacomixtle": "🦝",
+  "alacrán": "🦂", "manatí": "🐳", "luciérnaga": "🪲",
+  "boa constrictor": "🐍", "tortuga caguama": "🐢",
+  "mono aullador": "🙈", "manta raya": "🐟", "lince mexicano": "🐱",
+  "flamenco americano": "🦩", "tarántula mexicana": "🕷️",
+  "lechuza": "🦉", "tejón mexicano": "🦡",
+  // ── PLANTAS (nuevas) ──────────────────────────────────────
+  "nopal": "🌵", "maguey": "🌵", "ceiba sagrada": "🌳",
+  "mezquite": "🌳", "copal": "🪔", "chicozapote": "🍈",
+  "pitaya": "🐉", "tejocote": "🍎", "chaya": "🥬",
+  "peyote": "🌵", "árbol del tule": "🌳", "biznaga": "🌵",
+  // ── TRADICIONES (nuevas) ──────────────────────────────────
+  "día de muertos": "💀", "posadas navideñas": "🌟", "guelaguetza": "💃",
+  "quinceañera": "👗", "danza de los voladores": "🪂",
+  "altar de muertos": "🕯️", "piñata de posada": "🪅",
+  "rosca de reyes": "🍩", "cempasúchil": "🌼", "serenata": "🎶",
+  "tianguis": "🛒", "día de reyes": "👑", "carnaval de veracruz": "🎭",
+  // ── HISTORIA (nuevas) ─────────────────────────────────────
+  "tenochtitlan": "🏛️", "cuauhtémoc": "🦅", "benito juárez": "⚖️",
+  "emiliano zapata": "🌾", "la independencia": "🗽",
+  "miguel hidalgo": "🔔", "pancho villa": "🐎",
+  "huitzilopochtli": "☀️", "malinche": "🗣️", "quetzalcóatl": "🐍",
+  "tlaloc": "🌧️", "piedra del sol": "🗿", "moctezuma ii": "👑",
+  "adelitas": "💪",
+  // ── MUNDO DIGITAL ─────────────────────────────────────────
+  "peso pluma": "🎤", "el mariana": "📱", "quackity": "🎮",
+  "ibai llanos": "📺", "la velada": "🥊", "grupo frontera": "🪗",
+  "banda ms": "🎵", "carin leon": "🤠",
+  // ── VIDA COTIDIANA ──────────────────────────────────────────
+  "pesero": "🚌", "metro cdmx": "🚇", "mototaxi": "🛺",
+  "combi": "🚐", "bicitaxi": "🚲", "trolebús": "🚎",
+  "camión": "🚌", "micro": "🚐", "cuaderno scribe": "📓",
+  "recreo escolar": "⏰", "cooperativa": "🏪", "conaliteg": "📚",
+  "lonchera": "🍱", "escolta": "🇲🇽",
+  // ── REMEDIOS CASEROS ────────────────────────────────────────
+  "vicks vaporub": "💊", "agua de tila": "🍵", "sábila": "🌿",
+  "limón con sal": "🍋", "gordolobo": "🌾", "ruda": "🪴",
+  // ── ARTESANÍAS DE MÉXICO ────────────────────────────────────
+  "alebrijes": "🎨", "talavera": "🏺", "barro negro": "⚫",
+  "piñata": "🪅",
+  // ── DEPORTES MEXICANOS ──────────────────────────────────────
+  "lucha libre": "🤼", "el santo": "🦸", "blue demon": "😈",
+  "mil máscaras": "🎭", "hijo del santo": "🦸", "arena méxico": "🏟️",
+  "charrería": "🐎", "pelota mixteca": "🏐",
+  "julio césar chávez": "🥊", "ana guevara": "🏃", "béisbol norteño": "⚾",
 };
 
 /** Busca el emoji por palabra (ignora mayúsculas y acentos) */
 function getWordEmoji(word: string): string | null {
-  const normalized = word.toLowerCase().trim()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const normalized = normalizeText(word.trim());
   // Búsqueda directa primero
   if (WORD_EMOJI_MAP[word.toLowerCase().trim()]) {
     return WORD_EMOJI_MAP[word.toLowerCase().trim()];
   }
   // Búsqueda normalizada (sin acentos)
   for (const [key, emoji] of Object.entries(WORD_EMOJI_MAP)) {
-    const normalizedKey = key.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const normalizedKey = normalizeText(key);
     if (normalizedKey === normalized) return emoji;
   }
   return null;
@@ -169,10 +274,12 @@ export default function ColeccionScreen() {
 
   // Get user to see currentLevel
   const user = useQuery(api.users.getUser, userId ? { userId: userId } : "skip");
-  const currentLevel = user?.currentLevel || 1;
 
-  // Get dynamic collection data based on game levels
-  const collectionData = useQuery(api.collectionsQuery.getCollectionData, {});
+  // Get collection data with progress tied to the level ordering system
+  const collectionData = useQuery(
+    api.collectionsQuery.getCollectionsWithProgress,
+    userId ? { userId } : "skip",
+  );
 
   const onCardPress = (category) => {
     tapMedium();
@@ -185,8 +292,58 @@ export default function ColeccionScreen() {
     setSelectedCategory(null);
   };
 
-  const isWordUnlocked = (levelNumber) => {
-    return levelNumber < currentLevel;
+  const isWordUnlocked = (lvl: any) => {
+    return !!lvl.isCompleted;
+  };
+
+  // ── Palabras agrupadas alfabéticamente ────────────────────────────────────
+  const groupedWords = useMemo(() => {
+    if (!selectedCategory) return [];
+    const sorted = [...(selectedCategory.words ?? selectedCategory.levels ?? [])].sort((a: any, b: any) =>
+      a.word.localeCompare(b.word, 'es', { sensitivity: 'base' })
+    );
+    const groups: Array<{ letter: string; words: any[] }> = [];
+    for (const lvl of sorted) {
+      const letter = lvl.word[0]?.toUpperCase() ?? '#';
+      if (groups.length === 0 || groups[groups.length - 1].letter !== letter) {
+        groups.push({ letter, words: [lvl] });
+      } else {
+        groups[groups.length - 1].words.push(lvl);
+      }
+    }
+    return groups;
+  }, [selectedCategory]);
+
+  // ── Indicador de letra flotante mientras scrolleas ────────────────────────
+  const letterYPositions = useRef<Record<string, number>>({});
+  const [currentScrollLetter, setCurrentScrollLetter] = useState('');
+  const letterFadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeTimerRef = useRef<any>(null);
+
+  React.useEffect(() => {
+    if (!showLotteryModal) {
+      setCurrentScrollLetter('');
+      letterYPositions.current = {};
+      letterFadeAnim.setValue(0);
+    }
+  }, [showLotteryModal]);
+
+  const handleModalScroll = (e: any) => {
+    const scrollY = e.nativeEvent.contentOffset.y;
+    const positions = letterYPositions.current;
+    const letters = Object.keys(positions).sort();
+    let current = letters[0] ?? '';
+    for (const letter of letters) {
+      if (positions[letter] <= scrollY + 20) current = letter;
+    }
+    if (current && current !== currentScrollLetter) {
+      setCurrentScrollLetter(current);
+      letterFadeAnim.setValue(1);
+      clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = setTimeout(() => {
+        Animated.timing(letterFadeAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start();
+      }, 900);
+    }
   };
 
   React.useEffect(() => {
@@ -226,37 +383,44 @@ export default function ColeccionScreen() {
   }
 
   const CollectionCard = (category: any, index: number) => {
-    const totalWords = category.levels.length;
-    const unlockedWords = category.levels.filter(
-      (lvl: any) => isWordUnlocked(lvl.levelNumber)
-    ).length;
+    const totalWords = category.total ?? category.words?.length ?? 0;
+    const unlockedWords = category.completed ?? 0;
     const pct = totalWords > 0 ? unlockedWords / totalWords : 0;
     const img = CATEGORY_IMAGE_MAP[category.name] ?? null;
+    const isLocked = category.isUnlocked === false;
 
     return (
       <TouchableOpacity
         key={index}
-        style={styles.card}
-        onPress={() => onCardPress(category)}
-        activeOpacity={0.82}
+        style={[styles.card, isLocked && styles.cardLocked]}
+        onPress={() => !isLocked && onCardPress(category)}
+        activeOpacity={isLocked ? 1 : 0.82}
+        disabled={isLocked}
       >
         {/* Icono cuadrado AI — estilo Mexicanómetro */}
-        <View style={styles.iconSquare}>
+        <View style={[styles.iconSquare, isLocked && { borderColor: "rgba(139,69,19,0.15)" }]}>
           {img ? (
-            <Image source={img} style={styles.iconImage} resizeMode="cover" />
+            <Image source={img} style={[styles.iconImage, isLocked && { opacity: 0.4 }]} resizeMode="cover" />
           ) : (
-            <Text style={styles.iconFallback}>{category.icon}</Text>
+            <Text style={[styles.iconFallback, isLocked && { opacity: 0.4 }]}>{category.icon}</Text>
           )}
         </View>
 
         {/* Nombre */}
-        <Text style={styles.cardTitle} numberOfLines={2}>{category.name}</Text>
+        <Text style={[styles.cardTitle, isLocked && { color: "#A0714F" }]} numberOfLines={2}>{category.name}</Text>
 
-        {/* Barra de progreso amber — igual que fill bar del Mexicanómetro */}
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.round(pct * 100)}%` as any }]} />
-        </View>
-        <Text style={styles.progressText}>{unlockedWords}/{totalWords}</Text>
+        {isLocked ? (
+          /* Locked: show unlock level */
+          <Text style={styles.lockText}>{"🔒 Nivel " + (category.unlockLevel ?? "?")}</Text>
+        ) : (
+          /* Unlocked: progress bar */
+          <>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(pct * 100)}%` as any }]} />
+            </View>
+            <Text style={styles.progressText}>{unlockedWords}/{totalWords}</Text>
+          </>
+        )}
       </TouchableOpacity>
     );
   };
@@ -300,51 +464,77 @@ export default function ColeccionScreen() {
 
               {/* Warm border container for the grid */}
               <View style={styles.innerModalBox}>
-                <ScrollView contentContainerStyle={{ paddingBottom: 10 }} showsVerticalScrollIndicator={false}>
-                  <View style={styles.lotteryGrid}>
-                    {selectedCategory?.levels.map((lvl) => {
-                      const unlocked = isWordUnlocked(lvl.levelNumber);
+                {/* Burbuja flotante de letra actual */}
+                {currentScrollLetter ? (
+                  <Animated.View style={[styles.floatingLetterBadge, { opacity: letterFadeAnim }]}>
+                    <Text style={styles.floatingLetterText}>{currentScrollLetter}</Text>
+                  </Animated.View>
+                ) : null}
 
-                      // Calculate stars based on word length for visual variety
-                      let starsCount = 1;
-                      if (lvl.word.length > 6) starsCount = 2;
-                      if (lvl.word.length > 9) starsCount = 3;
-                      const stars = Array(starsCount).fill(0);
+                <ScrollView
+                  contentContainerStyle={{ paddingBottom: 10 }}
+                  showsVerticalScrollIndicator={false}
+                  onScroll={handleModalScroll}
+                  scrollEventThrottle={16}
+                >
+                  {groupedWords.map(({ letter, words }) => (
+                    <View
+                      key={letter}
+                      onLayout={(e) => { letterYPositions.current[letter] = e.nativeEvent.layout.y; }}
+                    >
+                      {/* Header de letra */}
+                      <View style={styles.letterHeader}>
+                        <Text style={styles.letterHeaderText}>{letter}</Text>
+                        <View style={styles.letterHeaderLine} />
+                      </View>
 
-                      if (unlocked) {
-                        const bgColor = ["#6FA95B", "#E08F32", "#C0392B", "#D4842E"][lvl.levelNumber % 4];
-                        return (
-                          <View key={lvl.levelNumber} style={[styles.lotteryCard, styles.collectedCard]}>
-                            <View style={styles.starsContainer}>
-                              {stars.map((_, i) => <Text key={i} style={styles.yellowStar}>★</Text>)}
-                            </View>
+                      {/* Grid de palabras de esta letra */}
+                      <View style={styles.lotteryGrid}>
+                        {words.map((lvl) => {
+                          const unlocked = isWordUnlocked(lvl);
+                          let starsCount = 1;
+                          if (lvl.word.length > 6) starsCount = 2;
+                          if (lvl.word.length > 9) starsCount = 3;
+                          const stars = Array(starsCount).fill(0);
 
-                            <View style={[styles.collectedInner, { backgroundColor: bgColor }]}>
-                              <Text style={{ fontSize: width * 0.1 }}>
-                                {getWordEmoji(lvl.word) ?? selectedCategory?.icon}
-                              </Text>
-                            </View>
-
-                            <View style={styles.collectedLabelContainer}>
-                              <Text style={styles.collectedLabelText} numberOfLines={1} adjustsFontSizeToFit>{lvl.word.toLowerCase()}</Text>
-                            </View>
-                          </View>
-                        );
-                      } else {
-                        return (
-                          <View key={lvl.levelNumber} style={[styles.lotteryCard, styles.uncollectedCard]}>
-                            <View style={styles.starsContainer}>
-                              {stars.map((_, i) => <Text key={i} style={styles.greyStar}>★</Text>)}
-                            </View>
-
-                            <View style={styles.uncollectedInner}>
-                              <Text style={styles.uncollectedLabelText} numberOfLines={2} adjustsFontSizeToFit>{lvl.word.toLowerCase()}</Text>
-                            </View>
-                          </View>
-                        );
-                      }
-                    })}
-                  </View>
+                          if (unlocked) {
+                            const bgColor = ["#6FA95B", "#E08F32", "#C0392B", "#D4842E"][lvl.levelNumber % 4];
+                            return (
+                              <View key={`${lvl.levelNumber}-${lvl.word}`} style={[styles.lotteryCard, styles.collectedCard]}>
+                                <View style={styles.starsContainer}>
+                                  {stars.map((_, i) => <Text key={i} style={styles.yellowStar}>★</Text>)}
+                                </View>
+                                <View style={[styles.collectedInner, { backgroundColor: bgColor }]}>
+                                  <Text style={{ fontSize: width * 0.1 }}>
+                                    {getWordEmoji(lvl.word) ?? selectedCategory?.icon}
+                                  </Text>
+                                </View>
+                                <View style={styles.collectedLabelContainer}>
+                                  <Text style={styles.collectedLabelText} numberOfLines={1} adjustsFontSizeToFit>{lvl.word.toLowerCase()}</Text>
+                                </View>
+                              </View>
+                            );
+                          } else {
+                            // Muestra cuántas letras tiene la palabra como pista (tipo Wordle)
+                            const dots = lvl.word.replace(/\s+/g, ' ').trim().split('').map(
+                              (c) => c === ' ' ? '  ' : '·'
+                            ).join(' ');
+                            return (
+                              <View key={`${lvl.levelNumber}-${lvl.word}`} style={[styles.lotteryCard, styles.uncollectedCard]}>
+                                <View style={styles.starsContainer}>
+                                  {stars.map((_, i) => <Text key={i} style={styles.greyStar}>★</Text>)}
+                                </View>
+                                <View style={styles.uncollectedInner}>
+                                  <Text style={styles.lockIcon}>🔒</Text>
+                                  <Text style={styles.dotsText} numberOfLines={2} adjustsFontSizeToFit>{dots}</Text>
+                                </View>
+                              </View>
+                            );
+                          }
+                        })}
+                      </View>
+                    </View>
+                  ))}
                 </ScrollView>
               </View>
             </View>
@@ -411,6 +601,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "rgba(139,69,19,0.35)",
+  },
+  cardLocked: {
+    opacity: 0.55,
+    backgroundColor: "#E8D5B8",
+  },
+  lockText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: width * 0.027,
+    color: "#A0714F",
+    marginTop: 4,
   },
   // ── Icono cuadrado AI (reemplaza círculo con emoji) ─────────────────────────
   iconSquare: {
@@ -583,6 +783,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "capitalize",
   },
+  lockIcon: {
+    fontSize: 18,
+    marginBottom: 2,
+  },
+  dotsText: {
+    fontFamily: FONTS.bodyBold,
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 10,
+    textAlign: "center",
+    letterSpacing: 1,
+  },
   closeButtonAbs: {
     position: "absolute",
     bottom: -25,
@@ -601,5 +812,45 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bodyBold,
     color: WHEAT,
     fontSize: 20,
-  }
+  },
+  // ── Indicador de letra ──────────────────────────────────────────────────
+  letterHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  letterHeaderText: {
+    fontFamily: FONTS.display,
+    fontSize: 20,
+    color: BROWN,
+    marginRight: 8,
+    minWidth: 22,
+  },
+  letterHeaderLine: {
+    flex: 1,
+    height: 1.5,
+    backgroundColor: 'rgba(139,69,19,0.25)',
+    borderRadius: 1,
+  },
+  floatingLetterBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(139,69,19,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  floatingLetterText: {
+    fontFamily: FONTS.display,
+    fontSize: 24,
+    color: WHEAT,
+  },
 });

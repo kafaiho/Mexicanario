@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
+import * as Sharing from "expo-sharing";
 import * as Speech from "expo-speech";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,7 +12,6 @@ import {
   Easing,
   Image,
   ImageBackground,
-  InteractionManager,
   Modal,
   Platform,
   SafeAreaView,
@@ -22,9 +22,11 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { captureRef } from "react-native-view-shot";
 import { api } from "../../convex/_generated/api";
 import AdRemovalModal from "../components/AdRemovalModal";
 import CoinFlyOverlay from "../components/CoinFlyOverlay";
+import DiamondFlyOverlay from "../components/DiamondFlyOverlay";
 import CuatesModal from "../components/CuatesModal";
 import DictionaryModal from "../components/DictionaryModal";
 import EnhancedComboCounter from "../components/EnhancedComboCounter";
@@ -32,16 +34,20 @@ import JuicyButton from "../components/JuicyButton";
 import MexicanarioModal from "../components/MexicanarioModal";
 import OnboardingTooltip from "../components/OnboardingTooltip";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
+import StageCropped from "../components/PetCompanion/StageCropped";
 import SupportModal from "../components/SupportModal";
 import TermsModal from "../components/TermsModal";
 import TopBar from "../components/TopBar";
-import VenezolanometroModal from "../components/VenezolanometroModal";
+import VictoryModal from "../components/VictoryModal";
+import VictoryShareCard from "../components/VictoryShareCard";
 import WheelModal from "../components/WheelModal";
 import { getNextZone, getZone, isZoneStart } from "../config/mexicoZones";
 import { useAuth } from "../context/AuthContext";
 import useCoinFly from "../hooks/useCoinFly";
+import useDiamondFly from "../hooks/useDiamondFly";
 import { useCombo } from "../hooks/useCombo";
 import useDevMode from "../hooks/useDevMode";
+import { useInterstitialAd } from "../hooks/useInterstitialAd";
 import { useOnboarding } from "../hooks/useOnboarding";
 import { useRewardedAd } from "../hooks/useRewardedAd";
 import { comboBurst, notifyError, notifySuccess, notifyWarning } from "../services/haptics";
@@ -52,16 +58,29 @@ import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 import { compareWordsFlexibly, normalizeWordForDisplay } from "../utils/textUtils";
 import ShopScreen from "./ShopScreen";
 
+
 const { width, height } = Dimensions.get("window");
 // Real screen center (unpatched) — used for coin fly origin on tablet
 const COIN_CENTER_X = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
 const COIN_CENTER_Y = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
 // On tablet use a fixed value — the patched height in landscape (~384px) would give
 // only 142px via the formula, which is far too small for 3 keyboard rows.
-const KEYBOARD_HEIGHT = TABLET_MODE ? 284 : Math.min(264, height * 0.39);
+const KEYBOARD_HEIGHT = TABLET_MODE ? 420 : Math.min(264, height * 0.39);
+
+// Keyboard key sizes — responsive to screen width on both phone and tablet.
+// Tablet container: left:16+right:16+paddingH:14×2 = REAL_WIDTH-60 usable.
+// Phone container: full-width + paddingH:14×2 = width-28 usable.
+// Row 1&2: 10 keys × (key_w + 2×margin) = usable  →  key_w = (usable - 10×2×margin) / 10
+// Row 3: 7 reg + 2 special + 9×2×margin = usable  →  special_w solved
+const _KB_MARGIN = TABLET_MODE ? 3 : 2;
+const _KB_USABLE = TABLET_MODE ? (REAL_WIDTH - 60) : (width - 28);
+const TABLET_KEY_W = Math.floor((_KB_USABLE - 10 * _KB_MARGIN * 2) / 10);
+const TABLET_SPECIAL_W = Math.floor((_KB_USABLE - 7 * TABLET_KEY_W - 9 * _KB_MARGIN * 2) / 2);
 
 // On tablet, tiles are bigger so they fill more of the larger screen
 const TILE_SCALE = TABLET_MODE ? 1.4 : 1;
+
+const MASCOTA_CHEER_KEY = "@mexicanario:mascota_cheer_date";
 
 // Keyboard layout
 const KEYBOARD_LAYOUT = [
@@ -134,7 +153,7 @@ const getVictoryPhrase = (level) =>
 
 /** Mensajes aleatorios de celebración cuando el jugador adivina la palabra */
 const WIN_PHRASES_PERFECT = [
-  "¡Órale, qué chingón!",
+  "¡Órale, qué crack!",
   "¡A la primera! ¡Eres un crack!",
   "¡Sin dudar ni tantito!",
   "¡Puro nivel, compa!",
@@ -145,7 +164,7 @@ const WIN_PHRASES_PERFECT = [
   "¡Qué monstruo estás hecho!",
   "¡Eres bien chilo, manito!",
   "¡Échale, ya las traes!",
-  "¡Bien cabrón, lo adivinaste!",
+  "¡Bien hecho, lo adivinaste!",
   "¡Le entendiste de volada!",
   "¡Ni quien le haga al tiro como tú!",
   "¡La rompiste, campeón!",
@@ -167,6 +186,114 @@ const WIN_PHRASES_ATTEMPTS = [
 ];
 
 const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+/** Genera un mensaje sarcástico/gracioso alusivo a la palabra que se completó con el poder ⭐ */
+const getVerificarMascotMessage = (word, meaning) => {
+  const w = (word || "").replace(/ /g, "").toUpperCase();
+  const m = (meaning || "").toLowerCase();
+  const len = w.length;
+
+  // Mensajes con la palabra incluida (más dopaminéticos)
+  const wordSpecific = [
+    `⭐ "${word}" ya era — ¡te la sabías y te hiciste!`,
+    `⭐ ¡Ándale! "${word}" en el bote 🫙`,
+    `⭐ "${word}"... como si no supieras, jaja`,
+    `⭐ ¡A ver si la usas esta semana! "${word}" 😏`,
+    `⭐ "${word}" — de nada, mi rey 👑`,
+    `⭐ Pa' que sepas: "${word}" existe y es de acá 🇲🇽`,
+    `⭐ ¡Anotado! "${word}" desbloqueada 🔓`,
+    `⭐ "${word}" al carrito, yo invito 🛒`,
+    `⭐ ¡Con dinero todo se puede, hasta "${word}"! 💸`,
+    `⭐ "${word}" ¿la usabas o ni la conocías? 👀`,
+  ];
+
+  // Mensajes por longitud de palabra
+  const shortWordPhrases = [
+    `⭐ ¡Tan cortita y no la adivinabas! 🤏`,
+    `⭐ ${len} letras... ¿en serio? 😂`,
+    `⭐ Era chiquita pero mató, jaja 🐭`,
+    `⭐ Con ${len} letritas — ¡uff, difícil! 😤`,
+  ];
+
+  const longWordPhrases = [
+    `⭐ Esa sí venía pesada, no te culpo 🧠`,
+    `⭐ ${len} letras... normal que necesitaras ayuda 😅`,
+    `⭐ Era un trabalenguas de nivel épico 🎙️`,
+    `⭐ Hasta yo sudé con esa 💦`,
+  ];
+
+  // Mensajes por contenido semántico
+  const foodPhrases = [
+    `⭐ Con esa palabra seguro me entra el hambre 🌮`,
+    `⭐ Qué buena, hasta se me antojó algo 🍜`,
+    `⭐ Palabra de comida = palabra sagrada 😤🇲🇽`,
+  ];
+
+  const drinkPhrases = [
+    `⭐ ¡Salud! Por "${word}" 🥂`,
+    `⭐ Esta palabra sabe a fiesta 🎉`,
+  ];
+
+  const insultPhrases = [
+    `⭐ Eso sí que es vocabulario mexicano 😂`,
+    `⭐ Mis abuelos estarían orgullosos 👴🏽`,
+    `⭐ De las palabras que te dan carácter 💪`,
+  ];
+
+  const moneyPhrases = [
+    `⭐ Bien gastados los pesitos, ¿no? 😜`,
+    `⭐ ¡Inversión inteligente! 📈`,
+    `⭐ El conocimiento no es gratis... pero casi 🧾`,
+  ];
+
+  // Pool de mensajes generales sarcásticos
+  const generalPhrases = [
+    `⭐ Así se hace cuando uno no sabe 😌`,
+    `⭐ Pa' eso estamos, para tapar hoyos 🕳️`,
+    `⭐ Yo le entro... ¡porque tú no pudiste! 😄`,
+    `⭐ ¿Qué habrías hecho sin mí? 🦅`,
+    `⭐ El poder ⭐ nunca falla, igual que yo 😎`,
+    `⭐ Sin comentarios... pero toma tu victoria 🏅`,
+    `⭐ No me agradezcas, solo es mi trabajo 🎩`,
+    `⭐ Eso se llama delegar inteligentemente 🤝`,
+    `⭐ ¡Ta' bueno! Aunque trampa, pero bueno 😆`,
+    `⭐ La próxima la adivinas solo, ¿verdad? 😏`,
+    `⭐ Nivel completado por obra y gracia de mis poderes ✨`,
+    `⭐ Ahora ya la puedes presumir — tú la "adivinaste" 😂`,
+    `⭐ El que paga manda, y ya pagaste 💰`,
+    `⭐ Misión cumplida... a medias, pero cumplida 😅`,
+    `⭐ Oye, al menos sabes cuándo pedir ayuda 👍`,
+  ];
+
+  // Selección inteligente basada en contexto
+  const roll = Math.random();
+
+  // 40% de probabilidad: mensaje con la palabra específica
+  if (roll < 0.40) {
+    return pickRandom(wordSpecific);
+  }
+
+  // 15%: basado en longitud
+  if (roll < 0.55) {
+    if (len <= 4) return pickRandom(shortWordPhrases);
+    if (len >= 9) return pickRandom(longWordPhrases);
+  }
+
+  // 15%: basado en semántica del significado
+  if (roll < 0.70) {
+    const foodWords = ["comida", "comer", "taco", "torta", "atole", "nixtamal", "pozole", "enchilada", "tamale", "guiso", "sopa"];
+    const drinkWords = ["beber", "bebida", "pulque", "mezcal", "tepache", "cerveza", "agua"];
+    const insultWords = ["insulto", "groser", "malo", "enfado", "enojo", "burla", "albur", "maldic"];
+    const moneyWords = ["dinero", "plata", "lana", "pago", "varo", "billete", "trampa"];
+    if (foodWords.some(fw => m.includes(fw))) return pickRandom(foodPhrases);
+    if (drinkWords.some(dw => m.includes(dw))) return pickRandom(drinkPhrases);
+    if (insultWords.some(iw => m.includes(iw))) return pickRandom(insultPhrases);
+    if (moneyWords.some(mw => m.includes(mw))) return pickRandom(moneyPhrases);
+  }
+
+  // Fallback: mensaje general sarcástico
+  return pickRandom(generalPhrases);
+};
 
 /** Frases de "La Mirada del Guía" — mascota insinúa que use el teclado o la pista */
 const GAZE_PHRASES = [
@@ -195,6 +322,48 @@ const buildCensoredExample = (example, mexicanWord) => {
   return example.replace(regex, stars);
 };
 
+// Memoized tile — only re-renders when THIS tile's data changes
+const LetterTile = React.memo(function LetterTile({
+  idx, ch, isFixed, isWrong, isSelected, isCorrect,
+  scaleAnim, boxSize, boxHeight, fontSize, marginH, onSelectBox,
+}) {
+  return (
+    <TouchableOpacity onPress={() => onSelectBox(idx)} activeOpacity={0.7}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <View
+          style={[
+            styles.letterBox,
+            { width: boxSize, height: boxHeight, marginHorizontal: marginH },
+            isSelected && styles.letterBoxSelected,
+            isCorrect && styles.letterBoxCorrect,
+            isFixed && styles.letterBoxFixed,
+            isWrong && styles.letterBoxWrong,
+          ]}
+        >
+          <Text
+            style={[
+              styles.letterText,
+              { fontSize },
+              isCorrect && styles.letterTextCorrect,
+              isFixed && styles.letterTextFixed,
+              isWrong && styles.letterTextWrong,
+            ]}
+          >
+            {ch}
+          </Text>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
+
+class PetErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { crashed: false }; }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(e) { console.warn('[PetErrorBoundary] mascota crash:', e?.message); }
+  render() { return this.state.crashed ? null : this.props.children; }
+}
+
 export default function GameplayScreen({ navigation, route }) {
   // UI state
   const [showDictionary, setShowDictionary] = useState(false);
@@ -202,7 +371,6 @@ export default function GameplayScreen({ navigation, route }) {
   const [showWheel, setShowWheel] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
-  const [showVenezolanometro, setShowVenezolanometro] = useState(false);
   const [showAdRemoval, setShowAdRemoval] = useState(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [showRegisterLure, setShowRegisterLure] = useState(false);
@@ -225,7 +393,6 @@ export default function GameplayScreen({ navigation, route }) {
         showWheel ||
         showTerms ||
         showSupport ||
-        showVenezolanometro ||
         showAdRemoval ||
         showAuthPrompt ||
         showRegisterLure ||
@@ -255,7 +422,6 @@ export default function GameplayScreen({ navigation, route }) {
     showWheel,
     showTerms,
     showSupport,
-    showVenezolanometro,
     showAdRemoval,
     showAuthPrompt,
     showRegisterLure,
@@ -268,10 +434,13 @@ export default function GameplayScreen({ navigation, route }) {
   // Refs para coin fly
   const topBarRef = useRef(null);
   const victoryRewardRef = useRef(null);
+  const victoryShareRef = useRef(null);
 
   // Coin fly — dos instancias: una para la pantalla principal, otra para el modal de victoria
   const { flyCoins: mainCoins, particles: mainCoinParticles, triggerCoinFly: triggerMainCoin, onCoinArrived: onMainCoinArrived } = useCoinFly();
   const { flyCoins: victoryCoins, particles: victoryCoinParticles, triggerCoinFly: triggerVictoryCoin, onCoinArrived: onVictoryCoinArrived } = useCoinFly();
+  // Diamond fly — para el modal de victoria
+  const { flyDiamonds: victoryDiamonds, diamondParticles: victoryDiamondParticles, triggerDiamondFly: triggerVictoryDiamond, onDiamondArrived: onVictoryDiamondArrived } = useDiamondFly();
 
   // Posición fallback del pill de monedas (igual que AchievementsScreen)
   const getCoinPillFallback = () => {
@@ -289,41 +458,47 @@ export default function GameplayScreen({ navigation, route }) {
     return (measured && measured.h > 0) ? measured : getCoinPillFallback();
   };
 
+  const getDiamondPillFallback = () => {
+    const topPad = Platform.OS === "ios" ? 52 : 36;
+    const coinPillLeft = REAL_WIDTH - 16 - 110;
+    return { x: coinPillLeft - 10 - 90, y: topPad, w: 90, h: 36 };
+  };
+
+  const getDiamondPillTarget = async () => {
+    const measured = await topBarRef.current?.measureDiamondPill();
+    return (measured && measured.h > 0) ? measured : getDiamondPillFallback();
+  };
+
   // Rewarded ad para el modal de monedas
   const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
+
+  // Interstitial ad — shown every 3 completed levels
+  const { showAd: showInterstitial } = useInterstitialAd();
+  const completedLevelsRef = useRef(0);
 
   // Onboarding — shown only on first launch
   const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("gameplay");
   const ONBOARDING_STEPS = [
     {
-      text: "Aquí aparece la pista. ¡Lee la definición para adivinar la palabra mexicana! 📖",
-      bubbleStyle: { top: height * 0.26, left: 20, right: 20 },
-      handStyle: { top: height * 0.17, left: width / 2 - 24 },
-      handEmoji: "👇",
-      handBounceDir: "down",
-    },
-    {
-      text: "Las casillas se llenarán con las letras que escribas. ¡Intenta adivinar la palabra! ⬜",
-      bubbleStyle: { top: height * 0.2, left: 20, right: 20 },
-      handStyle: { top: height * 0.5, left: width / 2 - 24 },
-      handEmoji: "👆",
-      handBounceDir: "up",
-    },
-    {
-      text: "Toca las letras del teclado para deletrear tu respuesta 🎹",
-      bubbleStyle: { bottom: KEYBOARD_HEIGHT + 20, left: 20, right: 20 },
+      // Step 0 — apunta al teclado; se auto-avanza al primer keypress
+      text: "¡Toca las letras del teclado para adivinar la palabra mexicana! 🎹",
+      bubbleStyle: { bottom: KEYBOARD_HEIGHT + 30, left: 20, right: 20 },
       handStyle: { bottom: KEYBOARD_HEIGHT + 10, left: width / 2 - 24 },
       handEmoji: "👇",
       handBounceDir: "down",
     },
     {
-      text: "¿Te atascas? Estos botones de ayuda revelan letras o completan la palabra 💡",
-      bubbleStyle: { bottom: KEYBOARD_HEIGHT + 110, left: 20, right: 20 },
-      handStyle: { bottom: KEYBOARD_HEIGHT + 52, left: 30 },
-      handEmoji: "👇",
-      handBounceDir: "down",
+      // Step 1 — apunta al tile grid; se auto-avanza al confirmar la palabra
+      text: "¡Así se llena la cuadrícula! Cuando completes la palabra presiona ✓ para confirmar 🏆",
+      bubbleStyle: { top: height * 0.22, left: 20, right: 20 },
+      handStyle: { top: height * 0.5, left: width / 2 - 24 },
+      handEmoji: "👆",
+      handBounceDir: "up",
     },
   ];
+
+  // Proactive rewarded ad offer (shown on 3rd wrong attempt)
+  const [showRewardedOffer, setShowRewardedOffer] = useState(false);
 
   // Combo & streak state (game logic + UI visibility decoupled)
   const { comboCount, maxCombo, comboVisible, incrementCombo, resetCombo, dismissCombo } = useCombo();
@@ -357,6 +532,7 @@ export default function GameplayScreen({ navigation, route }) {
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [reviewWordId, setReviewWordId] = useState(null);
   const hasRecordedFailRef = useRef(false);   // prevent duplicate recordFail calls per word
+  const mascotaCheerDateRef = useRef(null);    // date string of last cheer bubble (daily limit)
 
   // Map repaso mode — replaying a completed level from the map (no progress change)
   const reviewLevelParam = route?.params?.reviewLevel ?? null;
@@ -387,10 +563,12 @@ export default function GameplayScreen({ navigation, route }) {
   const updateUserCurrency = useMutation(api.users.updateUserCurrency);
   const completeLevelMutation = useMutation(api.levels.completeLevel);
   const addXp = useMutation(api.users.addXp);
+  const claimShareReward = useMutation(api.users.claimShareReward);
   const gainPetXp = useMutation(api.pet.gainPetXp);
   const allLevels = useQuery(api.levels.getAllLevels);
   const jumpToLevelMutation = useMutation(api.devTools.jumpToLevel);
   const usePowerupMutation = useMutation(api.shop.usePowerup);
+  const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
   const recordDailyPlay = useMutation(api.streaks.recordDailyPlay);
   const recordLeagueCXP = useMutation(api.league.recordLeagueCXP);
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
@@ -421,6 +599,18 @@ export default function GameplayScreen({ navigation, route }) {
   const deleteRepeatRef = useRef(null);
   const deleteHoldTimerRef = useRef(null);
   const onKeyPressRef = useRef(null); // kept updated below, avoids stale closure in interval
+  const wrongClearTimerRef = useRef(null); // cancel wrong-answer clear if user types early
+
+  // Stable per-key onPress handlers — created once (use ref so onKeyPress never goes stale).
+  // Allows React.memo on JuicyButton to skip re-renders when onPress didn't change.
+  const keyHandlers = useMemo(() => {
+    const map = {};
+    KEYBOARD_LAYOUT.flat().forEach((k) => {
+      map[k] = () => onKeyPressRef.current?.(k);
+    });
+    return map;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const startDeleteRepeat = useCallback(() => {
     deleteHoldTimerRef.current = setTimeout(() => {
       deleteRepeatRef.current = setInterval(() => {
@@ -453,6 +643,13 @@ export default function GameplayScreen({ navigation, route }) {
     }, 2500);
   };
 
+  // Load last mascot cheer date from storage (daily limit)
+  useEffect(() => {
+    AsyncStorage.getItem(MASCOTA_CHEER_KEY).then((v) => {
+      if (v) mascotaCheerDateRef.current = v;
+    });
+  }, []);
+
   // Cambiar BGM a gameplay al entrar, volver a menu al salir
   useEffect(() => {
     playBGM("gameplay");
@@ -474,9 +671,12 @@ export default function GameplayScreen({ navigation, route }) {
     }
   }, [allLevels]);
 
-  // Disparar coin fly cuando se abre el modal de victoria
+  // Disparar coin fly y diamond fly cuando se abre el modal de victoria
   useEffect(() => {
-    if (!showLevelUp || !(levelUpReward?.coins > 0)) return;
+    if (!showLevelUp) return;
+    const hasCoins = levelUpReward?.coins > 0;
+    const hasDiamonds = levelUpReward?.diamonds > 0;
+    if (!hasCoins && !hasDiamonds) return;
     const timer = setTimeout(async () => {
       // Medir fuente: el pill de recompensa dentro del modal
       let srcX = COIN_CENTER_X;
@@ -492,16 +692,25 @@ export default function GameplayScreen({ navigation, route }) {
           setTimeout(() => { if (!done) res(); }, 300);
         });
       }
-      // Medir destino: pill de monedas en TopBar (con fallback)
-      const target = await getCoinPillTarget();
-      triggerVictoryCoin({
-        fromX: srcX,
-        fromY: srcY,
-        toX: target.x + target.w / 2,
-        toY: target.y + target.h / 2,
-        coins: levelUpReward.coins,
-        onAllArrived: () => topBarRef.current?.triggerBounce(),
-      });
+      if (hasCoins) {
+        const target = await getCoinPillTarget();
+        triggerVictoryCoin({
+          fromX: srcX, fromY: srcY,
+          toX: target.x + target.w / 2,
+          toY: target.y + target.h / 2,
+          coins: levelUpReward.coins,
+          onAllArrived: () => topBarRef.current?.triggerBounce(),
+        });
+      }
+      if (hasDiamonds) {
+        const target = await getDiamondPillTarget();
+        triggerVictoryDiamond({
+          fromX: srcX, fromY: srcY,
+          toX: target.x + target.w / 2,
+          toY: target.y + target.h / 2,
+          diamonds: levelUpReward.diamonds,
+        });
+      }
     }, 350);
     return () => clearTimeout(timer);
   }, [showLevelUp]);
@@ -514,6 +723,35 @@ export default function GameplayScreen({ navigation, route }) {
         .map(() => new Animated.Value(1)),
     []
   );
+  const wordSegments = useMemo(() => {
+    const segs = [];
+    let cur = { startIdx: 0, letters: "" };
+    for (let i = 0; i < mexicanWord.length; i++) {
+      if (mexicanWord[i] === " ") {
+        segs.push(cur);
+        cur = { startIdx: i + 1, letters: "" };
+      } else {
+        cur.letters += mexicanWord[i];
+      }
+    }
+    segs.push(cur);
+    return segs.map((seg) => {
+      const wordLength = seg.letters.length;
+      let boxSize = Math.round(38 * TILE_SCALE);
+      let boxHeight = Math.round(42 * TILE_SCALE);
+      let fontSize = Math.round(20 * TILE_SCALE);
+      let marginH = Math.round(2 * TILE_SCALE);
+      if (wordLength > 7) {
+        const scale = Math.max(0.65, 7.5 / wordLength);
+        boxSize = Math.floor(38 * TILE_SCALE * scale);
+        boxHeight = Math.floor(42 * TILE_SCALE * scale);
+        fontSize = Math.floor(20 * TILE_SCALE * scale);
+        marginH = Math.max(0.5, Math.floor(2 * TILE_SCALE * scale));
+      }
+      return { ...seg, boxSize, boxHeight, fontSize, marginH };
+    });
+  }, [mexicanWord]);
+
   const shakeAnim = useRef(new Animated.Value(0)).current;
   // Prevents the levelInfo useEffect from calling initGame() while the
   // victory modal is open (Convex updates levelInfo reactively as soon as
@@ -522,55 +760,6 @@ export default function GameplayScreen({ navigation, route }) {
   const usedPowerupRef = useRef(false);    // true if any hint powerup was used this round
   const lastInputTimeRef = useRef(Date.now()); // timestamp of last keypress (for guide gaze)
 
-  // ─── Confetti particles ──────────────────────────────────────────────────────
-  const CONFETTI_COUNT = 10;
-  const CONFETTI_COLORS = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#FF922B", "#CC5DE8", "#F06595", "#74C0FC"];
-  const confettiAnims = useMemo(
-    () => Array(CONFETTI_COUNT).fill(0).map(() => ({
-      y: new Animated.Value(0),
-      x: new Animated.Value(0),
-      opacity: new Animated.Value(0),
-      rotation: new Animated.Value(0),
-      scale: new Animated.Value(0),
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-      size: 8 + Math.random() * 10,
-      startX: (Math.random() - 0.5) * 260,
-      endY: 180 + Math.random() * 120,
-      endX: (Math.random() - 0.5) * 300,
-    })),
-    []
-  );
-
-  const launchConfetti = () => {
-    confettiAnims.forEach((p, i) => {
-      p.y.setValue(0);
-      p.x.setValue(0);
-      p.opacity.setValue(0);
-      p.rotation.setValue(0);
-      p.scale.setValue(0);
-      const delay = i * 40;
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.parallel([
-          Animated.timing(p.opacity, { toValue: 1, duration: 120, useNativeDriver: true }),
-          Animated.spring(p.scale, { toValue: 1, friction: 5, useNativeDriver: true }),
-          Animated.timing(p.y, { toValue: -p.endY, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(p.x, { toValue: p.endX, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(p.rotation, { toValue: 6, duration: 900, useNativeDriver: true }),
-          Animated.sequence([
-            Animated.delay(600),
-            Animated.timing(p.opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-          ]),
-        ]),
-      ]).start();
-    });
-  };
-
-  useEffect(() => {
-    if (showLevelUp) {
-      setTimeout(() => launchConfetti(), 100);
-    }
-  }, [showLevelUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── AsyncStorage persistence ─────────────────────────────────────────────
   const SAVE_KEY = (levelNum) => `@mexicanario_save_level_${levelNum}`;
@@ -624,6 +813,7 @@ export default function GameplayScreen({ navigation, route }) {
     hasRecordedFailRef.current = false;
     usedPowerupRef.current = false;
     lastInputTimeRef.current = Date.now();
+    setShowRewardedOffer(false);
   };
 
   const initGame = async () => {
@@ -765,8 +955,8 @@ export default function GameplayScreen({ navigation, route }) {
   // ─── Animations ─────────────────────────────────────────────────────────────
   const bounceAtIndex = (idx) => {
     Animated.sequence([
-      Animated.timing(scaleAnims[idx], { toValue: 1.25, duration: 90, useNativeDriver: true }),
-      Animated.timing(scaleAnims[idx], { toValue: 1, duration: 90, useNativeDriver: true }),
+      Animated.timing(scaleAnims[idx], { toValue: 1.18, duration: 50, useNativeDriver: true }),
+      Animated.timing(scaleAnims[idx], { toValue: 1, duration: 40, useNativeDriver: true }),
     ]).start();
   };
 
@@ -780,41 +970,36 @@ export default function GameplayScreen({ navigation, route }) {
   };
 
   const celebrate = () => {
-    // Parallel (not stagger) so all tiles pulse together — prevents tile 0 from
-    // appearing enlarged/protruding relative to the others when green is applied.
-    // Scale 1→1.08→1 over 400ms total per tile, only on actual characters.
+    // Stagger(20ms) instead of parallel — distributes native animation starts over time,
+    // reducing the JS→native burst that causes jank on Android.
+    // Tiles all turn green simultaneously (isCorrect state); the scale wave is decoration.
     const anims = Array.from(mexicanWord).reduce((acc, ch, i) => {
       if (ch !== " ") {
         acc.push(
           Animated.sequence([
-            Animated.timing(scaleAnims[i], { toValue: 1.08, duration: 200, useNativeDriver: true }),
-            Animated.timing(scaleAnims[i], { toValue: 1.0, duration: 200, useNativeDriver: true }),
+            Animated.timing(scaleAnims[i], { toValue: 1.15, duration: 80, useNativeDriver: true }),
+            Animated.spring(scaleAnims[i], { toValue: 1.0, friction: 5, tension: 280, useNativeDriver: true }),
           ])
         );
       }
       return acc;
     }, []);
-    Animated.parallel(anims).start();
+    Animated.stagger(20, anims).start();
   };
 
   // ─── Rewards ─────────────────────────────────────────────────────────────────
-  const getComboMultiplier = (combo) => {
-    if (combo >= 10) return 2;
-    if (combo >= 5) return 1.5;
-    if (combo >= 3) return 1.25;
-    return 1;
-  };
-
-  const calculateReward = (currentCombo) => {
-    const baseReward = levelInfo?.reward || { coins: 0, diamonds: 1 };
-    return {
-      coins: 0, // No more coins for just beating levels
-      diamonds: baseReward.diamonds,
-    };
+  // Small base + slow growth: 3 coins at lvl1, +1 every 25 levels
+  const calculateReward = () => {
+    const baseReward = levelInfo?.reward || { coins: 3, diamonds: 1 };
+    const levelPos = levelInfo?.level || 1;
+    const coins = 3 + Math.floor((levelPos - 1) / 25);
+    return { coins, diamonds: baseReward.diamonds };
   };
 
   // ─── Validation ───────────────────────────────────────────────────────────────
   const validateWhenFull = async (nextGuess) => {
+    // Onboarding: auto-advance step 1 before tile animations run
+    if (obActive && obStep === 1) { obAdvance(ONBOARDING_STEPS.length); }
     const guessString = Array.isArray(nextGuess) ? nextGuess.join("") : nextGuess;
     if (guessString.length === mexicanWord.length) {
       const isCorrectFlexible = compareWordsFlexibly(guessString, mexicanWord);
@@ -822,8 +1007,8 @@ export default function GameplayScreen({ navigation, route }) {
         setIsCorrect(true);
         setWrongLetters([]);
         celebrate();
-        // Pronunciar la palabra al adivinarse correctamente
-        Speech.speak(mexicanWord, { language: "es-MX", rate: 0.85 });
+        // Diferir TTS para no bloquear el JS thread durante la animación de tiles
+        setTimeout(() => Speech.speak(mexicanWord, { language: "es-MX", rate: 0.85 }), 300);
 
         // Resolve review word if we're in review mode
         if (isReviewMode && reviewWordId) {
@@ -834,10 +1019,10 @@ export default function GameplayScreen({ navigation, route }) {
         let didCompleteZone = false;
         if (!isReviewMode && levelInfo?.level) {
           const nextLevel = levelInfo.level + 1;
-          if (isZoneStart(nextLevel)) {
+          if (isZoneStart(nextLevel, totalLevels)) {
             didCompleteZone = true;
-            setZoneCompleted(getZone(levelInfo.level));
-            setZoneCompletedNext(getNextZone(levelInfo.level));
+            setZoneCompleted(getZone(levelInfo.level, totalLevels));
+            setZoneCompletedNext(getNextZone(levelInfo.level, totalLevels));
           }
         }
 
@@ -876,7 +1061,13 @@ export default function GameplayScreen({ navigation, route }) {
             triggerMascota("celebrating", `x${newCombo} Combo!`);
           } else {
             notifySuccess();
-            triggerMascota("celebrating", pickRandom(WIN_PHRASES_PERFECT));
+            const today = new Date().toISOString().slice(0, 10);
+            const cheerBubble = mascotaCheerDateRef.current !== today
+              ? (mascotaCheerDateRef.current = today,
+                AsyncStorage.setItem(MASCOTA_CHEER_KEY, today),
+                pickRandom(WIN_PHRASES_PERFECT))
+              : null;
+            triggerMascota("celebrating", cheerBubble);
           }
           bondAcierto(); // +15 vínculo por acierto
         } else {
@@ -890,7 +1081,13 @@ export default function GameplayScreen({ navigation, route }) {
             notifySuccess();
           }
           resetCombo(); // resets comboCount to 0 and hides banner
-          triggerMascota("celebrating", pickRandom(WIN_PHRASES_ATTEMPTS));
+          const today = new Date().toISOString().slice(0, 10);
+          const cheerBubble = mascotaCheerDateRef.current !== today
+            ? (mascotaCheerDateRef.current = today,
+              AsyncStorage.setItem(MASCOTA_CHEER_KEY, today),
+              pickRandom(WIN_PHRASES_ATTEMPTS))
+            : null;
+          triggerMascota("celebrating", cheerBubble);
           bondAcierto(); // +15 vínculo incluso con intentos previos
         }
 
@@ -900,93 +1097,102 @@ export default function GameplayScreen({ navigation, route }) {
           setShowAuthPrompt(true);
           return;
         }
-        // Snapshot current-level data NOW, before the mutation increments the level
-        // and Convex reactively overwrites mexicanWord / wordExample / wordRegion.
+        // Snapshot current-level data NOW before mutation overwrites Convex reactive values
         const snapWord = originalWord || mexicanWord;
         const snapExample = wordExample;
         const snapRegion = wordRegion;
         const snapLevel = levelInfo?.level || 1;
-        setVictoryWord(snapWord);
-        setVictoryExample(snapExample);
-        setVictoryRegion(snapRegion);
-        setVictoryLevel(snapLevel);
-        // Block the levelInfo useEffect from resetting the game while the
-        // victory modal is open (Convex updates levelInfo reactively immediately
-        // after the mutation, which would call initGame() too early).
+        // Block levelInfo useEffect from resetting game while victory modal is open
         skipNextInitRef.current = true;
-        // If player used any hint powerup, no coin reward (fair play)
+        // Calculate reward synchronously (needs levelInfo before mutation runs)
+        // Powerup used → coins still earned (user already paid the cost); diamonds skipped (perfect-only bonus)
+        const baseReward = calculateReward();
         const reward = usedPowerupRef.current
-          ? { coins: 0, diamonds: 0 }
-          : calculateReward(newCombo);
-        // Add zone bonus to displayed reward (actual award happens in InteractionManager)
+          ? { coins: baseReward.coins, diamonds: 0 }
+          : baseReward;
         const displayReward = (!usedPowerupRef.current && didCompleteZone)
           ? { ...reward, coins: reward.coins + 100 }
           : reward;
 
-        // Delay victory modal — combo: 700ms banner + 150ms fade + 500ms legibility = 1350ms
-        //                         no-combo: 500ms legibility (no banner to wait for)
-        setLevelUpReward(displayReward);
+        // Batch all victory state updates in a single setTimeout — one re-render
+        // instead of 5 immediate + 1 delayed. Keeps JS thread free for animations.
         const victoryDelay = attempts === 0 ? 1350 : 500;
         setTimeout(() => {
+          setVictoryWord(snapWord);
+          setVictoryExample(snapExample);
+          setVictoryRegion(snapRegion);
+          setVictoryLevel(snapLevel);
+          setLevelUpReward(displayReward);
           setShowLevelUp(true);
           playSound("celebration");
         }, victoryDelay);
 
-        // Defer all backend work until animations settle
-        InteractionManager.runAfterInteractions(() => {
-          completeLevelMutation({
-            userId,
-            levelNumber: levelInfo.level,
-            isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
-          })
-            .then((levelResult) => {
-              if (levelResult.success) {
-                const totalCoins = reward.coins; // already 0 if powerup was used
-                if (totalCoins > 0 || reward.diamonds > 0) {
-                  updateUserCurrency({ userId, coins: totalCoins, diamonds: reward.diamonds }).catch(() => { });
-                }
-                gainPetXp({ userId }).catch(() => { });
-                // XP cultural: +10 base, +15 si nivel perfecto (0 errores, sin powerups)
-                const isPerfectLevel = !isMapReview && attempts === 0 && !usedPowerupRef.current;
-                addXp({ userId, amount: isPerfectLevel ? 25 : 10 }).catch(() => { });
-                recordLeagueCXP({ userId, attempts, comboCount: newCombo }).catch(() => { });
-                recordDailyPlay({ userId })
-                  .then(async (streakResult) => {
-                    if (!streakResult.alreadyRecorded && streakResult.isNewStreak) {
-                      setIsFirstWordToday(true);
-                      setStreakCount(streakResult.streak);
-                      setBoostActive(true);
-                      setTimeout(() => setBoostActive(false), 1500);
-                      playSound("streak");
-                    }
-                    // Request notification permission at streak >= 3 (high-momentum moment)
-                    const currentStreak = streakResult.streak ?? 0;
-                    const granted = await hasPermission();
-                    if (!granted && currentStreak >= 3) {
-                      await requestPermission();
-                    }
-                    // Re-schedule reminders with the updated streak
-                    if (await hasPermission()) {
-                      rescheduleAfterPlay({
-                        streakDays: currentStreak,
-                        petName: petState?.petName ?? '',
-                        petType: petState?.petType ?? 'ajolote',
-                      }).catch(() => { });
-                    }
-                  })
-                  .catch(() => { });
+        // Fire level completion immediately — InteractionManager.runAfterInteractions
+        // can silently fail on Android if celebrate() animation callbacks don't settle.
+        completeLevelMutation({
+          userId,
+          levelNumber: levelInfo.level,
+          isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
+        })
+          .then((levelResult) => {
+            if (levelResult.success) {
+              completedLevelsRef.current += 1;
+              const totalCoins = displayReward.coins; // includes zone bonus; 0 if powerup used
+              if (totalCoins > 0 || displayReward.diamonds > 0) {
+                updateUserCurrency({ userId, coins: totalCoins, diamonds: displayReward.diamonds }).catch(() => { });
               }
-            })
-            .catch(() => { });
-        });
+              gainPetXp({ userId }).catch(() => { });
+              // XP cultural: base + bonos por combo, racha y sesión
+              const isPerfectLevel = !isMapReview && attempts === 0 && !usedPowerupRef.current;
+              let xpAmount = 10; // base
+              if (isPerfectLevel) xpAmount += 15; // perfecto
+              if (newCombo >= 3) xpAmount += Math.min(newCombo * 2, 20); // combo: +6 a +20
+              const streak = userData?.playStreak ?? 0;
+              if (streak >= 3) xpAmount += Math.min(streak, 10); // racha: +3 a +10
+              if (completedLevelsRef.current >= 10) xpAmount += 5; // sesión larga: +5
+              if (completedLevelsRef.current >= 20) xpAmount += 5; // sesión muy larga: +10 total
+              addXp({ userId, amount: xpAmount }).catch(() => { });
+              recordLeagueCXP({ userId, attempts, comboCount: newCombo }).catch(() => { });
+              recordDailyPlay({ userId })
+                .then(async (streakResult) => {
+                  if (!streakResult.alreadyRecorded && streakResult.isNewStreak) {
+                    setIsFirstWordToday(true);
+                    setStreakCount(streakResult.streak);
+                    setBoostActive(true);
+                    setTimeout(() => setBoostActive(false), 1500);
+                    playSound("streak");
+                  }
+                  // Request notification permission at streak >= 3 (high-momentum moment)
+                  const currentStreak = streakResult.streak ?? 0;
+                  const granted = await hasPermission();
+                  if (!granted && currentStreak >= 3) {
+                    await requestPermission();
+                  }
+                  // Re-schedule reminders with the updated streak
+                  if (await hasPermission()) {
+                    rescheduleAfterPlay({
+                      streakDays: currentStreak,
+                      petName: petState?.petName ?? '',
+                      petType: petState?.petType ?? 'ajolote',
+                    }).catch(() => { });
+                  }
+                })
+                .catch(() => { });
+            }
+          })
+          .catch(() => { });
       } else {
         setIsCorrect(false);
-        setAttempts(attempts + 1);
+        const nextAttempts = attempts + 1;
+        setAttempts(nextAttempts);
         shakeRow();
         playSound("wrong");
         notifyError();
         triggerMascota("sad", "¡Ay!");
         if (!isMapReview) bondError(); // -3 vínculo por error
+        if (nextAttempts === 3 && adReady && !isMapReview) {
+          setShowRewardedOffer(true);
+        }
 
         // Record this word as failed (only once per word session, never in map repaso)
         if (!isMapReview && !hasRecordedFailRef.current && userId) {
@@ -996,17 +1202,19 @@ export default function GameplayScreen({ navigation, route }) {
             recordFailMutation({ userId, wordId: failWordId, wordText: mexicanWord }).catch(() => { });
           }
         }
-        setTimeout(() => {
+        wrongClearTimerRef.current = setTimeout(() => {
+          wrongClearTimerRef.current = null;
           setGuess((prev) => {
             const newGuess = [...prev];
             for (let i = 0; i < newGuess.length; i++) {
-              if (!fixedLetters.includes(i)) newGuess[i] = "";
+              // Preserve spaces (multi-word answers) and fixed letters
+              if (mexicanWord[i] !== " " && !fixedLetters.includes(i)) newGuess[i] = "";
             }
             return newGuess;
           });
           setWrongLetters([]);
           for (let i = 0; i < mexicanWord.length; i++) {
-            if (!fixedLetters.includes(i)) { setSelectedBoxIndex(i); break; }
+            if (mexicanWord[i] !== " " && !fixedLetters.includes(i)) { setSelectedBoxIndex(i); break; }
           }
         }, 400);
       }
@@ -1023,6 +1231,11 @@ export default function GameplayScreen({ navigation, route }) {
   };
 
   const onKeyPress = (key) => {
+    // Cancel pending wrong-answer clear so new keystrokes aren't overwritten
+    if (wrongClearTimerRef.current) {
+      clearTimeout(wrongClearTimerRef.current);
+      wrongClearTimerRef.current = null;
+    }
     lastInputTimeRef.current = Date.now(); // reset guide gaze timer
     // Dismiss combo banner on first keypress of the next word (non-blocking, keeps comboCount)
     dismissCombo();
@@ -1073,6 +1286,8 @@ export default function GameplayScreen({ navigation, route }) {
       return;
     }
     if (isCorrect) return;
+    // Onboarding: auto-advance step 0 on first keypress
+    if (obActive && obStep === 0) { obAdvance(ONBOARDING_STEPS.length); }
     if (
       selectedBoxIndex < mexicanWord.length &&
       mexicanWord[selectedBoxIndex] !== " " &&
@@ -1083,26 +1298,36 @@ export default function GameplayScreen({ navigation, route }) {
       newGuess[selectedBoxIndex] = key;
       setGuess(newGuess);
       setWrongLetters((prev) => prev.filter((i) => i !== selectedBoxIndex));
-      bounceAtIndex(selectedBoxIndex);
-      // Advance to next typable slot (skip spaces)
-      let next = selectedBoxIndex + 1;
-      while (next < mexicanWord.length && (mexicanWord[next] === " " || fixedLetters.includes(next))) next++;
-      if (next < mexicanWord.length) setSelectedBoxIndex(next);
-      // Check completion (all non-space slots filled)
+      // Check completion BEFORE bounceAtIndex — celebrate() inside validateWhenFull
+      // handles ALL tiles including the last one. Calling both causes animation conflict.
       const isComplete = newGuess.every((char, i) => i >= mexicanWord.length || char !== "");
       if (isComplete && newGuess.length >= mexicanWord.length) {
         validateWhenFull(newGuess.join(""));
+      } else {
+        bounceAtIndex(selectedBoxIndex);
+        // Advance to next typable slot (skip spaces & fixed letters)
+        let next = selectedBoxIndex + 1;
+        while (next < mexicanWord.length && (mexicanWord[next] === " " || fixedLetters.includes(next))) next++;
+        if (next < mexicanWord.length) {
+          setSelectedBoxIndex(next);
+        } else {
+          // No slot ahead — wrap around to first empty typable slot
+          const emptyIdx = newGuess.findIndex(
+            (ch, i) => i < mexicanWord.length && ch === "" && mexicanWord[i] !== " " && !fixedLetters.includes(i)
+          );
+          if (emptyIdx !== -1) setSelectedBoxIndex(emptyIdx);
+        }
       }
     }
   };
   onKeyPressRef.current = onKeyPress; // keep ref fresh every render for long-press repeat
 
-  const selectLetterBox = (index) => {
+  const selectLetterBox = useCallback((index) => {
     // Can't select a space or a fixed letter position
     if (index >= 0 && index < mexicanWord.length && mexicanWord[index] !== " " && !fixedLetters.includes(index)) {
       setSelectedBoxIndex(index);
     }
-  };
+  }, [mexicanWord, fixedLetters]);
 
   // ─── Power-ups ───────────────────────────────────────────────────────────────
   const checkCoins = (cost, actionKey) => {
@@ -1207,7 +1432,7 @@ export default function GameplayScreen({ navigation, route }) {
     const allIndices = Array.from({ length: mexicanWord.length }, (_, i) => i).filter(i => mexicanWord[i] !== " ");
     setWrongLetters([]);
     // Mascota rellena la palabra letra a letra (typewriter rápido 80ms)
-    triggerMascota("celebrating", "⭐ ¡Yo le entro!");
+    triggerMascota("celebrating", getVerificarMascotMessage(mexicanWord, wordMeaning));
     allIndices.forEach((idx, i) => {
       setTimeout(() => {
         setGuess((prev) => {
@@ -1228,15 +1453,19 @@ export default function GameplayScreen({ navigation, route }) {
     }, fillDuration);
   };
 
-  // Share
+  // Share — captures VictoryShareCard as PNG; falls back to text if capture fails
   const handleShare = async () => {
     try {
-      await Share.share({
-        message: "Estoy jugando Mexicanario 🇲🇽 ¿Me ayudas? Descárgalo ya!",
-        title: "Mexicanario",
-      });
-    } catch (error) {
-      console.error("Share error:", error);
+      const uri = await captureRef(victoryShareRef, { format: "png", quality: 0.92 });
+      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "¡Comparte tu victoria!" });
+    } catch (e) {
+      try {
+        await Share.share({
+          message: `¡Adiviné "${victoryWord || mexicanWord}" en Mexicanario! 🇲🇽 ¿Cuántas palabras mexicanas conoces? mexicanario.app`,
+        });
+      } catch (error) {
+        console.error("Share error:", error);
+      }
     }
   };
 
@@ -1246,6 +1475,8 @@ export default function GameplayScreen({ navigation, route }) {
     const censoredExample = wordExample
       ? buildCensoredExample(wordExample, mexicanWord)
       : null;
+    const currentLevel = reviewLevelParam || levelInfo?.level || victoryLevel || 1;
+    const webLink = `https://mexicanario.app`;
     const lines = [
       `🇲🇽 ¡A ver si sabes!`,
       ``,
@@ -1257,7 +1488,7 @@ export default function GameplayScreen({ navigation, route }) {
       wordRegion ? `Región: ${wordRegion}` : null,
       ``,
       `Descarga Mexicanario y juega conmigo 👇`,
-      `https://mexicanario.app`,
+      webLink,
     ].filter(Boolean).join("\n");
 
     try {
@@ -1301,17 +1532,19 @@ export default function GameplayScreen({ navigation, route }) {
 
         {/* Mascota — draggable, above keyboard (hidden during victory) */}
         {petState?.hasPet && !showLevelUp && (
-          <DraggablePet
-            scaleFactor={TABLET_MODE ? 0.82 : 0.44}
-            region={wordRegion || null}
-            currentWord={mexicanWord || null}
-            gameBubble={mascotaBubble}
-            reaction={
-              mascotaReaction === 'celebrating' ? 'correct'
-                : mascotaReaction === 'sad' ? 'wrong'
-                  : null
-            }
-          />
+          <PetErrorBoundary>
+            <DraggablePet
+              scaleFactor={TABLET_MODE ? 0.65 : 0.26}
+              region={wordRegion || null}
+              currentWord={mexicanWord || null}
+              gameBubble={mascotaBubble}
+              reaction={
+                mascotaReaction === 'celebrating' ? 'correct'
+                  : mascotaReaction === 'sad' ? 'wrong'
+                    : null
+              }
+            />
+          </PetErrorBoundary>
         )}
 
         {/* DEV: botón saltar nivel — solo visible en modo desarrollador */}
@@ -1380,96 +1613,41 @@ export default function GameplayScreen({ navigation, route }) {
               },
             ]}
           >
-            {(() => {
-              // Split the word into segments separated by spaces
-              // Each segment is { letters: string, startIdx: number }
-              const segments = [];
-              let cur = { startIdx: 0, letters: "" };
-              for (let i = 0; i < mexicanWord.length; i++) {
-                if (mexicanWord[i] === " ") {
-                  segments.push(cur);
-                  cur = { startIdx: i + 1, letters: "" };
-                } else {
-                  cur.letters += mexicanWord[i];
-                }
-              }
-              segments.push(cur);
-
-              return segments.map((seg, segIdx) => {
-                // Dynamic scaling logic to ensure the word fits on one line
-                const wordLength = seg.letters.length;
-                // Base sizes — scaled up on tablet so tiles fill more screen space
-                let boxSize = Math.round(38 * TILE_SCALE);
-                let boxHeight = Math.round(42 * TILE_SCALE);
-                let fontSize = Math.round(20 * TILE_SCALE);
-                let marginH = Math.round(2 * TILE_SCALE);
-
-                if (wordLength > 7) {
-                  // If it's longer than 7 letters, we compress it
-                  const scale = Math.max(0.65, 7.5 / wordLength);
-                  boxSize = Math.floor(38 * TILE_SCALE * scale);
-                  boxHeight = Math.floor(42 * TILE_SCALE * scale);
-                  fontSize = Math.floor(20 * TILE_SCALE * scale);
-                  marginH = Math.max(0.5, Math.floor(2 * TILE_SCALE * scale));
-                }
-
-                return (
-                  <View key={segIdx} style={styles.wordRow}>
-                    {/* Divider between words */}
-                    {segIdx > 0 && (
-                      <View style={styles.wordDivider}>
-                        <View style={styles.wordDividerLine} />
-                      </View>
-                    )}
-
-                    {/* Letter boxes for this word */}
-                    <View style={styles.wordRowBoxes}>
-                      {Array.from(seg.letters).map((_, letterIdx) => {
-                        const idx = seg.startIdx + letterIdx;
-                        const ch = (isCorrect && originalWord) ? (originalWord[idx] || guess[idx] || "") : (guess[idx] || "");
-                        const isFixed = fixedLetters.includes(idx);
-                        const isWrong = wrongLetters.includes(idx);
-                        const isSelected = selectedBoxIndex === idx && !isFixed;
-                        const animatedStyle = { transform: [{ scale: scaleAnims[idx] }] };
-
-                        return (
-                          <TouchableOpacity
-                            key={idx}
-                            onPress={() => selectLetterBox(idx)}
-                            activeOpacity={0.7}
-                          >
-                            <Animated.View style={animatedStyle}>
-                              <View
-                                style={[
-                                  styles.letterBox,
-                                  { width: boxSize, height: boxHeight, marginHorizontal: marginH },
-                                  isSelected && styles.letterBoxSelected,
-                                  isCorrect && styles.letterBoxCorrect,
-                                  isFixed && styles.letterBoxFixed,
-                                  isWrong && styles.letterBoxWrong,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.letterText,
-                                    { fontSize },
-                                    isCorrect && styles.letterTextCorrect,
-                                    isFixed && styles.letterTextFixed,
-                                    isWrong && styles.letterTextWrong,
-                                  ]}
-                                >
-                                  {ch}
-                                </Text>
-                              </View>
-                            </Animated.View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+            {wordSegments.map((seg, segIdx) => (
+              <View key={segIdx} style={styles.wordRow}>
+                {segIdx > 0 && (
+                  <View style={styles.wordDivider}>
+                    <View style={styles.wordDividerLine} />
                   </View>
-                );
-              });
-            })()}
+                )}
+                <View style={styles.wordRowBoxes}>
+                  {Array.from(seg.letters).map((_, letterIdx) => {
+                    const idx = seg.startIdx + letterIdx;
+                    const ch = (isCorrect && originalWord) ? (originalWord[idx] || guess[idx] || "") : (guess[idx] || "");
+                    const isFixed = fixedLetters.includes(idx);
+                    const isWrong = wrongLetters.includes(idx);
+                    const isSelected = selectedBoxIndex === idx && !isFixed;
+                    return (
+                      <LetterTile
+                        key={idx}
+                        idx={idx}
+                        ch={ch}
+                        isFixed={isFixed}
+                        isWrong={isWrong}
+                        isSelected={isSelected}
+                        isCorrect={isCorrect}
+                        scaleAnim={scaleAnims[idx]}
+                        boxSize={seg.boxSize}
+                        boxHeight={seg.boxHeight}
+                        fontSize={seg.fontSize}
+                        marginH={seg.marginH}
+                        onSelectBox={selectLetterBox}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
           </Animated.View>
         </View>
 
@@ -1518,27 +1696,32 @@ export default function GameplayScreen({ navigation, route }) {
                 {row.map((key) => {
                   const isSpecial = key === "DELETE_ONE" || key === "CLEAR_ALL";
                   const isDimmed = revealedKeys !== null && !isSpecial && !revealedKeys.has(key);
+                  // keyStyle: base differs per key type; isDimmed rarely changes → stable for React.memo
+                  const keyStyle = isDimmed
+                    ? [styles.key, key === "DELETE_ONE" && styles.deleteKey, key === "CLEAR_ALL" && styles.clearKey, styles.keyDimmed]
+                    : key === "DELETE_ONE" ? [styles.key, styles.deleteKey]
+                    : key === "CLEAR_ALL"  ? [styles.key, styles.clearKey]
+                    : styles.key;
                   return (
                     <JuicyButton
                       key={key}
-                      style={[
-                        styles.key,
-                        key === "DELETE_ONE" && styles.deleteKey,
-                        key === "CLEAR_ALL" && styles.clearKey,
-                        isDimmed && styles.keyDimmed,
-                      ]}
+                      style={keyStyle}
                       disabled={isDimmed}
-                      onPress={() => onKeyPress(key)}
+                      onPress={keyHandlers[key]}
                       onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
                       onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
                       intensity={key === "CLEAR_ALL" ? "medium" : "light"}
                       scaleDown={0.88}
                     >
                       {key === "DELETE_ONE" ? (
-                        <Image
-                          source={require("../../assets/images/delete_one.png")}
-                          style={styles.deleteIcon}
-                        />
+                        Platform.OS === "android" ? (
+                          <Text style={styles.deleteIconText}>⌫</Text>
+                        ) : (
+                          <Image
+                            source={require("../../assets/images/delete_one.png")}
+                            style={styles.deleteIcon}
+                          />
+                        )
                       ) : key === "CLEAR_ALL" ? (
                         <Image
                           source={require("../../assets/icons/trash.png")}
@@ -1571,7 +1754,6 @@ export default function GameplayScreen({ navigation, route }) {
         <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowWheel(false); setShowShop(true); }} />
         <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
         <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} />
-        <VenezolanometroModal visible={showVenezolanometro} onClose={() => setShowVenezolanometro(false)} />
         <AdRemovalModal visible={showAdRemoval} onClose={() => setShowAdRemoval(false)} />
 
         {/* DEV: Saltar a nivel */}
@@ -1645,7 +1827,7 @@ export default function GameplayScreen({ navigation, route }) {
                   <Text style={styles.regRewardLabel}>Diamantes</Text>
                 </View>
               </View>
-              <Text style={styles.regTagline}>¡No cuesta nada y ganas un chingo! 🌶️</Text>
+              <Text style={styles.regTagline}>¡No cuesta nada y ganas un montón! 🌶️</Text>
               <TouchableOpacity
                 style={styles.regBtn}
                 onPress={() => { setShowAuthPrompt(false); setShowRegisterLure(true); }}
@@ -1733,40 +1915,52 @@ export default function GameplayScreen({ navigation, route }) {
 
               <View style={styles.coinsOptionsRow}>
                 {/* Gratis */}
-                <View style={styles.coinsOption}>
-                  <View style={styles.coinsOptionBadge}>
-                    <Text style={styles.coinsOptionBadgeText}>GRATIS</Text>
-                  </View>
-                  <Image
-                    source={require("../../assets/images/coin.png")}
-                    style={styles.coinsOptionImage}
-                  />
-                  <Text style={styles.coinsOptionAmount}>25</Text>
-                  <TouchableOpacity
-                    style={[styles.coinsOptionBtn, { backgroundColor: "#4CAF50" }]}
-                    onPress={async () => {
-                      if (userId) {
-                        await updateUserCurrency({ userId, coins: 25 });
-                      }
-                      setShowCoinsModal(false);
-                      setPendingAction(null);
-                      // Coin fly en pantalla principal (modal ya cerrado)
-                      const target = await getCoinPillTarget();
-                      triggerMainCoin({
-                        fromX: COIN_CENTER_X,
-                        fromY: COIN_CENTER_Y,
-                        toX: target.x + target.w / 2,
-                        toY: target.y + target.h / 2,
-                        coins: 25,
-                        onAllArrived: () => topBarRef.current?.triggerBounce(),
-                      });
-                    }}
-                  >
-                    <Text style={styles.coinsOptionBtnText}>Gratis</Text>
-                  </TouchableOpacity>
-                </View>
+                {(() => {
+                  const cooldownMs = shopState?.freeCooldownRemaining ?? 0;
+                  const onCooldown = cooldownMs > 0;
+                  const hoursLeft = Math.ceil(cooldownMs / (1000 * 60 * 60));
+                  return (
+                    <View style={styles.coinsOption}>
+                      <View style={styles.coinsOptionBadge}>
+                        <Text style={styles.coinsOptionBadgeText}>GRATIS</Text>
+                      </View>
+                      <Image
+                        source={require("../../assets/images/coin.png")}
+                        style={styles.coinsOptionImage}
+                      />
+                      <Text style={styles.coinsOptionAmount}>25</Text>
+                      <TouchableOpacity
+                        style={[styles.coinsOptionBtn, { backgroundColor: onCooldown ? "#8A8A8A" : "#4CAF50" }]}
+                        disabled={onCooldown}
+                        onPress={async () => {
+                          if (!userId) return;
+                          try {
+                            await claimFreeCoins({ userId });
+                          } catch {
+                            return; // cooldown activo
+                          }
+                          setShowCoinsModal(false);
+                          setPendingAction(null);
+                          const target = await getCoinPillTarget();
+                          triggerMainCoin({
+                            fromX: COIN_CENTER_X,
+                            fromY: COIN_CENTER_Y,
+                            toX: target.x + target.w / 2,
+                            toY: target.y + target.h / 2,
+                            coins: 25,
+                            onAllArrived: () => topBarRef.current?.triggerBounce(),
+                          });
+                        }}
+                      >
+                        <Text style={styles.coinsOptionBtnText}>
+                          {onCooldown ? `${hoursLeft}h` : "Gratis"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
 
-                {/* Panas (use earned coins) */}
+                {/* Cuates — compartir con un amigo, 1 vez al día */}
                 <View style={styles.coinsOption}>
                   <Image
                     source={require("../../assets/images/coin.png")}
@@ -1776,24 +1970,37 @@ export default function GameplayScreen({ navigation, route }) {
                   <TouchableOpacity
                     style={[styles.coinsOptionBtn, { backgroundColor: "#4CAF50" }]}
                     onPress={async () => {
-                      if (userId) {
-                        await updateUserCurrency({ userId, coins: 50 });
+                      if (!userId) return;
+                      try {
+                        const result = await Share.share({
+                          message:
+                            "¡Juega Mexicanario y aprende palabras mexicanas! 🇲🇽🌮\nhttps://mexicanario.com",
+                          title: "Mexicanario",
+                        });
+                        if (result.action === Share.sharedAction) {
+                          const claim = await claimShareReward({ userId });
+                          if (claim.alreadyClaimed) {
+                            Alert.alert("Ya compartiste hoy", "Vuelve mañana para ganar más monedas 🌮");
+                            return;
+                          }
+                          setShowCoinsModal(false);
+                          setPendingAction(null);
+                          const target = await getCoinPillTarget();
+                          triggerMainCoin({
+                            fromX: COIN_CENTER_X,
+                            fromY: COIN_CENTER_Y,
+                            toX: target.x + target.w / 2,
+                            toY: target.y + target.h / 2,
+                            coins: 50,
+                            onAllArrived: () => topBarRef.current?.triggerBounce(),
+                          });
+                        }
+                      } catch (e) {
+                        console.error("Share error:", e);
                       }
-                      setShowCoinsModal(false);
-                      setPendingAction(null);
-                      // Coin fly en pantalla principal (modal ya cerrado)
-                      const target = await getCoinPillTarget();
-                      triggerMainCoin({
-                        fromX: COIN_CENTER_X,
-                        fromY: COIN_CENTER_Y,
-                        toX: target.x + target.w / 2,
-                        toY: target.y + target.h / 2,
-                        coins: 50,
-                        onAllArrived: () => topBarRef.current?.triggerBounce(),
-                      });
                     }}
                   >
-                    <Text style={styles.coinsOptionBtnText}>Panas</Text>
+                    <Text style={styles.coinsOptionBtnText}>Cuates</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -1813,7 +2020,7 @@ export default function GameplayScreen({ navigation, route }) {
                     onPress={() => {
                       const shown = showAd(async () => {
                         if (userId) {
-                          await updateUserCurrency({ userId, coins: 75 });
+                          await updateUserCurrency({ userId, coins: 40 });
                         }
                         setShowCoinsModal(false);
                         setPendingAction(null);
@@ -1823,14 +2030,14 @@ export default function GameplayScreen({ navigation, route }) {
                           fromY: COIN_CENTER_Y,
                           toX: target.x + target.w / 2,
                           toY: target.y + target.h / 2,
-                          coins: 75,
+                          coins: 40,
                           onAllArrived: () => topBarRef.current?.triggerBounce(),
                         });
                       });
                       if (!shown) {
                         // Ad no disponible en Expo Go — dar monedas directamente en dev
                         if (__DEV__ && userId) {
-                          updateUserCurrency({ userId, coins: 75 }).then(async () => {
+                          updateUserCurrency({ userId, coins: 40 }).then(async () => {
                             setShowCoinsModal(false);
                             setPendingAction(null);
                             const target = await getCoinPillTarget();
@@ -1838,7 +2045,7 @@ export default function GameplayScreen({ navigation, route }) {
                               fromX: COIN_CENTER_X, fromY: COIN_CENTER_Y,
                               toX: target.x + target.w / 2,
                               toY: target.y + target.h / 2,
-                              coins: 75,
+                              coins: 40,
                               onAllArrived: () => topBarRef.current?.triggerBounce(),
                             });
                           });
@@ -1871,216 +2078,76 @@ export default function GameplayScreen({ navigation, route }) {
 
         <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
 
-        {/* ══════════════════════════════════════════════════════════
-             VICTORY SCREEN — full dark overlay
-             ══════════════════════════════════════════════════════════ */}
-        <Modal visible={showLevelUp} transparent animationType="fade" statusBarTranslucent>
-          <View style={styles.victoryOverlay}>
+        {/* Victory screen — extracted to VictoryModal component */}
+        <VictoryModal
+          visible={showLevelUp}
+          onContinue={() => {
+            setShowLevelUp(false);
+            if (isMapReview) { navigation.navigate("Map"); return; }
+            if (completedLevelsRef.current % 3 === 0 && completedLevelsRef.current > 0) { showInterstitial(); }
+            skipNextInitRef.current = false;
+            initGame();
+          }}
+          onHome={() => { setShowLevelUp(false); navigation.navigate("MainMenu"); }}
+          onShare={handleShare}
+          isMapReview={isMapReview}
+          isReviewMode={isReviewMode}
+          isLastLevel={levelInfo?.isLastLevel}
+          petHasPet={petState?.hasPet}
+          maxCombo={maxCombo}
+          victoryPhrase={getVictoryPhrase(victoryLevel)}
+          word={victoryWord || mexicanWord}
+          example={victoryExample}
+          region={victoryRegion}
+          zoneCompleted={zoneCompleted}
+          zoneCompletedNext={zoneCompletedNext}
+          levelCurrent={levelInfo?.level || 1}
+          totalLevels={totalLevels}
+          diamonds={levelUpReward?.diamonds || 0}
+          coins={levelUpReward?.coins || 0}
+          flyOverlay={
+            <>
+              <CoinFlyOverlay coins={victoryCoins} particles={victoryCoinParticles} onCoinArrived={onVictoryCoinArrived} />
+              <DiamondFlyOverlay diamonds={victoryDiamonds} particles={victoryDiamondParticles} onDiamondArrived={onVictoryDiamondArrived} />
+            </>
+          }
+        />
 
-            {/* ── Confetti burst (behind everything) ── */}
-            <View style={styles.confettiContainer} pointerEvents="none">
-              {confettiAnims.map((p, i) => (
-                <Animated.View
-                  key={i}
-                  style={{
-                    position: "absolute",
-                    width: p.size,
-                    height: p.size,
-                    borderRadius: p.size / 2,
-                    backgroundColor: p.color,
-                    opacity: p.opacity,
-                    transform: [
-                      { translateY: p.y },
-                      { translateX: p.x },
-                      { scale: p.scale },
-                      { rotate: p.rotation.interpolate({ inputRange: [0, 6], outputRange: ["0deg", "1080deg"] }) },
-                    ],
-                  }}
-                />
-              ))}
-            </View>
-
-            {/* ── Main content ── */}
-            <View style={styles.victoryContent}>
-
-              {/* ── Trophy / mascot area (emoji for perf — avoids 2nd 3D canvas) ── */}
-              <View style={styles.victoryIconWrap}>
-                <Text style={styles.victoryIconEmoji}>
-                  {petState?.hasPet ? "🎉" : "🎁"}
-                </Text>
-              </View>
-
-              {/* ── Combo info in victory modal ── */}
-              {maxCombo >= 3 && (
-                <Text style={styles.victoryComboInfo}>
-                  🔥 ¡Combo máximo: x{maxCombo}!
-                </Text>
-              )}
-
-              {/* ── Celebration phrase (rotates by level) ── */}
-              <Text style={styles.victoryCelebration}>{getVictoryPhrase(victoryLevel)}</Text>
-
-              {/* ── Guessed word (frozen snapshot) + botón de pronunciación ── */}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={styles.victoryPhrase}>
-                  {victoryWord
-                    ? `¡${victoryWord.charAt(0) + victoryWord.slice(1).toLowerCase()}!`
-                    : `¡${mexicanWord.charAt(0) + mexicanWord.slice(1).toLowerCase()}!`}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => Speech.speak(victoryWord || mexicanWord, { language: "es-MX", rate: 0.85 })}
-                  style={{ padding: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20 }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={{ fontSize: 20 }}>🔊</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* ── Review mode: "Aprendiste de tu error" ── */}
-              {isReviewMode && (
-                <View style={styles.reviewVictoryBanner}>
-                  <Text style={styles.reviewVictoryText}>🧠 ¡Aprendiste de tu error!</Text>
-                </View>
-              )}
-
-              {/* ── Zone completion banner ── */}
-              {zoneCompleted && (
-                <View style={[styles.zoneCompletedBanner, { borderColor: zoneCompleted.color }]}>
-                  <Text style={styles.zoneCompletedTitle}>
-                    🎊 ¡Conquistaste {zoneCompleted.name}! {zoneCompleted.emoji}
-                  </Text>
-                  {zoneCompletedNext && (
-                    <Text style={styles.zoneCompletedNext}>
-                      Siguiente destino: {zoneCompletedNext.emoji} {zoneCompletedNext.name}
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {/* ── Info pill: example + region (frozen snapshot) ── */}
-              {(victoryExample || victoryRegion) ? (
-                <View style={styles.victoryInfoCard}>
-                  {victoryExample ? (
-                    <>
-                      <Text style={styles.victoryExampleLabel}>Ejemplo de uso:</Text>
-                      <Text style={styles.victoryExample}>"{victoryExample}"</Text>
-                    </>
-                  ) : null}
-                  {victoryRegion ? (
-                    <View style={styles.victoryRegionRow}>
-                      <Text style={styles.victoryRegionDot}>📍</Text>
-                      <Text style={styles.victoryRegionLabel}>{victoryRegion}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {/* ── Progress ring  (nivel X / total) ── */}
-              <View style={styles.progressRingWrap}>
-                {/* Outer ring background */}
-                <View style={styles.progressRingOuter}>
-                  {/* Filled arc — simple approach: colored left half + rotate right half */}
-                  {(() => {
-                    const current = levelInfo?.level || 1;
-                    const total = totalLevels || 50;
-                    const pct = Math.min(current / total, 1);
-                    const deg = pct * 360;
-                    return (
-                      <>
-                        {/* Left half (always teal) */}
-                        <View style={[styles.progressHalf, styles.progressHalfLeft]}>
-                          <View
-                            style={[
-                              styles.progressHalfInner,
-                              { transform: [{ rotate: `${deg <= 180 ? deg : 180}deg` }] },
-                              { backgroundColor: "#E9967A" },
-                            ]}
-                          />
-                        </View>
-                        {/* Right half — only visible if > 50% */}
-                        {deg > 180 && (
-                          <View style={[styles.progressHalf, styles.progressHalfRight]}>
-                            <View
-                              style={[
-                                styles.progressHalfInner,
-                                { transform: [{ rotate: `${deg - 180}deg` }] },
-                                { backgroundColor: "#E9967A" },
-                              ]}
-                            />
-                          </View>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  {/* Inner circle (gift icon) */}
-                  <View style={styles.progressRingInner}>
-                    <Text style={styles.progressRingGift}>🎁</Text>
-                  </View>
-                </View>
-
-                {/* Counter label */}
-                <Text style={styles.progressLabel}>
-                  {levelInfo?.level || 1}/{totalLevels}
-                </Text>
-              </View>
-
-              {/* ── Rewards row ── */}
-              <View style={styles.victoryRewardRow}>
-                <View style={styles.victoryRewardPill}>
-                  <Text style={{ fontSize: 16 }}>🐾</Text>
-                  <Text style={styles.victoryRewardText}>+Vínculo</Text>
-                </View>
-                <View style={styles.victoryRewardPill}>
-                  <Image source={require("../../assets/icons/diamond.png")} style={styles.victoryRewardIcon} />
-                  <Text style={styles.victoryRewardText}>+{levelUpReward?.diamonds || 0}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* ── Bottom actions ── */}
-            <View style={styles.victoryBottomActions}>
-              <TouchableOpacity
-                style={styles.victoryContinueBtn}
-                onPress={() => {
-                  setShowLevelUp(false);
-                  if (isMapReview) {
-                    // Return to map after a repaso — no progress change
-                    navigation.navigate("Map");
-                    return;
-                  }
-                  skipNextInitRef.current = false; // allow initGame() again
-                  initGame();
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.victoryContinueText}>
-                  {isMapReview ? "🗺️ Volver al mapa" : levelInfo?.isLastLevel ? "Reiniciar desde el inicio 🔄" : "Continuar"}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.victorySecondaryBtns}>
-                <TouchableOpacity
-                  style={styles.victoryCircleBtn}
-                  onPress={() => { setShowLevelUp(false); navigation.navigate("MainMenu"); }}
-                >
-                  <Text style={styles.victoryCircleBtnIcon}>🏠</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.victoryCircleBtn} onPress={handleShare}>
-                  <Text style={styles.victoryCircleBtnIcon}>📤</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Coin fly overlay dentro del modal de victoria */}
-            <CoinFlyOverlay coins={victoryCoins} particles={victoryCoinParticles} onCoinArrived={onVictoryCoinArrived} />
-
-          </View>
-        </Modal>
 
       </SafeAreaView>
 
-      {/* Coin fly overlay — fuera de SafeAreaView para usar coordenadas absolutas de pantalla */}
+      {/* Rewarded ad proactive offer — shown on 3rd wrong attempt */}
+      <Modal visible={showRewardedOffer && !showLevelUp} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.rewardedOfferOverlay}
+          activeOpacity={1}
+          onPress={() => setShowRewardedOffer(false)}
+        >
+          <View style={styles.rewardedOfferCard} onStartShouldSetResponder={() => true}>
+            <StageCropped petType={petState?.petType ?? "ajolote"} stage={petState?.stage ?? 1} size={90} />
+            <Text style={styles.rewardedOfferTitle}>
+              Tu {petState?.petName || "mascota"} quiere ayudarte 🥺
+            </Text>
+            <Text style={styles.rewardedOfferSub}>
+              ¡Mira 30 segundos y gana 75 monedas!
+            </Text>
+            <TouchableOpacity
+              style={styles.rewardedOfferBtn}
+              onPress={() => {
+                setShowRewardedOffer(false);
+                showAd(() => updateUserCurrency({ userId, coins: 40, diamonds: 0 }).catch(() => { }));
+              }}
+            >
+              <Text style={styles.rewardedOfferBtnText}>Ver video 📺 +40 🪙</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowRewardedOffer(false)} style={{ marginTop: 12 }}>
+              <Text style={styles.rewardedOfferDismiss}>No gracias</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Main coin fly — shown when no modal is open (ad reward flow) */}
       <CoinFlyOverlay coins={mainCoins} particles={mainCoinParticles} onCoinArrived={onMainCoinArrived} />
 
       {/* Onboarding tutorial — shown only on first play */}
@@ -2101,6 +2168,18 @@ export default function GameplayScreen({ navigation, route }) {
           />
         );
       })()}
+
+      {/* VictoryShareCard — rendered offscreen for image capture, never visible to user */}
+      <VictoryShareCard
+        ref={victoryShareRef}
+        word={victoryWord}
+        example={victoryExample}
+        region={victoryRegion}
+        comboCount={maxCombo}
+        petType={petState?.petType}
+        stage={petState?.stage ?? 1}
+        style={{ position: "absolute", left: -9999, top: 0 }}
+      />
 
     </ImageBackground>
   );
@@ -2202,6 +2281,7 @@ const styles = StyleSheet.create({
 
   // ── Letter Boxes ────────────────────────────────────────────────────────────
   wordBoxesContainer: {
+    width: "100%",
     justifyContent: "flex-start",
     alignItems: "center",
     marginTop: 8,
@@ -2298,18 +2378,21 @@ const styles = StyleSheet.create({
   // ── Keyboard container ──────────────────────────────────────────────────────
   keyboardContainer: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: KEYBOARD_HEIGHT,
-    backgroundColor: "#EAECEE",
+    bottom: TABLET_MODE ? 20 : 0,
+    // Tablet: near-full-width floating card (like iPad system keyboard) with small margins.
+    // Phone: full-width, sticks to bottom edge.
+    left: TABLET_MODE ? 16 : 0,
+    right: TABLET_MODE ? 16 : 0,
+    borderRadius: TABLET_MODE ? 20 : 0,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    height: KEYBOARD_HEIGHT,
+    backgroundColor: "#EAECEE",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 12,
+    shadowOffset: { width: 0, height: TABLET_MODE ? 6 : -3 },
+    shadowOpacity: TABLET_MODE ? 0.28 : 0.12,
+    shadowRadius: TABLET_MODE ? 14 : 8,
+    elevation: 16,
   },
 
   // ── Power-up row ────────────────────────────────────────────────────────────
@@ -2317,11 +2400,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: 8,
-    paddingHorizontal: 10,
-    marginBottom: 6,
-    maxWidth: 500,
-    alignSelf: "center",
+    paddingTop: TABLET_MODE ? 14 : 8,
+    paddingHorizontal: 14,
+    marginBottom: TABLET_MODE ? 10 : 6,
     width: "100%",
   },
   powerUpBtn: {
@@ -2375,39 +2456,39 @@ const styles = StyleSheet.create({
   // ── Keyboard ────────────────────────────────────────────────────────────────
   keyboard: {
     width: "100%",
-    paddingVertical: 4,
+    paddingVertical: TABLET_MODE ? 8 : 4,
     paddingHorizontal: 14,
   },
   keyboardRow: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 7,
+    marginBottom: TABLET_MODE ? 10 : 7,
   },
   key: {
-    width: TABLET_MODE ? 42 : 32,
-    height: TABLET_MODE ? 56 : 54,
-    marginHorizontal: TABLET_MODE ? 2 : 2,
+    width: TABLET_KEY_W,
+    height: TABLET_MODE ? 84 : 54,
+    marginHorizontal: _KB_MARGIN,
     backgroundColor: "white",
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: TABLET_MODE ? 3 : 2.5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 2,
     elevation: 3,
   },
-  deleteKey: { width: TABLET_MODE ? 64 : 52, backgroundColor: "#C8C8D0" },
-  clearKey: { width: TABLET_MODE ? 64 : 52, backgroundColor: "#C8C8D0" },
+  deleteKey: { width: TABLET_SPECIAL_W, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
+  clearKey: { width: TABLET_SPECIAL_W, backgroundColor: "#C8C8D0" },
   keyDimmed: { backgroundColor: "#D0D0D8", opacity: 0.25 },
   keyText: {
-    fontSize: TABLET_MODE ? 21 : 18,
+    fontSize: TABLET_MODE ? 24 : 18,
     fontWeight: "800",
     color: "#1A5276",
   },
-  deleteIcon: { width: TABLET_MODE ? 28 : 22, height: TABLET_MODE ? 28 : 22, tintColor: "#1A5276" },
-  clearIcon: { width: TABLET_MODE ? 28 : 22, height: TABLET_MODE ? 28 : 22, tintColor: "#C0392B" },
+  deleteIcon: { width: TABLET_MODE ? 32 : 22, height: TABLET_MODE ? 32 : 22, tintColor: "#1A5276" },
+  deleteIconText: { fontSize: TABLET_MODE ? 28 : 20, color: "#1A5276" },
+  clearIcon: { width: TABLET_MODE ? 32 : 22, height: TABLET_MODE ? 32 : 22, tintColor: "#C0392B" },
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   modalOverlay: {
@@ -3106,6 +3187,49 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.65)",
     fontSize: 12,
     textAlign: "center",
+  },
+
+  // ── Rewarded offer bottom sheet ──────────────────────────────────────────
+  rewardedOfferOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  rewardedOfferCard: {
+    backgroundColor: "#1A0A00",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 28,
+    alignItems: "center",
+  },
+  rewardedOfferTitle: {
+    color: "#FFE4B5",
+    fontSize: 18,
+    fontWeight: "900",
+    textAlign: "center",
+    marginTop: 12,
+  },
+  rewardedOfferSub: {
+    color: "rgba(255,228,181,0.7)",
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  rewardedOfferBtn: {
+    backgroundColor: "#D36B1E",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  rewardedOfferBtnText: {
+    color: "white",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  rewardedOfferDismiss: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 13,
   },
 });
 

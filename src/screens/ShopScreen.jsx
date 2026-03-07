@@ -30,10 +30,9 @@ import { useRewardedAd } from "../hooks/useRewardedAd";
 import { notifySuccess } from "../services/haptics";
 import {
   PAYWALL_RESULT,
-  presentCustomerCenter,
   presentMexicanarioPlusPaywall,
   purchaseProduct,
-  restorePurchases,
+  restorePurchases
 } from "../services/RevenueCatService";
 import { FONTS } from "../theme/designTokens";
 import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
@@ -97,17 +96,6 @@ const SKINS_PREMIUM = [
   { id: "skin_azteca", qty: 1, label: "Guerrero Azteca", icon: "🦅", price: "5,000", currency: "coins", badge: "MEJOR VALOR" },
 ];
 
-// Contenido +18
-const CONTENIDO_ADULTO = [
-  {
-    id: "content_insultos", qty: 1, label: "Insultos Finos", icon: "🌶️", price: "1,000", currency: "coins",
-    desc: "Léxico picante de alto nivel cultural 😏"
-  },
-  {
-    id: "content_suegra", qty: 1, label: "Diccionario de la Suegra", icon: "👵", price: "1,000", currency: "coins",
-    desc: "El vocabulario más temido de México 😅"
-  },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatCooldown(ms) {
@@ -165,7 +153,7 @@ function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, o
         activeOpacity={ready ? 0.75 : 1}
       >
         <Image source={require("../../assets/icons/coin.png")} style={s.gratisIcon} />
-        <Text style={s.gratisAmount}>25</Text>
+        <Text style={s.gratisAmount}>15</Text>
         {ready ? (
           <View style={s.gratisBtn}><Text style={s.gratisBtnText}>Gratis</Text></View>
         ) : (
@@ -193,7 +181,7 @@ function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, o
         disabled={adAvailable && !adReady}
       >
         <Image source={require("../../assets/icons/coin.png")} style={s.gratisIcon} />
-        <Text style={s.gratisAmount}>75</Text>
+        <Text style={s.gratisAmount}>40</Text>
         <View style={[s.gratisBtn, { backgroundColor: AMBER, borderColor: "#A0541A" }]}>
           <Text style={[s.gratisBtnText, { fontSize: 11, color: "#fff" }]}>
             {adAvailable && !adReady ? "⏳" : "📺 Ad"}
@@ -246,7 +234,7 @@ function ItemRow({ items, onBuy }) {
 }
 
 // ─── Main ShopScreen ──────────────────────────────────────────────────────────
-export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false, onAdultPackPurchased }) {
+export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false }) {
   const navigation = useNavigation();
   const [buying, setBuying] = useState(false);
   const [shopMascotState, setShopMascotState] = useState("idle");
@@ -259,12 +247,10 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
   const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
-  const insultoFirstLevel = useQuery(api.levels.getAdultPackFirstLevel, { pack: "insultos" });
-  const suegraFirstLevel  = useQuery(api.levels.getAdultPackFirstLevel, { pack: "suegra" });
   const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
   const buyWithCoins = useMutation(api.shop.buyWithCoins);
-  const applyIAPPurchase  = useMutation(api.shop.applyIAPPurchase);
-  const syncMexPlus       = useMutation(api.shop.syncMexPlusEntitlement);
+  const applyIAPPurchase = useMutation(api.shop.applyIAPPurchase);
+  const syncMexPlus = useMutation(api.shop.syncMexPlusEntitlement);
   const buyPetFood = useMutation(api.pet.buyPetFood);
   const buyStreakFreeze = useMutation(api.streaks.buyStreakFreeze);
   const updateUserCurrency = useMutation(api.users.updateUserCurrency);
@@ -373,7 +359,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
             const r = await applyIAPPurchase({ userId, itemId: item.id, receiptToken });
             notifySuccess();
             const t = getDiamondPillFallback();
-            const diamonds = (r.diamonds ?? 0) - (shopState?.diamonds ?? 0);
+            const diamonds = r.diamondsGranted ?? 0;
             if (diamonds > 0) {
               triggerDiamondFly({
                 fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
@@ -398,50 +384,6 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
       return;
     }
 
-    // +18 age gate
-    if (item.id === "content_insultos" || item.id === "content_suegra") {
-      await new Promise((resolve) => {
-        Alert.alert(
-          "🔞 Contenido para Adultos",
-          `"${item.label}" contiene vocabulario para mayores de 18 años.\n\n¿Confirmas que eres mayor de edad?`,
-          [
-            { text: "No, soy menor", style: "cancel", onPress: () => resolve("cancel") },
-            { text: "✅ Soy mayor de 18", onPress: () => resolve("ok") },
-          ]
-        );
-      }).then(async (choice) => {
-        if (choice !== "ok") return;
-        setBuying(true);
-        try {
-          await buyWithCoins({ userId, itemId: item.id });
-          setShopMascotState("celebrating");
-          setShopMascotBubble("¡Ándale!");
-          setTimeout(() => { setShopMascotState("idle"); setShopMascotBubble(null); }, 2500);
-          Alert.alert(
-            "🌶️ ¡Desbloqueado!",
-            `"${item.label}" ya está en tu colección.\n\n¿Qué quieres hacer?`,
-            [
-              { text: "Seguir comprando", style: "cancel" },
-              { text: "¡Jugar ahora! 🌶️", onPress: () => {
-                  onClose();
-                  const firstLevel = item.id === "content_insultos" ? insultoFirstLevel : suegraFirstLevel;
-                  if (firstLevel) {
-                    navigation.navigate("Gameplay", { reviewLevel: firstLevel });
-                  } else {
-                    navigation.navigate("Map", { scrollToAdult: item.id.replace("content_", "") });
-                  }
-                }
-              },
-            ]
-          );
-        } catch (e) {
-          Alert.alert("¡Aguas!", e.message ?? "No se pudo comprar");
-        } finally {
-          setBuying(false);
-        }
-      });
-      return;
-    }
 
     setBuying(true);
     try {
@@ -487,7 +429,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
         fromY: height * 0.65,
         toX: t.x + t.w / 2,
         toY: t.y + t.h / 2,
-        coins: r.coinsAdded ?? 25,
+        coins: r.coinsAdded ?? 15,
       });
     } catch (e) {
       Alert.alert("Espérate", e.message ?? "Error");
@@ -500,7 +442,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
     const shown = showAd(async () => {
       if (!userId) return;
       try {
-        await updateUserCurrency({ userId, coins: 75 });
+        await updateUserCurrency({ userId, coins: 40 });
         notifySuccess();
         const t = getCoinPillFallback();
         triggerCoinFly({
@@ -508,14 +450,14 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           fromY: height * 0.65,
           toX: t.x + t.w / 2,
           toY: t.y + t.h / 2,
-          coins: 75,
+          coins: 40,
         });
       } catch { }
     });
 
     // En Expo Go (__DEV__ sin módulo nativo) dar monedas directamente
     if (!shown && __DEV__ && userId) {
-      updateUserCurrency({ userId, coins: 75 }).then(() => {
+      updateUserCurrency({ userId, coins: 40 }).then(() => {
         notifySuccess();
         const t = getCoinPillFallback();
         triggerCoinFly({
@@ -523,7 +465,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           fromY: height * 0.65,
           toX: t.x + t.w / 2,
           toY: t.y + t.h / 2,
-          coins: 75,
+          coins: 40,
         });
       });
     }
@@ -642,23 +584,6 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
             ))}
           </View>
 
-          {/* Contenido +18 */}
-          <SectionBanner title="Contenido +18 🔞" />
-          <View style={s.adultBanner}>
-            <Text style={s.adultBannerText}>🔞 Requiere confirmar mayoría de edad</Text>
-          </View>
-          {CONTENIDO_ADULTO.map((item) => (
-            <TouchableOpacity key={item.id} style={s.adultCard} onPress={() => handleBuyItem(item)} activeOpacity={0.82}>
-              <Text style={s.adultIcon}>{item.icon}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.adultLabel}>{item.label}</Text>
-                <Text style={s.adultDesc}>{item.desc}</Text>
-              </View>
-              <View style={s.adultPricePill}>
-                <Text style={s.adultPriceText}>🪙 {item.price}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
 
           {/* Mexicanario Plus */}
           <SectionBanner title="Mexicanario Plus ⭐" />
@@ -760,6 +685,7 @@ const SCROLL_PAD_TOP = CLOSE_BTN_TOP + Math.round(width * 0.1) + 14;
 const s = StyleSheet.create({
   bg: {
     flex: 1,
+    backgroundColor: "#7FAAB8",
   },
 
   // Header Tienda — estilo Mexicanómetro
@@ -987,82 +913,85 @@ const s = StyleSheet.create({
   plusCard: {
     marginHorizontal: width * 0.04,
     marginBottom: height * 0.025,
-    borderRadius: 20,
+    borderRadius: width * 0.05,
     overflow: "hidden",
     borderWidth: 2.5,
-    borderColor: "#9C6FDE",
-    backgroundColor: "#1A0A33",
+    borderColor: GOLD,
+    backgroundColor: WHEAT,
   },
   plusHeader: {
-    backgroundColor: "#2D1259",
+    backgroundColor: AMBER,
     paddingVertical: height * 0.018,
     paddingHorizontal: 18,
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#9C6FDE44",
+    borderBottomWidth: 1.5,
+    borderBottomColor: "rgba(139,69,19,0.4)",
   },
   plusBadge: {
-    color: "#F8BE17",
+    color: WHEAT,
     fontSize: width * 0.028,
     fontFamily: FONTS.bodyBold,
     letterSpacing: 2,
     marginBottom: 4,
+    opacity: 0.9,
   },
   plusTitle: {
     fontFamily: FONTS.display,
     fontSize: width * 0.065,
-    color: "#EDE0FF",
+    color: WHEAT,
     marginBottom: 4,
   },
   plusSubtitle: {
     fontFamily: FONTS.body,
     fontSize: width * 0.03,
-    color: "#B89AD4",
+    color: "rgba(255,228,181,0.85)",
     textAlign: "center",
   },
   plusBenefits: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    gap: 12,
+    gap: 10,
   },
   plusRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: WHEAT2,
     borderRadius: 12,
     padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(139,69,19,0.22)",
   },
   plusRowIcon: { fontSize: 24, lineHeight: 28 },
   plusRowTitle: {
     fontFamily: FONTS.bodyBold,
-    color: "#EDE0FF",
+    color: BROWN,
     fontSize: width * 0.036,
     marginBottom: 2,
   },
   plusRowDesc: {
     fontFamily: FONTS.body,
-    color: "#B89AD4",
+    color: "#7A4020",
     fontSize: width * 0.029,
   },
   plusBtn: {
     marginHorizontal: 16,
     marginBottom: 10,
-    backgroundColor: "#9C6FDE",
+    backgroundColor: GOLD,
     borderRadius: 30,
     paddingVertical: height * 0.018,
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#C4A8FF",
+    borderColor: ACTION_BORDER,
   },
   plusBtnText: {
     fontFamily: FONTS.bodyBold,
-    color: "#fff",
+    color: ACTION_TEXT,
     fontSize: width * 0.04,
   },
   plusDisclaimer: {
     fontFamily: FONTS.body,
-    color: "#7A5EA8",
+    color: "#9A6030",
     fontSize: width * 0.027,
     textAlign: "center",
     marginBottom: 14,

@@ -34,11 +34,11 @@ const CARD_W = Math.min(width * 0.88, 380);
 const STORAGE_KEY_DATE = "@mexicanario_daily_reward_date";
 const STORAGE_KEY_DAY  = "@mexicanario_daily_reward_day";
 
-const DAY_REWARDS = [10, 15, 20, 25, 30, 40, null]; // null = Piñata (día 7)
+const DAY_REWARDS = [5, 8, 10, 12, 15, 18, null]; // null = Piñata (día 7)
 const DAY_LABELS  = ["Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "🪅 Día 7"];
 
 function getPiñataReward() {
-  return Math.floor(Math.random() * 151) + 50; // 50-200
+  return Math.floor(Math.random() * 76) + 25; // 25-100
 }
 
 function getTodayString() {

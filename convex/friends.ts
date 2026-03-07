@@ -1,20 +1,20 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 
 // ── SHA-256 usando Web Crypto API (disponible en V8 runtime de Convex) ────────
 async function hashPassword(password: string): Promise<string> {
-  const enc  = new TextEncoder();
+  const enc = new TextEncoder();
   const data = enc.encode(password);
-  const buf  = await crypto.subtle.digest("SHA-256", data);
+  const buf = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
 
 function cleanUsername(u: string) {
-  return u.toLowerCase().trim();
+  return u.replace(/^@/, "").toLowerCase().trim();
 }
 
 function validateUsername(u: string): string | null {
@@ -25,27 +25,27 @@ function validateUsername(u: string): string | null {
 }
 
 // ── Recompensa de registro (solo primera vez) ─────────────────────────────────
-const REGISTER_COINS    = 500;
+const REGISTER_COINS = 500;
 const REGISTER_DIAMONDS = 5;
 
 // ── Registrar cuenta (añade email + contraseña + username al usuario anónimo) ─
 // Devuelve { success, coinsAdded, diamondsAdded } solo en primera inscripción
-export const registerAccount = mutation({
+export const registerAccountInDb = internalMutation({
   args: {
-    userId:           v.id("users"),
-    email:            v.string(),
-    password:         v.string(),
-    username:         v.string(),
+    userId: v.id("users"),
+    email: v.string(),
+    password: v.string(),
+    username: v.string(),
     referrerUsername: v.optional(v.string()),  // username del cuate que invitó
   },
   handler: async (ctx, { userId, email, password, username, referrerUsername }) => {
-    const uname      = cleanUsername(username);
+    const uname = cleanUsername(username);
     const emailLower = email.toLowerCase().trim();
 
     const err = validateUsername(uname);
-    if (err) throw new Error(err);
+    if (err) throw new ConvexError(err);
 
-    if (password.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres");
+    if (password.length < 6) throw new ConvexError("La contraseña debe tener al menos 6 caracteres");
 
     // Correo no debe estar en otra cuenta
     const emailConflict = await ctx.db
@@ -53,7 +53,7 @@ export const registerAccount = mutation({
       .withIndex("by_email", (q) => q.eq("email", emailLower))
       .first();
     if (emailConflict && emailConflict._id !== userId) {
-      throw new Error("Este correo ya tiene una cuenta. Usa 'Entrar' en su lugar.");
+      throw new ConvexError("Este correo ya tiene una cuenta. Usa 'Entrar' en su lugar.");
     }
 
     // Username único
@@ -62,7 +62,7 @@ export const registerAccount = mutation({
       .withIndex("by_username", (q) => q.eq("username", uname))
       .first();
     if (usernameConflict && usernameConflict._id !== userId) {
-      throw new Error("Ese nombre ya lo tiene otro cuate. ¡Elige otro!");
+      throw new ConvexError("Ese nombre ya lo tiene otro cuate. ¡Elige otro!");
     }
 
     const passwordHash = await hashPassword(password);
@@ -72,13 +72,14 @@ export const registerAccount = mutation({
     const isFirstTime = !user?.email;
 
     const patch: Record<string, unknown> = {
-      email:        emailLower,
+      email: emailLower,
       passwordHash,
-      username:     uname,
+      username: uname,
+      name: uname,
     };
 
     if (isFirstTime) {
-      patch.coins    = (user?.coins    ?? 0) + REGISTER_COINS;
+      patch.coins = (user?.coins ?? 0) + REGISTER_COINS;
       patch.diamonds = (user?.diamonds ?? 0) + REGISTER_DIAMONDS;
     }
 
@@ -100,34 +101,34 @@ export const registerAccount = mutation({
             const newCount = (referrer.referralCount ?? 0) + 1;
             const milestone = REFERRAL_MILESTONES.find((m) => m.count === newCount) ?? null;
 
-            const referrerCoinsGain   = COINS_REFERRER + (milestone?.coins   ?? 0);
+            const referrerCoinsGain = COINS_REFERRER + (milestone?.coins ?? 0);
             const referrerDiamondGain = milestone?.diamonds ?? 0;
 
             // Award referred user bonus on top of already-patched coins
             await ctx.db.patch(userId, {
-              coins:      (currentReferred?.coins ?? 0) + COINS_REFERRED,
+              coins: (currentReferred?.coins ?? 0) + COINS_REFERRED,
               referredBy: referrer._id,
             });
 
             // Award referrer
             await ctx.db.patch(referrer._id, {
-              coins:         (referrer.coins    ?? 0) + referrerCoinsGain,
-              diamonds:      (referrer.diamonds ?? 0) + referrerDiamondGain,
+              coins: (referrer.coins ?? 0) + referrerCoinsGain,
+              diamonds: (referrer.diamonds ?? 0) + referrerDiamondGain,
               referralCount: newCount,
             });
 
             await ctx.db.insert("referrals", {
-              referrerId:     referrer._id,
-              referredId:     userId,
-              createdAt:      Date.now(),
-              coinsReferrer:  referrerCoinsGain,
-              coinsReferred:  COINS_REFERRED,
+              referrerId: referrer._id,
+              referredId: userId,
+              createdAt: Date.now(),
+              coinsReferrer: referrerCoinsGain,
+              coinsReferred: COINS_REFERRED,
               milestoneBonus: milestone ? true : undefined,
             });
 
             referralResult = {
-              coinsReferred:    COINS_REFERRED,
-              coinsReferrer:    referrerCoinsGain,
+              coinsReferred: COINS_REFERRED,
+              coinsReferrer: referrerCoinsGain,
               milestoneReached: milestone?.count ?? null,
             };
           }
@@ -139,18 +140,74 @@ export const registerAccount = mutation({
     }
 
     return {
-      success:       true,
-      coinsAdded:    isFirstTime ? REGISTER_COINS    : 0,
+      success: true,
+      coinsAdded: isFirstTime ? REGISTER_COINS : 0,
       diamondsAdded: isFirstTime ? REGISTER_DIAMONDS : 0,
-      referral:      referralResult,
+      referral: referralResult,
+      username: uname,
+      email: emailLower,
     };
+  },
+});
+
+export const registerAccount = action({
+  args: {
+    userId: v.id("users"),
+    email: v.string(),
+    password: v.string(),
+    username: v.string(),
+    referrerUsername: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // 1. Efectuar el registro en la base de datos
+    const result: any = await ctx.runMutation(internal.friends.registerAccountInDb, args);
+
+    // 2. Intentar mandar el correo de bienvenida (sin bloquear si falla)
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      try {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: "Mexicanario <onboarding@resend.dev>",
+            to: result.email,
+            subject: "¡Bienvenido a Mexicanario! 🎉",
+            html: `
+              <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #8B4513; text-align: center;">
+                <h1 style="font-size: 40px; margin-bottom: 5px;">🌮</h1>
+                <h2 style="color: #D2691E;">¡Qué onda, ${result.username}!</h2>
+                <p style="font-size: 16px; line-height: 1.5;">
+                  Ya eres oficialmente un cuate en <strong>Mexicanario</strong>. Prepárate para descubrir, jugar y aprender el lado más divertido del español de México.
+                </p>
+                <div style="background-color: #F5DEB3; border-radius: 12px; padding: 20px; margin: 20px 0; border: 2px solid #D2691E;">
+                  <h3 style="margin-top: 0; color: #8B4513;">Tu cuenta está asegurada</h3>
+                  <p style="margin-bottom: 0;">Con este correo podrás recuperar tu cuenta si algún día cambias de celular o se te olvida tu contraseña.</p>
+                </div>
+                <p style="font-size: 16px;">
+                  ¡Órale a darle duro al juego y a armar esa racha!
+                </p>
+              </div>
+            `,
+          }),
+        });
+      } catch (e) {
+        // En un registro exitoso, no queremos fallar toda la solicitud si Resend falla
+        console.error("No se pudo enviar correo de bienvenida", e);
+      }
+    }
+
+    return result;
   },
 });
 
 // ── Entrar con correo + contraseña ────────────────────────────────────────────
 export const loginWithEmail = mutation({
   args: {
-    email:    v.string(),
+    email: v.string(),
     password: v.string(),
   },
   handler: async (ctx, { email, password }) => {
@@ -161,11 +218,11 @@ export const loginWithEmail = mutation({
       .withIndex("by_email", (q) => q.eq("email", emailLower))
       .first();
 
-    if (!user) throw new Error("No encontramos una cuenta con ese correo.");
-    if (!user.passwordHash) throw new Error("Esta cuenta usa Google o Apple. Inicia sesión por ahí.");
+    if (!user) throw new ConvexError("No encontramos una cuenta con ese correo.");
+    if (!user.passwordHash) throw new ConvexError("Esta cuenta usa Google o Apple. Inicia sesión por ahí.");
 
     const hash = await hashPassword(password);
-    if (hash !== user.passwordHash) throw new Error("Contraseña incorrecta. ¡Échale otro intento!");
+    if (hash !== user.passwordHash) throw new ConvexError("Contraseña incorrecta. ¡Échale otro intento!");
 
     return { userId: user._id as string };
   },
@@ -177,15 +234,15 @@ export const setUsername = mutation({
   handler: async (ctx, { userId, username }) => {
     const uname = cleanUsername(username);
     const err = validateUsername(uname);
-    if (err) throw new Error(err);
+    if (err) throw new ConvexError(err);
 
     const taken = await ctx.db
       .query("users")
       .withIndex("by_username", (q) => q.eq("username", uname))
       .first();
-    if (taken && taken._id !== userId) throw new Error("Ese nombre ya lo tiene otro cuate. ¡Elige otro!");
+    if (taken && taken._id !== userId) throw new ConvexError("Ese nombre ya lo tiene otro cuate. ¡Elige otro!");
 
-    await ctx.db.patch(userId, { username: uname });
+    await ctx.db.patch(userId, { username: uname, name: uname });
     return { success: true };
   },
 });
@@ -208,7 +265,7 @@ export const checkUsername = query({
 // ── Buscar usuarios por prefijo de username ───────────────────────────────────
 export const searchUsers = query({
   args: {
-    query:         v.string(),
+    query: v.string(),
     excludeUserId: v.optional(v.string()),
   },
   handler: async (ctx, { query: searchTerm, excludeUserId }) => {
@@ -226,10 +283,10 @@ export const searchUsers = query({
       .filter((u) => u.username && u._id !== excludeUserId)
       .slice(0, 10)
       .map((u) => ({
-        userId:   u._id,
+        userId: u._id,
         username: u.username!,
-        name:     u.name,
-        avatar:   u.avatar,
+        name: u.name,
+        avatar: u.avatar,
       }));
   },
 });
@@ -238,7 +295,7 @@ export const searchUsers = query({
 export const addFriend = mutation({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
-    if (userId === friendId) throw new Error("No puedes agregarte a ti mismo 😅");
+    if (userId === friendId) throw new ConvexError("No puedes agregarte a ti mismo 😅");
 
     // Verificar que no exista ya
     const exists = await ctx.db
@@ -269,6 +326,40 @@ export const removeFriend = mutation({
   },
 });
 
+// ── Perfil Público (para Modal de Competencia) ────────────────────────────────
+export const getUserProfile = query({
+  args: { targetId: v.id("users") },
+  handler: async (ctx, { targetId }) => {
+    const u = await ctx.db.get(targetId);
+    if (!u) return null;
+
+    // Fetch mini-game all-time bests
+    const nahual = await ctx.db.query("nahualScores").withIndex("by_user", (q) => q.eq("userId", targetId)).first();
+    const taquero = await ctx.db.query("taqueroScores").withIndex("by_user", (q) => q.eq("userId", targetId)).first();
+    const albures = await ctx.db.query("alburesScores").withIndex("by_user", (q) => q.eq("userId", targetId)).first();
+    const loteria = await ctx.db.query("loteriaScores").withIndex("by_user", (q) => q.eq("userId", targetId)).first();
+
+    return {
+      userId: u._id,
+      username: u.username ?? null,
+      name: u.name ?? "Jugador",
+      avatar: u.avatar ?? "default",
+      tacos: u.tacos ?? 0,
+      xp: u.xp ?? 0,
+      playStreakMax: u.playStreakMax ?? 0,
+      leagueTrophies: u.leagueTrophies ?? 0,
+      bestCombo: u.bestCombo ?? 0,
+      leagueHighestDiv: u.leagueHighestDiv ?? null,
+      miniGames: {
+        nahual: nahual?.allTimeBest ?? 0,
+        taquero: taquero?.allTimeBest ?? 0,
+        albures: albures?.allTimeBest ?? 0,
+        loteria: loteria?.allTimeBest ?? 0,
+      }
+    };
+  },
+});
+
 // ── Obtener mis cuates (con info de usuario) ──────────────────────────────────
 export const getMyFriends = query({
   args: { userId: v.id("users") },
@@ -286,9 +377,9 @@ export const getMyFriends = query({
         return {
           friendId: f.friendId,
           username: u.username ?? null,
-          name:     u.name,
-          avatar:   u.avatar,
-          addedAt:  f.createdAt,
+          name: u.name,
+          avatar: u.avatar,
+          addedAt: f.createdAt,
         };
       })
     );
@@ -316,13 +407,13 @@ export const getFriendsLeaderboard = query({
     return users
       .filter(Boolean)
       .map((u) => ({
-        userId:   u!._id as string,
+        userId: u!._id as string,
         username: u!.username ?? null,
-        name:     u!.name ?? null,
-        avatar:   u!.avatar ?? null,
-        tacos:    u!.tacos ?? 0,
-        coins:    u!.coins ?? 0,
-        isSelf:   u!._id === userId,
+        name: u!.name ?? null,
+        avatar: u!.avatar ?? null,
+        tacos: u!.tacos ?? 0,
+        coins: u!.coins ?? 0,
+        isSelf: u!._id === userId,
       }))
       .sort((a, b) => b.tacos - a.tacos);
   },
@@ -339,5 +430,163 @@ export const isFriend = query({
       )
       .first();
     return !!rec;
+  },
+});
+
+// ── Recuperación de Contraseña ────────────────────────────────────────────────
+
+// 1. Generar código y guardarlo en la tabla
+export const createPasswordResetCode = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const emailLower = email.toLowerCase().trim();
+
+    // Verificar que el usuario exista y no use red social (sin passwordHash)
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .first();
+
+    if (!user) {
+      throw new ConvexError("No encontramos una cuenta con ese correo.");
+    }
+    if (!user.passwordHash) {
+      throw new ConvexError(
+        "Esta cuenta usa Google o Apple. Inicia sesión por ahí."
+      );
+    }
+
+    // Borrar códigos anteriores de este correo para evitar spam/confusión
+    const existing = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .collect();
+    for (const doc of existing) {
+      await ctx.db.delete(doc._id);
+    }
+
+    // Generar código de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutos
+
+    await ctx.db.insert("passwordResets", {
+      email: emailLower,
+      code,
+      expiresAt,
+    });
+
+    return { code, username: user.username || "cuate" };
+  },
+});
+
+// 2. Acción expuesta al cliente para solicitar el reseteo (envía el correo)
+export const requestPasswordReset = action({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      throw new ConvexError("Servicio de correos no configurado (falta API Key)");
+    }
+
+    // Obtener código
+    const { code, username } = await ctx.runMutation(internal.friends.createPasswordResetCode, { email });
+
+    // Enviar correo vía Resend
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Mexicanario <onboarding@resend.dev>",
+        to: email.toLowerCase().trim(),
+        subject: "Código de recuperación - Mexicanario",
+        html: `
+          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #8B4513;">
+            <h2>¡Hola, ${username}! 🌮</h2>
+            <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta en Mexicanario.</p>
+            <p>Tu código de recuperación es:</p>
+            <h1 style="background: #F8BE17; color: #8B4513; padding: 10px; text-align: center; border-radius: 8px; letter-spacing: 4px;">
+              ${code}
+            </h1>
+            <p>Este código expira en 15 minutos.</p>
+            <p>Si no pediste esto, simplemente ignora el correo. ¡Nos vemos en el juego!</p>
+          </div>
+        `,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("Resend Error:", errorText);
+      throw new ConvexError("No pudimos enviar el correo. Intenta de nuevo más tarde.");
+    }
+
+    return { success: true };
+  },
+});
+
+// 3. Verificar código y cambiar contraseña
+export const resetPassword = mutation({
+  args: {
+    email: v.string(),
+    code: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, { email, code, newPassword }) => {
+    const emailLower = email.toLowerCase().trim();
+
+    if (newPassword.length < 6) {
+      throw new ConvexError("La nueva contraseña debe tener al menos 6 caracteres.");
+    }
+
+    // Buscar código
+    const resetDoc = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .filter((q) => q.eq(q.field("code"), code))
+      .first();
+
+    if (!resetDoc) {
+      throw new ConvexError("El código de verificación es incorrecto.");
+    }
+
+    if (Date.now() > resetDoc.expiresAt) {
+      // Borrar por limpieza
+      await ctx.db.delete(resetDoc._id);
+      throw new ConvexError("El código ya expiró. Solicita uno nuevo.");
+    }
+
+    // Cambiar contraseña
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .first();
+
+    if (!user) {
+      throw new ConvexError("Usuario no encontrado.");
+    }
+
+    // Usar la función hashPassword ya definida en este archivo
+    const enc = new TextEncoder();
+    const data = enc.encode(newPassword);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    const passwordHash = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    await ctx.db.patch(user._id, { passwordHash });
+
+    // Borrar TODOS los códigos de este usuario para que no se reusen
+    const allResets = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .collect();
+    for (const doc of allResets) {
+      await ctx.db.delete(doc._id);
+    }
+
+    return { success: true };
   },
 });

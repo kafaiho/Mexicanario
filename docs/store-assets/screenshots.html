@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Mexicanario — Screenshots</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  /* ─────────────────────────────────────────────────────────────────
+     INSTRUCCIONES PARA EXPORTAR:
+     1. Abre este archivo en Chrome
+     2. DevTools (F12) → toggle device toolbar (Ctrl+Shift+M)
+     3. Para cada pantalla, ajusta el viewport al tamaño indicado
+        y haz screenshot con "Capture screenshot" en DevTools.
+
+     Tamaños requeridos:
+       .screen  → 1080×1920  (teléfono)
+       .tablet7 → 1280×800   (tablet 7")
+       .tablet10→ 1920×1200  (tablet 10")
+
+     Haz screenshot de CADA .slide individualmente.
+  ──────────────────────────────────────────────────────────────────── */
+
+  body { background:#222; padding:40px; display:flex; flex-wrap:wrap; gap:40px; }
+
+  /* ── Shared phone screen size ── */
+  .screen {
+    width: 1080px;
+    height: 1920px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    transform-origin: top left;
+    transform: scale(0.28);   /* preview scale — no afecta el screenshot */
+    margin-bottom: -1380px;
+    margin-right: -780px;
+  }
+
+  /* ── Base background (warm Mexican) ── */
+  .bg-warm {
+    background: linear-gradient(180deg, #2A0A00 0%, #5C1800 40%, #8B2500 100%);
+  }
+  .bg-map {
+    background: linear-gradient(180deg, #0A0400 0%, #1C0800 50%, #2A1000 100%);
+  }
+
+  /* ── Shared UI components ── */
+  .topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 130px;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 40px 18px;
+    justify-content: space-between;
+    border-bottom: 2px solid rgba(248,190,23,0.3);
+  }
+  .topbar-coin {
+    background: rgba(248,190,23,0.2);
+    border: 2px solid #F8BE17;
+    border-radius: 50px;
+    padding: 10px 28px;
+    font-size: 36px;
+    font-weight: 900;
+    color: #F8BE17;
+    font-family: sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar-streak {
+    background: rgba(255,107,53,0.2);
+    border: 2px solid #FF6B35;
+    border-radius: 50px;
+    padding: 10px 28px;
+    font-size: 36px;
+    font-weight: 900;
+    color: #FF6B35;
+    font-family: sans-serif;
+  }
+
+  /* ── Gameplay screen ── */
+  .gameplay-title {
+    position: absolute;
+    top: 155px; left: 0; right: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 52px;
+    font-weight: 900;
+    color: rgba(255,228,181,0.6);
+    letter-spacing: 3px;
+  }
+  .tile-grid {
+    position: absolute;
+    top: 260px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .tile-row {
+    display: flex;
+    gap: 20px;
+  }
+  .tile {
+    width: 138px;
+    height: 138px;
+    border-radius: 20px;
+    border: 4px solid rgba(255,228,181,0.35);
+    background: rgba(255,228,181,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Georgia, serif;
+    font-size: 64px;
+    font-weight: 900;
+    color: #FFE4B5;
+  }
+  .tile.correct { background: #4CAF50; border-color: #2E7D32; }
+  .tile.present { background: #D2691E; border-color: #8B4513; }
+  .tile.absent  { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color:rgba(255,255,255,0.4); }
+  .tile.empty   { background: rgba(255,228,181,0.05); }
+
+  .keyboard {
+    position: absolute;
+    bottom: 80px;
+    left: 40px; right: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .kb-row { display: flex; gap: 14px; justify-content: center; }
+  .kb-key {
+    height: 118px;
+    min-width: 90px;
+    border-radius: 14px;
+    background: #FFE4B5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: sans-serif;
+    font-size: 40px;
+    font-weight: 800;
+    color: #8B4513;
+    flex: 1;
+    max-width: 100px;
+  }
+  .kb-key.used { background: #D2691E; color: #fff; }
+  .kb-key.wide { max-width: 180px; font-size: 30px; }
+
+  /* ── Mexicanometro preview ── */
+  .mexo-modal {
+    position: absolute;
+    inset: 100px 60px;
+    background: #FFE4B5;
+    border-radius: 60px;
+    border: 8px solid #8B4513;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .mexo-header {
+    background: #FFE4B5;
+    padding: 40px 50px 25px;
+    border-bottom: 3px solid rgba(139,69,19,0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .mexo-title {
+    font-family: Georgia, serif;
+    font-size: 60px;
+    font-weight: 900;
+    color: #8B4513;
+  }
+  .mexo-close {
+    width: 80px; height: 80px;
+    border-radius: 40px;
+    background: #FF6B35;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    color: #fff;
+    font-weight: 900;
+  }
+  .mexo-rank {
+    margin: 30px 50px;
+    background: #F5DEB3;
+    border-radius: 40px;
+    border: 3px solid #D2691E;
+    padding: 30px 40px;
+    display: flex;
+    align-items: center;
+    gap: 30px;
+  }
+  .mexo-rank-emoji { font-size: 100px; }
+  .mexo-rank-title { font-family: Georgia, serif; font-size: 48px; font-weight: 900; color: #8B4513; }
+  .mexo-rank-desc  { font-size: 34px; color: #7A4020; margin-top: 8px; font-family: sans-serif; }
+  .mexo-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 22px 50px;
+  }
+  .mexo-dot {
+    width: 36px; height: 36px;
+    border-radius: 18px;
+    background: #F8BE17;
+    border: 3px solid #C8950A;
+    flex-shrink: 0;
+  }
+  .mexo-dot.locked { background: #D2A679; border-color: #B8926A; }
+  .mexo-card-unlocked {
+    flex: 1;
+    background: #F5DEB3;
+    border-radius: 30px;
+    border: 2px solid #D2A679;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .mexo-card-locked {
+    flex: 1;
+    background: #E8C99A;
+    border-radius: 30px;
+    border: 2px solid #C4A882;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mexo-card-emoji { font-size: 54px; }
+  .mexo-card-name  { font-family: sans-serif; font-size: 34px; font-weight: 800; color: #8B4513; }
+  .mexo-card-desc  { font-size: 26px; color: #7A4020; margin-top: 4px; }
+  .mexo-lnum { font-size: 28px; font-weight: 700; color: #8B4513; width: 80px; text-align: right; }
+  .mexo-lnum.dim { color: #C4A882; }
+
+  /* ── Map screen ── */
+  .map-overlay { position: absolute; inset: 0; background: rgba(10,4,1,0.82); }
+  .map-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 130px;
+    border-bottom: 2px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 50px 18px;
+  }
+  .map-back { color: #F59B40; font-size: 40px; font-weight: 800; font-family: sans-serif; }
+  .map-statsbar {
+    position: absolute;
+    top: 150px; left: 30px; right: 30px;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 30px;
+    padding: 30px 0;
+    display: flex;
+    justify-content: space-around;
+  }
+  .map-stat { text-align: center; }
+  .map-stat-val { font-size: 52px; font-weight: 900; color: #fff; font-family: sans-serif; }
+  .map-stat-lbl { font-size: 26px; color: rgba(255,255,255,0.45); font-family: sans-serif; margin-top: 6px; }
+  .zone-banner {
+    position: absolute;
+    left: 30px; right: 30px;
+    border-radius: 24px;
+    padding: 28px 36px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .zone-emoji { font-size: 52px; }
+  .zone-name { font-size: 30px; font-weight: 900; color: #fff; font-family: sans-serif; letter-spacing: 2px; }
+  .zone-desc { font-size: 24px; color: rgba(255,255,255,0.72); font-family: sans-serif; margin-top: 4px; }
+  .map-node {
+    position: absolute;
+    width: 130px;
+    height: 130px;
+    border-radius: 65px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: sans-serif;
+  }
+  .node-shadow {
+    position: absolute;
+    border-radius: 65px;
+    background: rgba(0,0,0,0.4);
+    top: 8px; left: 0;
+    width: 130px; height: 130px;
+  }
+  .node-icon { font-size: 40px; }
+  .node-num  { font-size: 26px; font-weight: 900; color: rgba(255,255,255,0.9); }
+  .node-ring {
+    position: absolute;
+    border: 4px dashed;
+    border-radius: 50%;
+    width: 154px; height: 154px;
+    top: -12px; left: -12px;
+  }
+  .popup-card {
+    position: absolute;
+    background: #FFE4B5;
+    border-radius: 30px;
+    border: 2.5px solid #D2691E;
+    padding: 32px 36px;
+    width: 620px;
+  }
+  .popup-word { font-size: 52px; font-weight: 900; color: #8B4513; font-family: Georgia, serif; margin-bottom: 12px; }
+  .popup-meaning { font-size: 32px; color: #7A4020; font-family: sans-serif; margin-bottom: 28px; line-height: 1.4; }
+  .popup-btn {
+    border-radius: 18px;
+    padding: 24px;
+    text-align: center;
+    font-size: 36px;
+    font-weight: 900;
+    color: #fff;
+    font-family: sans-serif;
+    letter-spacing: 2px;
+  }
+
+  /* ── Pet / Mascota screen ── */
+  .pet-bg {
+    background: linear-gradient(180deg, #1A0800 0%, #3D1A00 50%, #5C2800 100%);
+  }
+  .pet-header {
+    position: absolute;
+    top: 110px; left: 0; right: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 58px;
+    color: #FFE4B5;
+    font-weight: 900;
+  }
+  .pet-display {
+    position: absolute;
+    top: 240px; left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+  }
+  .pet-emoji-big { font-size: 360px; line-height: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5)); }
+  .pet-name {
+    font-family: Georgia, serif;
+    font-size: 64px;
+    font-weight: 900;
+    color: #F8BE17;
+    text-align: center;
+    margin-top: 20px;
+    text-shadow: 0 3px 0 #8B4513;
+  }
+  .pet-stage {
+    font-size: 36px;
+    color: rgba(255,228,181,0.7);
+    text-align: center;
+    font-family: sans-serif;
+    margin-top: 8px;
+  }
+  .pet-stats {
+    position: absolute;
+    bottom: 200px;
+    left: 60px; right: 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .pet-stat-row { display: flex; align-items: center; gap: 20px; }
+  .pet-stat-label { font-size: 34px; color: #FFE4B5; font-family: sans-serif; width: 220px; }
+  .pet-stat-bar { flex: 1; height: 32px; background: rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; }
+  .pet-stat-fill { height: 100%; border-radius: 16px; }
+
+  /* ── Coleccion screen ── */
+  .colec-bg {
+    background: linear-gradient(180deg, #2A0A00 0%, #5C1800 100%);
+  }
+  .colec-title {
+    position: absolute;
+    top: 150px; left: 0; right: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 64px;
+    color: #FFE4B5;
+    font-weight: 900;
+  }
+  .colec-grid {
+    position: absolute;
+    top: 260px;
+    left: 40px; right: 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+  .colec-card {
+    background: #FFE4B5;
+    border-radius: 36px;
+    border: 2.5px solid rgba(139,69,19,0.4);
+    padding: 36px 30px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .colec-icon { font-size: 70px; }
+  .colec-name { font-size: 34px; font-weight: 800; color: #8B4513; font-family: sans-serif; }
+  .colec-count { font-size: 26px; color: #7A4020; font-family: sans-serif; margin-top: 6px; }
+  .colec-prog { height: 14px; background: rgba(139,69,19,0.18); border-radius: 7px; margin-top: 10px; overflow: hidden; }
+  .colec-prog-fill { height: 100%; background: #D2691E; border-radius: 7px; }
+
+  /* ── Labels ── */
+  .screen-label {
+    font-family: sans-serif;
+    font-size: 24px;
+    color: #aaa;
+    margin-top: -1380px;
+    margin-bottom: 20px;
+    text-align: center;
+    transform: none;
+    display: block;
+    width: 300px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREENSHOT 1 — Gameplay (1080×1920)
+     Para capturar: viewport 1080×1920, screenshot completo
+════════════════════════════════════════════════════ -->
+<span class="screen-label">📱 Screenshot 1 — Gameplay (1080×1920)</span>
+<div class="screen bg-warm">
+  <div class="topbar">
+    <div class="topbar-coin">🪙 1,240</div>
+    <div class="topbar-streak">🔥 7</div>
+  </div>
+  <div class="gameplay-title">NIVEL 12</div>
+
+  <div class="tile-grid">
+    <!-- Row 1: correct guess -->
+    <div class="tile-row">
+      <div class="tile correct">C</div>
+      <div class="tile correct">H</div>
+      <div class="tile correct">I</div>
+      <div class="tile correct">D</div>
+      <div class="tile correct">O</div>
+    </div>
+    <!-- Row 2: attempt -->
+    <div class="tile-row">
+      <div class="tile present">C</div>
+      <div class="tile absent">A</div>
+      <div class="tile correct">I</div>
+      <div class="tile absent">F</div>
+      <div class="tile absent">A</div>
+    </div>
+    <!-- Row 3: empty -->
+    <div class="tile-row">
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+    </div>
+    <!-- Row 4: empty -->
+    <div class="tile-row">
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+    </div>
+    <!-- Row 5: empty -->
+    <div class="tile-row">
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+    </div>
+    <!-- Row 6: empty -->
+    <div class="tile-row">
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+      <div class="tile empty"></div>
+    </div>
+  </div>
+
+  <div class="keyboard">
+    <div class="kb-row">
+      <div class="kb-key">Q</div><div class="kb-key">W</div><div class="kb-key">E</div>
+      <div class="kb-key">R</div><div class="kb-key">T</div><div class="kb-key">Y</div>
+      <div class="kb-key">U</div><div class="kb-key">I</div><div class="kb-key">O</div>
+      <div class="kb-key">P</div>
+    </div>
+    <div class="kb-row">
+      <div class="kb-key">A</div><div class="kb-key used">S</div><div class="kb-key used">D</div>
+      <div class="kb-key used">F</div><div class="kb-key">G</div><div class="kb-key">H</div>
+      <div class="kb-key used">J</div><div class="kb-key">K</div><div class="kb-key">L</div>
+    </div>
+    <div class="kb-row">
+      <div class="kb-key wide">⌫</div>
+      <div class="kb-key">Z</div><div class="kb-key">X</div><div class="kb-key used">C</div>
+      <div class="kb-key">V</div><div class="kb-key">B</div><div class="kb-key">N</div>
+      <div class="kb-key used">M</div>
+      <div class="kb-key wide">↵</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREENSHOT 2 — Mexicanómetro (1080×1920)
+════════════════════════════════════════════════════ -->
+<span class="screen-label">📊 Screenshot 2 — Mexicanómetro (1080×1920)</span>
+<div class="screen bg-warm">
+  <div class="topbar">
+    <div class="topbar-coin">🪙 1,240</div>
+    <div class="topbar-streak">🔥 7</div>
+  </div>
+  <div class="mexo-modal">
+    <div class="mexo-header">
+      <div class="mexo-title">Mexicanómetro 🌮</div>
+      <div class="mexo-close">×</div>
+    </div>
+    <div class="mexo-rank">
+      <div class="mexo-rank-emoji">🎺</div>
+      <div>
+        <div class="mexo-rank-title">Chilango honorario</div>
+        <div class="mexo-rank-desc">¡Ya hablas como del DF!</div>
+      </div>
+    </div>
+    <div style="padding:10px 50px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:44px; font-weight:900; color:#8B4513; font-family:sans-serif;">🌮 248 tacos</span>
+      <span style="font-size:28px; color:#9A6030; font-family:sans-serif; max-width:340px; text-align:right;">Faltan 2 tacos para «Jalapeño con poder»</span>
+    </div>
+    <div style="flex:1; overflow:hidden; padding-top:10px;">
+      <div class="mexo-row">
+        <div class="mexo-lnum dim">1200</div>
+        <div class="mexo-dot locked"></div>
+        <div class="mexo-card-locked"><span style="font-size:52px;">🔒</span></div>
+      </div>
+      <div class="mexo-row">
+        <div class="mexo-lnum dim">1100</div>
+        <div class="mexo-dot locked"></div>
+        <div class="mexo-card-locked"><span style="font-size:52px;">🔒</span></div>
+      </div>
+      <div class="mexo-row">
+        <div class="mexo-lnum dim">1000</div>
+        <div class="mexo-dot locked"></div>
+        <div class="mexo-card-locked"><span style="font-size:52px;">🔒</span></div>
+      </div>
+      <div class="mexo-row" style="background:rgba(248,190,23,0.1); border-radius:20px; margin:0 10px;">
+        <div class="mexo-lnum">250</div>
+        <div class="mexo-dot"></div>
+        <div class="mexo-card-unlocked">
+          <div class="mexo-card-emoji">🌶️</div>
+          <div>
+            <div class="mexo-card-name">Jalapeño con poder</div>
+            <div class="mexo-card-desc">¡Ya le atas el caballo!</div>
+          </div>
+        </div>
+      </div>
+      <div class="mexo-row">
+        <div class="mexo-lnum">150</div>
+        <div class="mexo-dot"></div>
+        <div class="mexo-card-unlocked">
+          <div class="mexo-card-emoji">🎺</div>
+          <div>
+            <div class="mexo-card-name">Chilango honorario</div>
+            <div class="mexo-card-desc">¡Ya hablas como del DF!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREENSHOT 3 — Mapa (1080×1920)
+════════════════════════════════════════════════════ -->
+<span class="screen-label">🗺️ Screenshot 3 — Mapa (1080×1920)</span>
+<div class="screen" style="background:#0A0200;">
+  <div class="map-overlay"></div>
+  <div class="map-header"><span class="map-back">← Volver</span></div>
+  <div class="map-statsbar">
+    <div class="map-stat"><div class="map-stat-val">11</div><div class="map-stat-lbl">⭐ Completados</div></div>
+    <div style="width:2px;background:rgba(255,255,255,0.1);"></div>
+    <div class="map-stat"><div class="map-stat-val" style="color:#F59B40;">12</div><div class="map-stat-lbl">📍 Actual</div></div>
+    <div style="width:2px;background:rgba(255,255,255,0.1);"></div>
+    <div class="map-stat"><div class="map-stat-val">80</div><div class="map-stat-lbl">🗺️ Total</div></div>
+  </div>
+
+  <!-- Zone banner -->
+  <div class="zone-banner" style="top:330px; background:#C0392B;">
+    <div class="zone-emoji">🏙️</div>
+    <div>
+      <div class="zone-name">CHILANGO</div>
+      <div class="zone-desc">El corazón del DF</div>
+    </div>
+  </div>
+
+  <!-- Nodes -->
+  <div style="position:absolute; top:470px; left:130px;">
+    <div class="node-shadow"></div>
+    <div class="map-node" style="background:#C0392B;">
+      <div class="node-icon">✓</div>
+      <div class="node-num">10</div>
+    </div>
+  </div>
+  <div style="position:absolute; top:630px; right:200px;">
+    <div class="node-shadow"></div>
+    <div class="map-node" style="background:#C0392B;">
+      <div class="node-icon">✓</div>
+      <div class="node-num">11</div>
+    </div>
+  </div>
+  <!-- Current node with popup -->
+  <div style="position:absolute; top:820px; left:110px;">
+    <div class="node-ring" style="border-color:#C0392B;"></div>
+    <div class="node-shadow" style="width:148px;height:148px;border-radius:74px;"></div>
+    <div class="map-node" style="background:#C0392B; width:148px;height:148px;border-radius:74px;">
+      <div class="node-icon" style="font-size:48px;">▶</div>
+      <div class="node-num" style="font-size:30px;">12</div>
+    </div>
+    <!-- Popup -->
+    <div class="popup-card" style="top:170px; left:-40px;">
+      <div class="popup-word">CHIDO</div>
+      <div class="popup-meaning">Algo que está muy bien, cool o de moda en México</div>
+      <div class="popup-btn" style="background:#C0392B;">▶ &nbsp;SEGUIR JUGANDO</div>
+    </div>
+  </div>
+
+  <div style="position:absolute; bottom:80px; left:0; right:0; text-align:center; font-size:28px; color:rgba(255,255,255,0.3); font-family:sans-serif;">🦅 ¡Sigue avanzando, cuate!</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREENSHOT 4 — Mascota (1080×1920)
+════════════════════════════════════════════════════ -->
+<span class="screen-label">🦎 Screenshot 4 — Mascota (1080×1920)</span>
+<div class="screen pet-bg">
+  <div class="topbar">
+    <div class="topbar-coin">🪙 1,240</div>
+    <div class="topbar-streak">🔥 7</div>
+  </div>
+  <div class="pet-header">Mi Mascota 🦎</div>
+  <div class="pet-display">
+    <div class="pet-emoji-big">🦎</div>
+    <div class="pet-name">Alebrije</div>
+    <div class="pet-stage">Etapa 3 · Evolucionando</div>
+  </div>
+  <div class="pet-stats">
+    <div class="pet-stat-row">
+      <div class="pet-stat-label">😋 Hambre</div>
+      <div class="pet-stat-bar"><div class="pet-stat-fill" style="width:72%;background:#4CAF50;"></div></div>
+    </div>
+    <div class="pet-stat-row">
+      <div class="pet-stat-label">😄 Felicidad</div>
+      <div class="pet-stat-bar"><div class="pet-stat-fill" style="width:88%;background:#F8BE17;"></div></div>
+    </div>
+    <div class="pet-stat-row">
+      <div class="pet-stat-label">⭐ Nivel</div>
+      <div class="pet-stat-bar"><div class="pet-stat-fill" style="width:55%;background:#FF6B35;"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREENSHOT 5 — Colecciones (1080×1920)
+════════════════════════════════════════════════════ -->
+<span class="screen-label">📚 Screenshot 5 — Colecciones (1080×1920)</span>
+<div class="screen colec-bg">
+  <div class="topbar">
+    <div class="topbar-coin">🪙 1,240</div>
+    <div class="topbar-streak">🔥 7</div>
+  </div>
+  <div class="colec-title">Colecciones 📚</div>
+  <div class="colec-grid">
+    <div class="colec-card">
+      <div class="colec-icon">🌮</div>
+      <div>
+        <div class="colec-name">Chilango</div>
+        <div class="colec-count">24 / 40 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:60%;"></div></div>
+      </div>
+    </div>
+    <div class="colec-card">
+      <div class="colec-icon">🌵</div>
+      <div>
+        <div class="colec-name">Norteño</div>
+        <div class="colec-count">12 / 35 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:34%;"></div></div>
+      </div>
+    </div>
+    <div class="colec-card">
+      <div class="colec-icon">🌊</div>
+      <div>
+        <div class="colec-name">Jarocho</div>
+        <div class="colec-count">8 / 30 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:27%;"></div></div>
+      </div>
+    </div>
+    <div class="colec-card">
+      <div class="colec-icon">🎭</div>
+      <div>
+        <div class="colec-name">Refranes</div>
+        <div class="colec-count">16 / 50 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:32%;"></div></div>
+      </div>
+    </div>
+    <div class="colec-card">
+      <div class="colec-icon">💀</div>
+      <div>
+        <div class="colec-name">Cultura Pop</div>
+        <div class="colec-count">5 / 25 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:20%;"></div></div>
+      </div>
+    </div>
+    <div class="colec-card">
+      <div class="colec-icon">🎵</div>
+      <div>
+        <div class="colec-name">Corridos</div>
+        <div class="colec-count">3 / 20 palabras</div>
+        <div class="colec-prog"><div class="colec-prog-fill" style="width:15%;"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

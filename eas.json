@@ -4,37 +4,55 @@
   },
   "build": {
     "preview": {
+      "channel": "preview",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "env": {
+          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud",
+          "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_mnBCWqnSmPrDNzBwdDHxKFRMRAk"
+        }
       },
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "env": {
+          "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud"
+        }
       }
     },
     "device": {
       "distribution": "internal",
+      "channel": "preview",
       "ios": {
         "credentialsSource": "remote"
       }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle",
         "env": {
           "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud",
-          "EAS_BUILD": "true"
+          "EAS_BUILD": "true",
+          "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_mnBCWqnSmPrDNzBwdDHxKFRMRAk"
         }
       },
       "ios": {
         "credentialsSource": "remote",
         "env": {
           "EXPO_PUBLIC_CONVEX_URL": "https://enchanted-penguin-105.convex.cloud",
-          "EAS_BUILD": "true"
+          "EAS_BUILD": "true",
+          "EXPO_PUBLIC_RC_IOS_KEY": "REPLACE_WITH_IOS_PRODUCTION_KEY"
         }
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": false
+      }
+    }
   }
 }

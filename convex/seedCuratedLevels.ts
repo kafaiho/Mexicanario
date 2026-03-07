@@ -13,107 +13,60 @@ import { mutation } from "./_generated/server";
  *   Monumentos N14
  */
 const CURATED_WORDS = [
-    // ── Nivel 1 – Taquito fácil (Comida) ───────────────────────────────────────
-    { word: "Taco", meaning: "Tortilla rellena con guiso", example: "Vamos por unos tacos al pastor", region: "Todo México", category: "Comida" },
-    { word: "Tamal", meaning: "Masa de maíz envuelta en hoja", example: "En la mañana desayuné un tamal verde", region: "Nacional", category: "Comida" },
-    { word: "Pozole", meaning: "Caldo con maíz y carne", example: "El 15 de septiembre cenamos pozole", region: "Tradicional", category: "Comida" },
-    { word: "Mole", meaning: "Salsa espesa de chiles y especias", example: "El mole poblano es mi favorito", region: "Puebla", category: "Comida" },
-    { word: "Tlayuda", meaning: "Tortilla grande con frijoles y carne", example: "En Oaxaca comí una tlayuda enorme", region: "Oaxaca", category: "Comida" },
+    // ── Nivel 1 – Bienvenida (Básico / Modismos) ───────────────────────────────
+    { word: "Taco", meaning: "Tortilla rellena con guiso", example: "Vamos por unos tacos al pastor", region: "Todo México", category: "Comida Mexicana" },
+    { word: "Wey", meaning: "Amigo o persona (coloquial)", example: "¿Qué onda, wey, cómo estás?", region: "Todo México", category: "Expresiones y Modismos" },
+    { word: "Chido", meaning: "Bonito o muy bueno", example: "¡Qué chido está tu coche nuevo!", region: "Centro y Sur", category: "Expresiones y Modismos" },
+    { word: "No manches", meaning: "Expresión de asombro o incredulidad", example: "¡No manches, sacaste diez en el examen!", region: "Todo México", category: "Expresiones y Modismos" },
 
-    // ── Nivel 2 – Pan de muerto (Comida) ───────────────────────────────────────
-    { word: "Pan de muerto", meaning: "Pan dulce típico del Día de Muertos", example: "En noviembre comimos pan de muerto con chocolate", region: "Tradicional", category: "Comida" },
-    { word: "Atole", meaning: "Bebida caliente de maíz", example: "En el Día de Muertos tomamos atole", region: "Tradicional", category: "Comida" },
-    { word: "Champurrado", meaning: "Chocolate espeso con maíz", example: "En la feria vendían champurrado", region: "CDMX", category: "Comida" },
-    { word: "Buñuelo", meaning: "Fritura dulce con azúcar", example: "Comimos buñuelos en Navidad", region: "Nacional", category: "Comida" },
-    { word: "Calabaza en tacha", meaning: "Postre de calabaza con piloncillo", example: "En Día de Muertos prepararon calabaza en tacha", region: "Tradicional", category: "Comida" },
+    // ── Nivel 2 – Rompehielo (Expresiones fáciles) ─────────────────────────────
+    { word: "Órale", meaning: "Expresión de asombro, afirmación o prisa", example: "¡Órale, apúrate que llegamos tarde!", region: "Nacional", category: "Expresiones y Modismos" },
+    { word: "Ahorita", meaning: "En un momento (generalmente indefinido)", example: "Ahorita voy, dame cinco minutos", region: "Todo México", category: "Expresiones y Modismos" },
+    { word: "Carnal", meaning: "Hermano o amigo muy cercano", example: "Ese wey es mi carnal de toda la vida", region: "CdMx y Centro", category: "Expresiones y Modismos" },
 
-    // ── Nivel 3 – Juguete de feria (Juegos) ────────────────────────────────────
-    { word: "Trompo", meaning: "Juguete de madera que gira", example: "El trompo se quedó bailando en la punta", region: "Infantil", category: "Juegos" },
-    { word: "Balero", meaning: "Juguete de madera con cuerda", example: "El niño encestó el balero a la primera", region: "Tradicional", category: "Juegos" },
-    { word: "Lotería", meaning: "Juego de cartas con imágenes", example: "Cantamos lotería en la fiesta", region: "Todo México", category: "Juegos" },
-    { word: "Canicas", meaning: "Esferas de vidrio para jugar", example: "Jugamos canicas en el recreo", region: "Infantil", category: "Juegos" },
-    { word: "Pirinola", meaning: "Juguete que indica acciones", example: "La pirinola cayó en 'toma todo'", region: "Todo México", category: "Juegos" },
+    // ── Nivel 3 – El Sabor Básicos (Comida muy común) ──────────────────────────
+    { word: "Salsa", meaning: "Aderezo picante para acompañar", example: "Le puse salsa verde a mis tacos", region: "Nacional", category: "Comida Mexicana" },
+    { word: "Aguacate", meaning: "Fruto verde, base del guacamole", example: "Ese taco lleva mucho aguacate", region: "Nacional", category: "Comida Mexicana" },
+    { word: "Tamal", meaning: "Masa de maíz rellena envuelta en hoja", example: "Desayuné un tamal con atole", region: "Nacional", category: "Comida Mexicana" },
 
-    // ── Nivel 4 – Rayuela mexicana (Juegos) ────────────────────────────────────
-    { word: "Serpientes y escaleras", meaning: "Juego de tablero de avance y retroceso", example: "Jugamos serpientes y escaleras en familia", region: "Infantil", category: "Juegos" },
-    { word: "Rayuela", meaning: "Juego de piso con casillas numeradas", example: "Saltamos en la rayuela", region: "Callejero", category: "Juegos" },
-    { word: "Stop", meaning: "Juego de categorías en papel", example: "Jugamos stop con mis primos", region: "Juvenil", category: "Juegos" },
-    { word: "Encantados", meaning: "Juego de persecución", example: "Me atraparon en encantados", region: "Infantil", category: "Juegos" },
-
-    // ── Nivel 5 – Mariachi básico (Música) ─────────────────────────────────────
-    { word: "Mariachi", meaning: "Conjunto musical típico", example: "El mariachi tocó en la boda", region: "Todo México", category: "Música" },
-    { word: "Ranchera", meaning: "Género musical tradicional", example: "Cantamos rancheras toda la noche", region: "Nacional", category: "Música" },
-    { word: "Corrido", meaning: "Canción narrativa popular", example: "Escuché un corrido revolucionario", region: "Norte", category: "Música" },
-    { word: "Banda", meaning: "Música sinaloense con viento", example: "La banda alegró la fiesta", region: "Sinaloa", category: "Música" },
-    { word: "Cumbia mexicana", meaning: "Versión nacional de la cumbia", example: "Bailamos cumbia mexicana en la boda", region: "Nacional", category: "Música" },
-
-    // ── Nivel 6 – Son de la tierra (Música) ────────────────────────────────────
-    { word: "Son jarocho", meaning: "Género musical de Veracruz", example: "El arpa sonó en el son jarocho", region: "Veracruz", category: "Música" },
-    { word: "Huapango", meaning: "Baile y música tradicional", example: "El huapango se baila en pareja", region: "Huasteca", category: "Música" },
-    { word: "Bolero", meaning: "Género romántico popular", example: "Cantaron boleros en la serenata", region: "Todo México", category: "Música" },
-    { word: "Norteño", meaning: "Música con acordeón y bajo sexto", example: "Escuchamos norteño en Monterrey", region: "Norte", category: "Música" },
-    { word: "Chilena costeña", meaning: "Música alegre del Pacífico", example: "Bailamos chilena en Oaxaca", region: "Costa Pacífico", category: "Música" },
-
-    // ── Nivel 7 – Animales de leyenda (Animales) ───────────────────────────────
-    { word: "Jaguar", meaning: "Felino emblemático mesoamericano", example: "El jaguar era símbolo de poder", region: "Sur de México", category: "Animales" },
-    { word: "Águila real", meaning: "Ave nacional mexicana", example: "El águila real aparece en el escudo", region: "Todo México", category: "Animales" },
-    { word: "Serpiente cascabel", meaning: "Reptil venenoso de México", example: "La serpiente cascabel sonó en el campo", region: "Norte y centro", category: "Animales" },
-    { word: "Cenzontle", meaning: "Ave conocida como el pájaro de las 400 voces", example: "El cenzontle canta variado", region: "Nacional", category: "Animales" },
-    { word: "Armadillo", meaning: "Mamífero con caparazón", example: "Vimos un armadillo cruzar", region: "Sur", category: "Animales" },
-
-    // ── Nivel 8 – Criaturas únicas (Animales) ──────────────────────────────────
-    { word: "Ajolote", meaning: "Anfibio endémico de Xochimilco", example: "El ajolote se regenera solo", region: "CDMX", category: "Animales" },
-    { word: "Xoloitzcuintle", meaning: "Perro ancestral mexicano", example: "El xoloitzcuintle acompañaba a los mexicas", region: "Nacional", category: "Animales" },
-    { word: "Chapulín", meaning: "Insecto comestible y típico", example: "Comimos chapulines con limón", region: "Oaxaca", category: "Animales" },
-    { word: "Guacamaya", meaning: "Ave de plumas coloridas", example: "La guacamaya voló sobre la selva", region: "Selva", category: "Animales" },
-    { word: "Mapache", meaning: "Mamífero nocturno de México", example: "Un mapache abrió la basura", region: "Bosques", category: "Animales" },
-
-    // ── Nivel 9 – Antojitos callejeros (Comida) ────────────────────────────────
-    { word: "Esquites", meaning: "Maíz en vaso con mayonesa, queso y chile", example: "En la feria vendían esquites con chile piquín", region: "CDMX", category: "Comida" },
-    { word: "Tostilocos", meaning: "Botana de Tostitos con salsas y toppings", example: "Me comí unos tostilocos con cueritos", region: "Juvenil", category: "Comida" },
-    { word: "Pambazo", meaning: "Torta bañada en salsa roja", example: "El pambazo me enchiló", region: "CDMX", category: "Comida" },
-    { word: "Torta ahogada", meaning: "Torta con salsa picante", example: "La torta ahogada estaba buenísima", region: "Guadalajara", category: "Comida" },
-    { word: "Huarache", meaning: "Tortilla alargada con frijoles y guiso", example: "Me dieron un huarache con nopales", region: "CDMX", category: "Comida" },
-    { word: "Chilaquiles", meaning: "Totopos bañados en salsa", example: "Desayuné chilaquiles verdes con pollo", region: "Todo México", category: "Comida" },
-
-    // ── Nivel 10 – Juegos de recreo (Juegos) ───────────────────────────────────
-    { word: "La víbora de la mar", meaning: "Juego tradicional en fiestas", example: "Cantamos en la víbora de la mar", region: "Tradicional", category: "Juegos" },
-    { word: "La roña", meaning: "Juego de persecución", example: "Me atraparon en la roña", region: "Callejero", category: "Juegos" },
-    { word: "Burro castigado", meaning: "Juego de resistencia física", example: "Saltamos en el burro castigado", region: "Escuela", category: "Juegos" },
-    { word: "Doña Blanca", meaning: "Juego en ronda con canción", example: "Jugamos a Doña Blanca en la fiesta", region: "Infantil", category: "Juegos" },
-    { word: "A las escondidas", meaning: "Juego de esconderse y buscar", example: "Nos escondimos jugando escondidas", region: "Todo México", category: "Juegos" },
+    // ── Nivel 4 – Juegos de recreo (Juegos) ───────────────────────────────────
+    { word: "La víbora de la mar", meaning: "Juego tradicional en fiestas", example: "Cantamos en la víbora de la mar", region: "Tradicional", category: "Juegos y Niñez" },
+    { word: "La roña", meaning: "Juego de persecución", example: "Me atraparon en la roña", region: "Callejero", category: "Juegos y Niñez" },
+    { word: "Burro castigado", meaning: "Juego de resistencia física", example: "Saltamos en el burro castigado", region: "Escuela", category: "Juegos y Niñez" },
+    { word: "Doña Blanca", meaning: "Juego en ronda con canción", example: "Jugamos a Doña Blanca en la fiesta", region: "Infantil", category: "Juegos y Niñez" },
+    { word: "A las escondidas", meaning: "Juego de esconderse y buscar", example: "Nos escondimos jugando escondidas", region: "Todo México", category: "Juegos y Niñez" },
 
     // ── Nivel 11 – Voces mexicanas (Música) ────────────────────────────────────
-    { word: "Pedro Infante", meaning: "Ícono de la música ranchera", example: "Escuchamos canciones de Pedro Infante", region: "Época de Oro", category: "Música" },
-    { word: "Chavela Vargas", meaning: "Cantante reconocida de rancheras", example: "Chavela Vargas cantaba con sentimiento", region: "Tradicional", category: "Música" },
-    { word: "José Alfredo Jiménez", meaning: "Compositor de rancheras", example: "José Alfredo escribió 'El Rey'", region: "Todo México", category: "Música" },
-    { word: "Lila Downs", meaning: "Cantante contemporánea mexicana", example: "Lila Downs mezcla géneros en sus canciones", region: "Actual", category: "Música" },
-    { word: "Juan Gabriel", meaning: "Cantante y compositor icónico", example: "Cantamos canciones de Juan Gabriel", region: "Todo México", category: "Música" },
-    { word: "Vicente Fernández", meaning: "Ícono de la música ranchera", example: "Vicente Fernández es 'El Charro de Huentitán'", region: "Jalisco", category: "Música" },
+    { word: "Pedro Infante", meaning: "Ídolo de la música ranchera y el cine de oro", example: "Escuchamos canciones de Pedro Infante, el ídolo de Guamúchil", region: "Sinaloa", category: "Música y Artistas" },
+    { word: "Chavela Vargas", meaning: "Cantante costarricense naturalizada mexicana, ícono de la ranchera adoptada por México", example: "Chavela Vargas cantaba con sentimiento", region: "Internacional", category: "Música y Artistas" },
+    { word: "José Alfredo Jiménez", meaning: "Compositor de rancheras", example: "José Alfredo escribió 'El Rey'", region: "Todo México", category: "Música y Artistas" },
+    { word: "Lila Downs", meaning: "Cantante contemporánea mexicana de Oaxaca que mezcla lenguas indígenas con rock y jazz", example: "Lila Downs mezcla géneros en sus canciones", region: "Oaxaca", category: "Música y Artistas" },
+    { word: "Juan Gabriel", meaning: "Cantante y compositor icónico", example: "Cantamos canciones de Juan Gabriel", region: "Todo México", category: "Música y Artistas" },
+    { word: "Vicente Fernández", meaning: "Ícono de la música ranchera", example: "Vicente Fernández es 'El Charro de Huentitán'", region: "Jalisco", category: "Música y Artistas" },
 
     // ── Nivel 12 – Fauna mexicana (Animales) ───────────────────────────────────
-    { word: "Ocelote", meaning: "Felino de tamaño mediano", example: "El ocelote vive en la selva", region: "Sur", category: "Animales" },
-    { word: "Tlacuache", meaning: "Marsupial mexicano", example: "Un tlacuache se metió en la casa", region: "CDMX", category: "Animales" },
-    { word: "Colibrí", meaning: "Ave pequeña de rápido vuelo", example: "El colibrí revoloteaba en el jardín", region: "Todo México", category: "Animales" },
-    { word: "Murciélago magueyero", meaning: "Polinizador del agave", example: "El murciélago magueyero ayuda al tequila", region: "Agavero", category: "Animales" },
-    { word: "Iguana", meaning: "Reptil común en zonas cálidas", example: "La iguana tomó sol en la roca", region: "Costa", category: "Animales" },
-    { word: "Zorrillo", meaning: "Mamífero con glándulas de defensa", example: "El zorrillo espantó a todos", region: "Bosques", category: "Animales" },
+    { word: "Ocelote", meaning: "Felino de tamaño mediano", example: "El ocelote vive en la selva", region: "Sur", category: "Animales de México" },
+    { word: "Tlacuache", meaning: "Único marsupial nativo de México, habita en casi todo el país", example: "Un tlacuache se metió en la casa por el techo", region: "Todo México", category: "Animales de México" },
+    { word: "Colibrí", meaning: "Ave pequeña de rápido vuelo", example: "El colibrí revoloteaba en el jardín", region: "Todo México", category: "Animales de México" },
+    { word: "Murciélago magueyero", meaning: "Polinizador del agave, esencial para el tequila y el mezcal", example: "Sin el murciélago magueyero no habría tequila ni mezcal", region: "Occidente", category: "Animales de México" },
+    { word: "Iguana", meaning: "Reptil común en zonas cálidas", example: "La iguana tomó sol en la roca", region: "Costa", category: "Animales de México" },
+    { word: "Zorrillo", meaning: "Mamífero que lanza líquido fétido como defensa", example: "El zorrillo espantó a todos con su terrible olor", region: "Todo México", category: "Animales de México" },
 
     // ── Nivel 13 – Muralismo mexicano (Artistas) ───────────────────────────────
-    { word: "Orozco", meaning: "Muralista mexicano", example: "Orozco pintó murales en Guadalajara", region: "Jalisco", category: "Artistas" },
-    { word: "Siqueiros", meaning: "Muralista y político", example: "Siqueiros creó murales con temática social", region: "Nacional", category: "Artistas" },
-    { word: "Rufino Tamayo", meaning: "Pintor de colores vibrantes", example: "Tamayo expuso en Nueva York", region: "Oaxaca", category: "Artistas" },
-    { word: "Leonora Carrington", meaning: "Pintora surrealista", example: "Carrington influyó en el surrealismo mexicano", region: "CDMX", category: "Artistas" },
-    { word: "Remedios Varo", meaning: "Artista surrealista", example: "Remedios Varo pintó mundos fantásticos", region: "CDMX", category: "Artistas" },
-    { word: "Octavio Paz", meaning: "Poeta y Nobel mexicano", example: "Octavio Paz escribió 'El Laberinto de la Soledad'", region: "CDMX", category: "Artistas" },
+    { word: "Orozco", meaning: "Muralista mexicano", example: "Orozco pintó murales en Guadalajara", region: "Jalisco", category: "Música y Artistas" },
+    { word: "Siqueiros", meaning: "Muralista y político", example: "Siqueiros creó murales con temática social", region: "Nacional", category: "Música y Artistas" },
+    { word: "Rufino Tamayo", meaning: "Pintor de colores vibrantes", example: "Tamayo expuso en Nueva York", region: "Oaxaca", category: "Música y Artistas" },
+    { word: "Leonora Carrington", meaning: "Pintora surrealista", example: "Carrington influyó en el surrealismo mexicano", region: "CDMX", category: "Música y Artistas" },
+    { word: "Remedios Varo", meaning: "Artista surrealista", example: "Remedios Varo pintó mundos fantásticos", region: "CDMX", category: "Música y Artistas" },
+    { word: "Octavio Paz", meaning: "Poeta y Nobel mexicano", example: "Octavio Paz escribió 'El Laberinto de la Soledad'", region: "CDMX", category: "Música y Artistas" },
 
     // ── Nivel 14 – Patrimonios UNESCO (Monumentos) ─────────────────────────────
-    { word: "Monte Albán", meaning: "Zona arqueológica zapoteca", example: "Visitamos Monte Albán en Oaxaca", region: "Oaxaca", category: "Monumentos" },
-    { word: "Palenque", meaning: "Ciudad maya en Chiapas", example: "Palenque tiene templos impresionantes", region: "Chiapas", category: "Monumentos" },
-    { word: "Uxmal", meaning: "Zona arqueológica maya", example: "Uxmal es famosa por su pirámide del Adivino", region: "Yucatán", category: "Monumentos" },
-    { word: "Calakmul", meaning: "Gran ciudad maya", example: "Calakmul está en la selva", region: "Campeche", category: "Monumentos" },
-    { word: "Paquimé", meaning: "Sitio arqueológico del norte", example: "Paquimé está en Chihuahua", region: "Chihuahua", category: "Monumentos" },
-    { word: "Mitla", meaning: "Zona arqueológica zapoteca", example: "Mitla es conocida por sus grecas", region: "Oaxaca", category: "Monumentos" },
+    { word: "Monte Albán", meaning: "Zona arqueológica zapoteca", example: "Visitamos Monte Albán en Oaxaca", region: "Oaxaca", category: "Monumentos y Lugares" },
+    { word: "Palenque", meaning: "Ciudad maya en Chiapas", example: "Palenque tiene templos impresionantes", region: "Chiapas", category: "Monumentos y Lugares" },
+    { word: "Uxmal", meaning: "Zona arqueológica maya", example: "Uxmal es famosa por su pirámide del Adivino", region: "Yucatán", category: "Monumentos y Lugares" },
+    { word: "Calakmul", meaning: "Gran ciudad maya", example: "Calakmul está en la selva", region: "Campeche", category: "Monumentos y Lugares" },
+    { word: "Paquimé", meaning: "Sitio arqueológico del norte", example: "Paquimé está en Chihuahua", region: "Chihuahua", category: "Monumentos y Lugares" },
+    { word: "Mitla", meaning: "Zona arqueológica zapoteca", example: "Mitla es conocida por sus grecas", region: "Oaxaca", category: "Monumentos y Lugares" },
 ];
 
 /**
@@ -161,8 +114,8 @@ export const seedCuratedLevels = mutation({
             });
 
             // Coins scale with level, diamonds every 5 levels
-            const coins = 50 + (nextLevel - 1) * 10;
-            const diamonds = Math.floor((nextLevel - 1) / 5) + 1;
+            const coins = 2 + Math.floor((nextLevel - 1) / 100);
+            const diamonds = Math.floor((nextLevel - 1) / 200);
 
             // Insert level
             await ctx.db.insert("levels", {

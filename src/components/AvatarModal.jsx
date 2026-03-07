@@ -1,116 +1,172 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useMutation } from "convex/react";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "../context/AuthContext";
+import { FONTS } from "../theme/designTokens";
+
+const BROWN = "#8B4513";
+const AMBER = "#D2691E";
+const GOLD  = "#F8BE17";
+const WHEAT = "#FFE4B5";
+const WHEAT2 = "#F5DEB3";
+
+const AVATARS = [
+  "🧔🏽", "👨🏽", "👩🏽", "🧑🏽",
+  "🌮", "🌯", "🌶️", "🦅",
+  "🐺", "🎸", "⚽", "🏆",
+  "🇲🇽", "💀", "🌵", "🎭",
+];
 
 export default function AvatarModal({ visible, onClose }) {
-  const [selectedAvatar, setSelectedAvatar] = useState(0);
+  const { userId } = useAuth();
+  const updateProfile = useMutation(api.users.updateUserProfile);
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const avatars = ['🌮', '🌯', '🥙', '🌶️'];
+  async function handleSave() {
+    if (selected === null || !userId) return;
+    setBusy(true);
+    try {
+      await updateProfile({ userId, avatar: AVATARS[selected] });
+      onClose();
+    } catch (e) {
+      if (__DEV__) console.warn(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleClose() {
+    setSelected(null);
+    onClose();
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Avatar</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color="#8B4513" />
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <View style={s.overlay}>
+        <View style={s.modal}>
+          <View style={s.header}>
+            <Text style={s.title}>Elige tu avatar</Text>
+            <TouchableOpacity onPress={handleClose} style={s.closeBtn}>
+              <Text style={s.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.content}>
-            <View style={styles.avatarGrid}>
-              {avatars.map((avatar, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.avatarOption,
-                    selectedAvatar === index && styles.selectedAvatar
-                  ]}
-                  onPress={() => setSelectedAvatar(index)}
-                >
-                  <Text style={styles.avatarEmoji}>{avatar}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Guardar</Text>
-            </TouchableOpacity>
+          <View style={s.grid}>
+            {AVATARS.map((av, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[s.avatarOption, selected === i && s.avatarSelected]}
+                onPress={() => setSelected(i)}
+              >
+                <Text style={s.avatarEmoji}>{av}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
+
+          <TouchableOpacity
+            style={[s.saveBtn, selected === null && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={selected === null || busy}
+          >
+            {busy
+              ? <ActivityIndicator color={BROWN} />
+              : <Text style={s.saveBtnText}>Guardar</Text>
+            }
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modal: {
-    backgroundColor: '#FFE4B5',
+    backgroundColor: WHEAT,
     borderRadius: 20,
     padding: 20,
-    width: '80%',
-    borderWidth: 4,
-    borderColor: '#8B4513',
+    width: "85%",
+    borderWidth: 3,
+    borderColor: BROWN,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1.5,
+    borderBottomColor: "rgba(210,105,30,0.3)",
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8B4513',
+    fontFamily: FONTS.display,
+    fontSize: 22,
+    color: BROWN,
   },
-  closeButton: {
-    padding: 5,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#e64a33",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  content: {
-    alignItems: 'center',
+  closeBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    lineHeight: 19,
   },
-  avatarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 15,
-    marginBottom: 30,
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
   },
   avatarOption: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F5DEB3',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#D2691E',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: WHEAT2,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2.5,
+    borderColor: "rgba(139,69,19,0.25)",
   },
-  selectedAvatar: {
-    borderColor: '#32CD32',
-    backgroundColor: '#98FB98',
+  avatarSelected: {
+    borderColor: GOLD,
+    backgroundColor: "#FFF8E1",
+    borderWidth: 3,
   },
   avatarEmoji: {
-    fontSize: 40,
+    fontSize: 32,
   },
-  saveButton: {
-    backgroundColor: '#32CD32',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
+  saveBtn: {
+    backgroundColor: GOLD,
+    borderRadius: 50,
+    paddingVertical: 13,
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: '#228B22',
+    borderColor: "#C8950A",
   },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  saveBtnText: {
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: 17,
   },
 });

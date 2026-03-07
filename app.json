@@ -2,16 +2,24 @@
   "expo": {
     "name": "Mexicanario",
     "slug": "mexicanario",
-    "version": "1.0.0",
+    "version": "1.2.8",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ea949252-b664-4472-b1a6-afcdadc99cc9",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD"
+    },
     "scheme": "mexicanario",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFE4B5"
     },
     "plugins": [
       "./plugins/withAndroidProductionFixes",
@@ -30,7 +38,8 @@
           "userTrackingPermission": "Usamos datos anónimos para mostrarte anuncios relevantes y mejorar tu experiencia en Mexicanario."
         }
       ],
-      "react-native-edge-to-edge"
+      "react-native-edge-to-edge",
+      "expo-router"
     ],
     "ios": {
       "bundleIdentifier": "com.kafaiho.mexicanario",
@@ -54,7 +63,7 @@
       }
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -65,8 +74,11 @@
         "com.google.android.gms.permission.AD_ID"
       ]
     },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive"
+    },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/icon.png"
     },
     "extra": {
       "eas": {

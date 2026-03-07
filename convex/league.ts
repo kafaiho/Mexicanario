@@ -17,17 +17,18 @@ export const DIVISIONS = [
 ] as const;
 
 // Rewards per division: [ascenso coins, ascenso diamonds, participación coins, top3 coins, top3 diamonds]
+// Designed to create strong dopamine response — higher leagues = exponentially better rewards
 const DIVISION_REWARDS: Record<number, { promo: [number, number]; participation: number; top3: [number, number] }> = {
-  1:  { promo: [10, 0],   participation: 5,  top3: [25, 0] },
-  2:  { promo: [15, 0],   participation: 8,  top3: [35, 0] },
-  3:  { promo: [20, 0],   participation: 10, top3: [50, 0] },
-  4:  { promo: [30, 0],   participation: 15, top3: [75, 0] },
-  5:  { promo: [40, 1],   participation: 20, top3: [100, 0] },
-  6:  { promo: [60, 2],   participation: 25, top3: [150, 1] },
-  7:  { promo: [80, 3],   participation: 30, top3: [200, 2] },
-  8:  { promo: [100, 5],  participation: 40, top3: [300, 3] },
-  9:  { promo: [150, 8],  participation: 50, top3: [400, 5] },
-  10: { promo: [200, 10], participation: 75, top3: [500, 10] },
+  1:  { promo: [60,  0],  participation: 20,  top3: [100,  0] },
+  2:  { promo: [80,  0],  participation: 25,  top3: [125,  1] },
+  3:  { promo: [100, 1],  participation: 30,  top3: [150,  1] },
+  4:  { promo: [150, 1],  participation: 40,  top3: [200,  2] },
+  5:  { promo: [200, 2],  participation: 50,  top3: [275,  2] },
+  6:  { promo: [275, 3],  participation: 65,  top3: [375,  3] },
+  7:  { promo: [375, 4],  participation: 80,  top3: [500,  5] },
+  8:  { promo: [500, 6],  participation: 100, top3: [650,  7] },
+  9:  { promo: [650, 8],  participation: 125, top3: [850,  10] },
+  10: { promo: [0,   0],  participation: 150, top3: [1000, 15] },
 };
 
 // ── Time helpers ────────────────────────────────────────────────────────────
@@ -77,8 +78,14 @@ function getWeekEndMs(): number {
 // ── cXP formula ─────────────────────────────────────────────────────────────
 
 const BASE_CXP = 10;
-const DAILY_SOFT_CAP = 100;
-const DAILY_HARD_CAP = 150;
+const DAILY_SOFT_CAP = 150;  // diminishing returns start here (was 100)
+const DAILY_HARD_CAP = 200;  // absolute daily ceiling (was 150)
+
+// ── League zone thresholds ──────────────────────────────────────────────────
+const PROMO_PCT     = 0.20;  // top 20% of group get promoted
+const DEMO_PCT      = 0.20;  // bottom 20% of group get demoted
+const PROMO_MIN_CXP = 200;   // must earn this much weekly to be eligible for promotion
+const SAFE_MIN_CXP  = 50;    // earn less than this → demotion zone regardless of rank
 
 function calculateWordCXP(
   attempts: number,
@@ -163,15 +170,21 @@ export const getLeagueStatus = query({
     // Sort by cxpTotal desc, then by wordsThisWeek desc
     groupPlayers.sort((a, b) => b.cxpTotal - a.cxpTotal || b.wordsThisWeek - a.wordsThisWeek);
 
+    // Zone boundaries (percentage-based, like Duolingo)
+    const total = groupPlayers.length;
+    const promoCount = Math.max(1, Math.ceil(total * PROMO_PCT)); // top 20%
+    const demoCount  = Math.max(1, Math.ceil(total * DEMO_PCT));  // bottom 20%
+
     // Enrich with user data
     const enriched = await Promise.all(
       groupPlayers.map(async (p, idx) => {
         const u = await ctx.db.get(p.userId);
         const rank = idx + 1;
-        const zone =
-          rank <= 5 ? "promotion" :
-          rank > Math.max(groupPlayers.length - 5, 25) ? "demotion" :
-          "safe";
+        // Promotion: top 20% AND earned enough CXP this week
+        const wouldPromote = rank <= promoCount && p.cxpTotal >= PROMO_MIN_CXP && division < 10;
+        // Demotion: bottom 20% OR too inactive (regardless of rank)
+        const wouldDemote  = (rank > total - demoCount || p.cxpTotal < SAFE_MIN_CXP) && division > 1;
+        const zone = wouldPromote ? "promotion" : wouldDemote ? "demotion" : "safe";
         return {
           rank,
           zone,
@@ -188,16 +201,21 @@ export const getLeagueStatus = query({
       })
     );
 
-    const myRank = enriched.find((e) => e.isCurrentUser);
+    const myEntry = enriched.find((e) => e.isCurrentUser);
     const todayCxp = playerEntry.todayDate === getTodayCST() ? playerEntry.cxpToday : 0;
+
+    // CXP of the player just at the promotion boundary (for "X más para ascender")
+    const promoBoundaryCxp = enriched[promoCount - 1]?.cxpTotal ?? 0;
+    // CXP of the player just above the demotion zone
+    const safeBoundaryCxp  = enriched[total - demoCount - 1]?.cxpTotal ?? 0;
 
     return {
       joined: true,
       weekId,
       division,
       divisionInfo: DIVISIONS[division - 1] ?? DIVISIONS[0],
-      rank: myRank?.rank ?? 0,
-      zone: myRank?.zone ?? "safe",
+      rank: myEntry?.rank ?? 0,
+      zone: myEntry?.zone ?? "safe",
       cxpTotal: playerEntry.cxpTotal,
       cxpToday: todayCxp,
       capRemaining: Math.max(0, DAILY_HARD_CAP - todayCxp),
@@ -208,6 +226,13 @@ export const getLeagueStatus = query({
       leagueHighestDiv: (user as any).leagueHighestDiv ?? 1,
       leagueTrophies: (user as any).leagueTrophies ?? 0,
       leagueWeeklyStreak: (user as any).leagueWeeklyStreak ?? 0,
+      // Zone info for UI nudges
+      promoCount,
+      demoCount,
+      promoMinCXP: PROMO_MIN_CXP,
+      safeMinCXP: SAFE_MIN_CXP,
+      promoBoundaryCxp,
+      safeBoundaryCxp,
     };
   },
 });
@@ -583,6 +608,8 @@ export const processWeekEnd = internalMutation({
       players.sort((a, b) => b.cxpTotal - a.cxpTotal || b.wordsThisWeek - a.wordsThisWeek);
 
       const total = players.length;
+      const promoCount = Math.max(1, Math.ceil(total * PROMO_PCT));
+      const demoCount  = Math.max(1, Math.ceil(total * DEMO_PCT));
 
       for (let i = 0; i < players.length; i++) {
         const p = players[i];
@@ -591,9 +618,11 @@ export const processWeekEnd = internalMutation({
 
         let outcome: "promoted" | "stayed" | "demoted" = "stayed";
 
-        if (rank <= 5 && division < 10) {
+        // Promotion: top 20% AND earned the minimum CXP to prove real activity
+        if (rank <= promoCount && p.cxpTotal >= PROMO_MIN_CXP && division < 10) {
           outcome = "promoted";
-        } else if (rank > Math.max(total - 5, 25) && division > 1) {
+        // Demotion: bottom 20% OR too inactive (didn't earn SAFE_MIN_CXP)
+        } else if ((rank > total - demoCount || p.cxpTotal < SAFE_MIN_CXP) && division > 1) {
           outcome = "demoted";
         }
 

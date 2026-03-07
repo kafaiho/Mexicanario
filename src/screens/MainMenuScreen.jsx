@@ -14,6 +14,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { api } from "../../convex/_generated/api";
 import AdBanner from "../components/AdBanner";
 import DailyMissionsWidget from "../components/DailyMissionsWidget";
@@ -29,16 +37,9 @@ import { useAuth } from "../context/AuthContext";
 import useDevMode from "../hooks/useDevMode";
 import { useOnboarding } from "../hooks/useOnboarding";
 import { tapMedium } from "../services/haptics";
-import { playSound } from "../utils/soundManager";
+import { presentMexicanarioPlusPaywall } from "../services/RevenueCatService";
 import usePetStore from "../store/usePetStore";
-import Reanimated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
+import { playSound } from "../utils/soundManager";
 import { REAL_HEIGHT, REAL_WIDTH } from "../utils/tabletSetup";
 import ShopScreen from "./ShopScreen";
 
@@ -75,13 +76,13 @@ export default function MainMenuScreen({ navigation }) {
   const [devMsg, setDevMsg] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [showDevPanel, setShowDevPanel] = useState(false);
-  const devEnabled = useDevMode((s) => s.enabled);
+  const devEnabled = __DEV__ && useDevMode((s) => s.enabled);
 
   // ── Floating icon bounce animations ─────────────────────────────────────────
   const mexicanarioScale = useSharedValue(1);
-  const giftScale        = useSharedValue(1);
-  const wheelScale       = useSharedValue(1);
-  const adsScale         = useSharedValue(1);
+  const giftScale = useSharedValue(1);
+  const wheelScale = useSharedValue(1);
+  const adsScale = useSharedValue(1);
 
   function bounceTap(sv) {
     playSound("click");
@@ -92,13 +93,13 @@ export default function MainMenuScreen({ navigation }) {
   }
 
   const mexicanarioAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: mexicanarioScale.value }] }));
-  const giftAnimStyle        = useAnimatedStyle(() => ({ transform: [{ scale: giftScale.value }] }));
-  const wheelAnimStyle       = useAnimatedStyle(() => ({ transform: [{ scale: wheelScale.value }] }));
-  const adsAnimStyle         = useAnimatedStyle(() => ({ transform: [{ scale: adsScale.value }] }));
+  const giftAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: giftScale.value }] }));
+  const wheelAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: wheelScale.value }] }));
+  const adsAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: adsScale.value }] }));
 
   const { userId, logout } = useAuth();
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
-  const allLevels = useQuery(api.levels.getAllLevels, {});
+  const allLevels = useQuery(api.levels.getAllLevels, userId ? { userId } : {});
 
   // Onboarding — shown only on first launch
   const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("menu");
@@ -140,7 +141,6 @@ export default function MainMenuScreen({ navigation }) {
   const seed15to18 = useMutation(api.levels.seedLevels15_18);
   const buildLevels = useMutation(api.levels.createLevelsForAllWords);
   const seedOriginal = useMutation(api.words.seedOriginalWords);
-  const seedAdultos = useMutation(api.seedAdultWords.seedAdultWords);
 
   const DEV_PET_TYPES = ["ajolote", "xolo", "alebrije"];
   const [devPetIdx, setDevPetIdx] = useState(0);
@@ -150,6 +150,7 @@ export default function MainMenuScreen({ navigation }) {
 
   const currentLevel = levelInfo?.level || 1;
   const allLevelsData = allLevels || [];
+  const totalLevels = allLevelsData.length;
 
   // ── Groups of 50 ────────────────────────────────────────────────────────────
   const groups = useMemo(() => {
@@ -273,9 +274,9 @@ export default function MainMenuScreen({ navigation }) {
             <>
               {/* Zone chip — only on active slide */}
               {isActive && (() => {
-                const zone = getZone(currentLevel);
-                const zoneProgress = getZoneProgress(currentLevel);
-                const zoneSize = zone.levels[1] === 9999 ? 10 : zone.levels[1] - zone.levels[0] + 1;
+                const zone = getZone(currentLevel, totalLevels);
+                const zoneProgress = getZoneProgress(currentLevel, totalLevels);
+                const zoneSize = zone.levels[1] - zone.levels[0] + 1;
                 return (
                   <TouchableOpacity
                     style={[styles.zoneChip, { backgroundColor: zone.color + "DD" }]}
@@ -344,7 +345,7 @@ export default function MainMenuScreen({ navigation }) {
           </TouchableOpacity>
         </Reanimated.View>
         <Reanimated.View style={adsAnimStyle}>
-          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(adsScale); setShowShop(true); setShowAds(true); }}>
+          <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(adsScale); presentMexicanarioPlusPaywall(); }}>
             <Image source={require("../../assets/images/ads.png")} style={styles.floatIcon} resizeMode="contain" />
           </TouchableOpacity>
         </Reanimated.View>
@@ -384,7 +385,18 @@ export default function MainMenuScreen({ navigation }) {
             </View>
           </>
         ) : (
-          <ActivityIndicator size="large" color="#F59B40" />
+          <View style={{ alignItems: "center", gap: 20 }}>
+            {allLevels === undefined && (
+              <ActivityIndicator size="large" color="#F59B40" />
+            )}
+            <TouchableOpacity
+              style={styles.ctaBtn}
+              onPress={() => { tapMedium(); navigation.navigate("Gameplay"); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ctaBtnText}>{`Nivel ${currentLevel}`}</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -428,10 +440,7 @@ export default function MainMenuScreen({ navigation }) {
                 onPress={async () => { if (!userId) return; setDevMsg("⏳ Cargando seed..."); await seedOriginal(); await seed15to18(); await buildLevels(); setDevMsg("✅ Seed completo"); }}>
                 <Text style={styles.devModalBtnText}>🌱 Seed palabras 15-18</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#9B1717" }]}
-                onPress={async () => { setDevMsg("⏳ Sembrando palabras +18..."); try { const r = await seedAdultos(); setDevMsg(`✅ ${r.wordsAdded} palabras +18 agregadas (${r.levelsAdded} niveles)`); } catch(e) { setDevMsg("Error: " + e.message); } }}>
-                <Text style={styles.devModalBtnText}>🌶️ Seed palabras +18 (Insultos + Suegra)</Text>
-              </TouchableOpacity>
+
 
               {/* Mascota */}
               <Text style={styles.devSectionLabel}>🐾 Mascota</Text>
@@ -492,16 +501,16 @@ export default function MainMenuScreen({ navigation }) {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#7FAAB8" },
 
   // Side icons — large, two columns, anchored high (use real screen dims for positioning)
-  leftColumn: { position: "absolute", top: SCREEN_H * 0.16, left: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
-  rightColumn: { position: "absolute", top: SCREEN_H * 0.16, right: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
+  leftColumn: { position: "absolute", top: SCREEN_H * 0.14, left: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
+  rightColumn: { position: "absolute", top: SCREEN_H * 0.14, right: SCREEN_W * 0.03, gap: SCREEN_H * 0.07, zIndex: 50 },
   floatBadge: { width: width * 0.16, height: width * 0.16, justifyContent: "center", alignItems: "center" },
   floatIcon: { width: "100%", height: "100%" },
 
   // Carousel area: starts after TopBar, takes middle of screen
-  carouselArea: { marginTop: SCREEN_H * 0.17, height: SCREEN_H * 0.48 },
+  carouselArea: { marginTop: SCREEN_H * 0.14, height: SCREEN_H * 0.47 },
 
   // Each slide = full real screen width, vertically centered
   slide: {
@@ -517,7 +526,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     position: "relative",
   },
-  bigEmoji: { fontSize: 120, lineHeight: 130 },
+  bigEmoji: { fontSize: 100, lineHeight: 110 },
   // Oval shadow — blurred ellipse below the emoji
   emojiShadow: {
     width: 110,
@@ -525,8 +534,6 @@ const styles = StyleSheet.create({
     borderRadius: 55,
     backgroundColor: "rgba(0,0,0,0.18)",
     marginTop: -8,
-    // shift shadow to the right like in the reference
-    transform: [{ translateX: 10 }],
   },
 
   lockBadge: { position: "absolute", top: 0, right: -10, zIndex: 10 },

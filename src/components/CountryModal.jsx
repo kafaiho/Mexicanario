@@ -1,124 +1,191 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useMutation } from "convex/react";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "../context/AuthContext";
+import { FONTS } from "../theme/designTokens";
+
+const BROWN = "#8B4513";
+const GOLD  = "#F8BE17";
+const WHEAT = "#FFE4B5";
+const WHEAT2 = "#F5DEB3";
+
+const COUNTRIES = [
+  { code: "MX", flag: "🇲🇽", name: "México" },
+  { code: "US", flag: "🇺🇸", name: "Estados Unidos" },
+  { code: "CO", flag: "🇨🇴", name: "Colombia" },
+  { code: "AR", flag: "🇦🇷", name: "Argentina" },
+  { code: "ES", flag: "🇪🇸", name: "España" },
+  { code: "PE", flag: "🇵🇪", name: "Perú" },
+  { code: "CL", flag: "🇨🇱", name: "Chile" },
+  { code: "VE", flag: "🇻🇪", name: "Venezuela" },
+  { code: "GT", flag: "🇬🇹", name: "Guatemala" },
+  { code: "EC", flag: "🇪🇨", name: "Ecuador" },
+  { code: "CU", flag: "🇨🇺", name: "Cuba" },
+  { code: "HN", flag: "🇭🇳", name: "Honduras" },
+  { code: "SV", flag: "🇸🇻", name: "El Salvador" },
+  { code: "BR", flag: "🇧🇷", name: "Brasil" },
+  { code: "CA", flag: "🇨🇦", name: "Canadá" },
+];
 
 export default function CountryModal({ visible, onClose }) {
-  const [selectedCountry, setSelectedCountry] = useState('mexico');
+  const { userId, user } = useAuth();
+  const updateProfile = useMutation(api.users.updateUserProfile);
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const countries = [
-    { code: 'usa', flag: '🇺🇸', name: 'usa' },
-    { code: 'mexico', flag: '🇲🇽', name: 'mexico' },
-    { code: 'uk', flag: '🇬🇧', name: 'uk' }
-  ];
+  React.useEffect(() => {
+    if (visible && user?.country) {
+      const idx = COUNTRIES.findIndex((c) => c.code === user.country);
+      if (idx >= 0) setSelected(idx);
+    }
+  }, [visible]);
+
+  async function handleSave() {
+    if (selected === null || !userId) return;
+    setBusy(true);
+    try {
+      await updateProfile({ userId, country: COUNTRIES[selected].code });
+      onClose();
+    } catch (e) {
+      if (__DEV__) console.warn(e);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Mexico</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color="#8B4513" />
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <View style={s.modal}>
+          <View style={s.header}>
+            <Text style={s.title}>Tu país</Text>
+            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
+              <Text style={s.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.content}>
-            <View style={styles.countryList}>
-              {countries.map((country) => (
-                <TouchableOpacity
-                  key={country.code}
-                  style={[
-                    styles.countryOption,
-                    selectedCountry === country.code && styles.selectedCountry
-                  ]}
-                  onPress={() => setSelectedCountry(country.code)}
-                >
-                  <Text style={styles.flagEmoji}>{country.flag}</Text>
-                  <Text style={styles.countryName}>{country.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+            {COUNTRIES.map((c, i) => (
+              <TouchableOpacity
+                key={c.code}
+                style={[s.countryRow, selected === i && s.countrySelected]}
+                onPress={() => setSelected(i)}
+              >
+                <Text style={s.flag}>{c.flag}</Text>
+                <Text style={s.countryName}>{c.name}</Text>
+                {selected === i && <Text style={s.check}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
-            <TouchableOpacity style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Guardar</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[s.saveBtn, selected === null && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={selected === null || busy}
+          >
+            {busy
+              ? <ActivityIndicator color={BROWN} />
+              : <Text style={s.saveBtnText}>Guardar</Text>
+            }
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modal: {
-    backgroundColor: '#FFE4B5',
+    backgroundColor: WHEAT,
     borderRadius: 20,
     padding: 20,
-    width: '80%',
-    borderWidth: 4,
-    borderColor: '#8B4513',
+    width: "85%",
+    borderWidth: 3,
+    borderColor: BROWN,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1.5,
+    borderBottomColor: "rgba(210,105,30,0.3)",
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8B4513',
+    fontFamily: FONTS.display,
+    fontSize: 22,
+    color: BROWN,
   },
-  closeButton: {
-    padding: 5,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#e64a33",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  content: {
-    alignItems: 'center',
-  },
-  countryList: {
-    width: '100%',
-    gap: 10,
-    marginBottom: 30,
-  },
-  countryOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5DEB3',
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#D2691E',
-  },
-  selectedCountry: {
-    borderColor: '#32CD32',
-    backgroundColor: '#98FB98',
-  },
-  flagEmoji: {
-    fontSize: 24,
-    marginRight: 15,
-  },
-  countryName: {
+  closeBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
     fontSize: 16,
-    color: '#8B4513',
-    fontWeight: '500',
+    lineHeight: 19,
   },
-  saveButton: {
-    backgroundColor: '#32CD32',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#228B22',
+  countryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: WHEAT2,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: "rgba(139,69,19,0.2)",
+    gap: 12,
   },
-  saveButtonText: {
-    color: 'white',
+  countrySelected: {
+    borderColor: GOLD,
+    backgroundColor: "#FFF8E1",
+    borderWidth: 2.5,
+  },
+  flag: { fontSize: 24 },
+  countryName: {
+    flex: 1,
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: 15,
+  },
+  check: {
     fontSize: 18,
-    fontWeight: 'bold',
+    color: "#27AE60",
+    fontWeight: "bold",
+  },
+  saveBtn: {
+    backgroundColor: GOLD,
+    borderRadius: 50,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#C8950A",
+    marginTop: 12,
+  },
+  saveBtnText: {
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: 17,
   },
 });

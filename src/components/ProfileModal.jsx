@@ -1,143 +1,158 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
-import { FONTS } from '../theme/designTokens';
+import { useMutation } from "convex/react";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "../context/AuthContext";
+import { FONTS } from "../theme/designTokens";
 
-const BROWN = '#8B4513';
-const AMBER = '#D2691E';
-const GOLD  = '#F8BE17';
-const WHEAT = '#FFE4B5';
-const WHEAT2 = '#F5DEB3';
+const BROWN = "#8B4513";
+const GOLD  = "#F8BE17";
+const WHEAT = "#FFE4B5";
+const WHEAT2 = "#F5DEB3";
 
 export default function ProfileModal({ visible, onClose }) {
+  const { userId, user } = useAuth();
+  const updateProfile = useMutation(api.users.updateUserProfile);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // Pre-fill with current name when modal opens
+  React.useEffect(() => {
+    if (visible && user?.name) setName(user.name);
+  }, [visible]);
+
+  async function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed || !userId) return;
+    setBusy(true);
+    try {
+      await updateProfile({ userId, name: trimmed });
+      onClose();
+    } catch (e) {
+      if (__DEV__) console.warn(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Perfil</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeIcon}>✕</Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <View style={s.modal}>
+          <View style={s.header}>
+            <Text style={s.title}>Editar nombre</Text>
+            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
+              <Text style={s.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.content}>
-            <View style={styles.inputGroup}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.fieldIcon}>✏️</Text>
-                <Text style={styles.inputLabel}>Mudassir</Text>
-              </View>
-            </View>
+          <Text style={s.label}>Tu nombre visible:</Text>
+          <TextInput
+            style={s.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Ej: Juan Carlos"
+            placeholderTextColor="#A0714F"
+            maxLength={30}
+            autoFocus
+          />
 
-            <View style={styles.inputGroup}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.avatarIcon}>👤</Text>
-                <Text style={styles.inputLabel}>Avatar</Text>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.flagIcon}>🇲🇽</Text>
-                <Text style={styles.inputLabel}>País</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Guardar</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[s.saveBtn, !name.trim() && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={!name.trim() || busy}
+          >
+            {busy
+              ? <ActivityIndicator color={BROWN} />
+              : <Text style={s.saveBtnText}>Guardar</Text>
+            }
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modal: {
     backgroundColor: WHEAT,
     borderRadius: 20,
     padding: 20,
-    width: '80%',
-    borderWidth: 2,
-    borderColor: 'rgba(139,69,19,0.5)',
+    width: "85%",
+    borderWidth: 3,
+    borderColor: BROWN,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(210,105,30,0.3)',
+    borderBottomWidth: 1.5,
+    borderBottomColor: "rgba(210,105,30,0.3)",
   },
   title: {
     fontFamily: FONTS.display,
-    fontSize: 24,
+    fontSize: 22,
     color: BROWN,
   },
-  closeButton: {
+  closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: WHEAT2,
-    borderWidth: 1.5,
-    borderColor: 'rgba(139,69,19,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#e64a33",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  closeIcon: {
+  closeBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    lineHeight: 19,
+  },
+  label: {
     fontFamily: FONTS.bodyBold,
-    fontSize: 14,
     color: BROWN,
+    fontSize: 15,
+    marginBottom: 8,
   },
-  content: {
-    gap: 12,
-  },
-  inputGroup: {
-    marginBottom: 4,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  input: {
     backgroundColor: WHEAT2,
-    padding: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: 'rgba(210,105,30,0.4)',
-    gap: 12,
-  },
-  fieldIcon: {
-    fontSize: 18,
-  },
-  inputLabel: {
+    borderColor: "rgba(139,69,19,0.35)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontFamily: FONTS.body,
     fontSize: 16,
     color: BROWN,
+    marginBottom: 16,
   },
-  avatarIcon: {
-    fontSize: 18,
-  },
-  flagIcon: {
-    fontSize: 18,
-  },
-  saveButton: {
+  saveBtn: {
     backgroundColor: GOLD,
-    padding: 14,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginTop: 16,
-    borderWidth: 1.5,
-    borderColor: '#C8950A',
+    borderRadius: 50,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#C8950A",
   },
-  saveButtonText: {
+  saveBtnText: {
     fontFamily: FONTS.bodyBold,
-    color: '#523600',
+    color: BROWN,
     fontSize: 17,
   },
 });

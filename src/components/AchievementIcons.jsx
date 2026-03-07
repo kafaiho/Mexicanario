@@ -769,24 +769,386 @@ function Invitar10Icon({ size = 40 }) {
   );
 }
 
+// ── 19. QUINIENTAS PALABRAS ───────────────────────────────────
+// Pirámide escalonada estilo Teotihuacán con sol
+function QuinientasPalabrasIcon({ size = 40 }) {
+  const C = COLORS.primeros;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="61" rx="22" ry="3" fill="rgba(82,54,0,0.15)" />
+      <Rect x="6" y="54" width="52" height="6" rx="1" fill={C.acc} />
+      <Rect x="11" y="46" width="42" height="8" fill={C.pri} />
+      <Rect x="16" y="38" width="32" height="8" fill="#D48018" />
+      <Rect x="21" y="30" width="22" height="8" fill={C.sec} />
+      <Rect x="26" y="22" width="12" height="8" fill="#C87010" />
+      <Rect x="28" y="14" width="8" height="8" fill={C.acc} />
+      <Circle cx="32" cy="9" r="4.5" fill={C.sec} />
+      <Line x1="32" y1="2" x2="32" y2="4" stroke={C.sec} strokeWidth="1.5" strokeLinecap="round" />
+      <Line x1="38.5" y1="4" x2="37" y2="6" stroke={C.sec} strokeWidth="1.5" strokeLinecap="round" />
+      <Line x1="25.5" y1="4" x2="27" y2="6" stroke={C.sec} strokeWidth="1.5" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// ── 20. MIL PALABRAS ──────────────────────────────────────────
+// Serpiente emplumada / Quetzalcoatl
+function MilPalabrasIcon({ size = 40 }) {
+  const C = COLORS.primeros;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="61" rx="18" ry="3" fill="rgba(82,54,0,0.15)" />
+      <Ellipse cx="16" cy="18" rx="4" ry="11" fill="#1B5E20" transform="rotate(-30 16 18)" />
+      <Ellipse cx="24" cy="11" rx="4" ry="11" fill="#2E7D32" transform="rotate(-10 24 11)" />
+      <Ellipse cx="32" cy="9" rx="4" ry="11" fill="#4CAF50" />
+      <Ellipse cx="40" cy="11" rx="4" ry="11" fill="#2E7D32" transform="rotate(10 40 11)" />
+      <Ellipse cx="48" cy="18" rx="4" ry="11" fill="#1B5E20" transform="rotate(30 48 18)" />
+      <Path d="M14 52 C14 42 20 38 32 38 C44 38 50 42 50 52 L50 56 C50 58 48 60 32 60 C16 60 14 58 14 56 Z" fill={C.pri} stroke={C.acc} strokeWidth="1" />
+      <Ellipse cx="32" cy="34" rx="10" ry="8" fill={C.pri} stroke={C.acc} strokeWidth="1" />
+      <Circle cx="27" cy="32" r="3" fill="white" />
+      <Circle cx="37" cy="32" r="3" fill="white" />
+      <Circle cx="27" cy="32" r="1.5" fill={C.acc} />
+      <Circle cx="37" cy="32" r="1.5" fill={C.acc} />
+      <Path d="M32 40 L29 45 M32 40 L35 45" fill="none" stroke="#E85D3A" strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M22 44 C26 42 30 42 34 44 C38 42 42 44 46 44" fill="none" stroke={C.sec} strokeWidth="0.8" opacity="0.5" />
+      <Path d="M20 50 L24 46 L28 50 L24 54 Z" fill={C.sec} opacity="0.3" />
+      <Path d="M36 50 L40 46 L44 50 L40 54 Z" fill={C.sec} opacity="0.3" />
+    </Svg>
+  );
+}
+
+// ── 21. RACHA 60 ──────────────────────────────────────────────
+// Maguey/Agave con espinas
+function Racha60Icon({ size = 40 }) {
+  const C = COLORS.racha;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="61" rx="18" ry="3" fill="rgba(82,54,0,0.15)" />
+      <Path d="M10 56 C16 54 24 54 32 54 C40 54 48 54 54 56 L56 60 L8 60 Z" fill="#8B6914" />
+      <Rect x="30" y="44" width="4" height="12" rx="1" fill="#558B2F" />
+      <Path d="M32 44 L30 24 L32 4 L34 24 Z" fill="#558B2F" />
+      <Path d="M32 30 L10 16 L30 26 Z" fill="#4CAF50" />
+      <Path d="M32 30 L54 16 L34 26 Z" fill="#2E7D32" />
+      <Path d="M32 36 L6 26 L30 32 Z" fill="#2E7D32" />
+      <Path d="M32 36 L58 26 L34 32 Z" fill="#4CAF50" />
+      <Path d="M32 42 L10 36 L30 40 Z" fill="#4CAF50" />
+      <Path d="M32 42 L54 36 L34 40 Z" fill="#2E7D32" />
+      <Circle cx="32" cy="4" r="1.5" fill={C.pri} />
+      <Circle cx="10" cy="16" r="1.5" fill={C.pri} />
+      <Circle cx="54" cy="16" r="1.5" fill={C.pri} />
+      <Circle cx="6" cy="26" r="1.5" fill={C.pri} />
+      <Circle cx="58" cy="26" r="1.5" fill={C.pri} />
+      <Circle cx="10" cy="36" r="1.5" fill={C.pri} />
+      <Circle cx="54" cy="36" r="1.5" fill={C.pri} />
+    </Svg>
+  );
+}
+
+// ── 22. RACHA 100 ─────────────────────────────────────────────
+// Calavera Día de Muertos con flores
+function Racha100Icon({ size = 40 }) {
+  const C = COLORS.racha;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="16" ry="2.5" fill="rgba(82,54,0,0.15)" />
+      <Rect x="20" y="44" width="24" height="14" rx="3" fill="white" stroke={C.pri} strokeWidth="1.5" />
+      <Rect x="23" y="47" width="4" height="9" rx="1" fill="white" stroke={C.pri} strokeWidth="1" />
+      <Rect x="29" y="47" width="4" height="9" rx="1" fill="white" stroke={C.pri} strokeWidth="1" />
+      <Rect x="35" y="47" width="4" height="9" rx="1" fill="white" stroke={C.pri} strokeWidth="1" />
+      <Path d="M12 38 C12 22 20 10 32 10 C44 10 52 22 52 38 L52 46 L12 46 Z" fill="white" stroke={C.pri} strokeWidth="1.5" />
+      <Ellipse cx="23" cy="32" rx="6" ry="7" fill={C.pri} />
+      <Circle cx="23" cy="32" r="2.5" fill={C.sec} />
+      <Ellipse cx="19" cy="32" rx="2" ry="1.5" fill={C.sec} />
+      <Ellipse cx="27" cy="32" rx="2" ry="1.5" fill={C.sec} />
+      <Ellipse cx="23" cy="28.5" rx="1.5" ry="2" fill={C.sec} />
+      <Ellipse cx="23" cy="35.5" rx="1.5" ry="2" fill={C.sec} />
+      <Ellipse cx="41" cy="32" rx="6" ry="7" fill={C.pri} />
+      <Circle cx="41" cy="32" r="2.5" fill={C.sec} />
+      <Ellipse cx="37" cy="32" rx="2" ry="1.5" fill={C.sec} />
+      <Ellipse cx="45" cy="32" rx="2" ry="1.5" fill={C.sec} />
+      <Ellipse cx="41" cy="28.5" rx="1.5" ry="2" fill={C.sec} />
+      <Ellipse cx="41" cy="35.5" rx="1.5" ry="2" fill={C.sec} />
+      <Path d="M29 40 L32 43 L35 40" fill="none" stroke={C.pri} strokeWidth="1.5" strokeLinecap="round" />
+      <Circle cx="32" cy="22" r="3" fill={C.sec} stroke={C.acc} strokeWidth="0.8" />
+      <Ellipse cx="26" cy="20" rx="2.5" ry="1.5" fill="#4CAF50" />
+      <Ellipse cx="38" cy="20" rx="2.5" ry="1.5" fill={C.sec} />
+      <Circle cx="20" cy="26" r="1.5" fill="#4CAF50" />
+      <Circle cx="44" cy="26" r="1.5" fill={C.sec} />
+    </Svg>
+  );
+}
+
+// ── 23. NIVEL 150 ─────────────────────────────────────────────
+// Pirámide isométrica con luna y estrellas
+function Nivel150Icon({ size = 40 }) {
+  const C = COLORS.experto;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="61" rx="24" ry="3" fill="rgba(82,54,0,0.15)" />
+      <Path d="M4 58 L32 12 L32 58 Z" fill={C.pri} stroke={C.acc} strokeWidth="1.2" />
+      <Path d="M60 58 L32 12 L32 58 Z" fill="#B8920A" stroke={C.acc} strokeWidth="1.2" />
+      <Line x1="10" y1="54" x2="32" y2="54" stroke={C.acc} strokeWidth="0.8" opacity="0.4" />
+      <Line x1="16" y1="48" x2="32" y2="48" stroke={C.acc} strokeWidth="0.8" opacity="0.4" />
+      <Line x1="22" y1="40" x2="32" y2="40" stroke={C.acc} strokeWidth="0.8" opacity="0.4" />
+      <Line x1="27" y1="32" x2="32" y2="32" stroke={C.acc} strokeWidth="0.8" opacity="0.4" />
+      <Line x1="54" y1="54" x2="32" y2="54" stroke={C.acc} strokeWidth="0.8" opacity="0.3" />
+      <Line x1="48" y1="48" x2="32" y2="48" stroke={C.acc} strokeWidth="0.8" opacity="0.3" />
+      <Line x1="4" y1="58" x2="60" y2="58" stroke={C.acc} strokeWidth="2" />
+      <Path d="M36 5 C34 3 32 2 32 2 C35 2 40 5 40 9 C40 13 37 16 34 16 C34 16 36 15 37 13 C38 11 38 7 36 5 Z" fill="white" opacity="0.85" />
+      <Circle cx="8" cy="14" r="1.5" fill={C.sec} />
+      <Circle cx="56" cy="8" r="1.2" fill={C.sec} />
+      <Circle cx="52" cy="20" r="1" fill={C.sec} opacity="0.7" />
+      <Circle cx="12" cy="22" r="0.9" fill={C.sec} opacity="0.7" />
+    </Svg>
+  );
+}
+
+// ── 24. NIVEL 200 ─────────────────────────────────────────────
+// Quetzal — ave sagrada con cola larga
+function Nivel200Icon({ size = 40 }) {
+  const C = COLORS.experto;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="14" ry="2.5" fill="rgba(82,54,0,0.15)" />
+      <Path d="M30 44 C26 50 22 54 18 60" fill="none" stroke="#2E7D32" strokeWidth="3" strokeLinecap="round" />
+      <Path d="M32 46 C30 52 28 56 26 62" fill="none" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round" />
+      <Path d="M34 44 C38 50 40 56 38 62" fill="none" stroke="#2E7D32" strokeWidth="3" strokeLinecap="round" />
+      <Path d="M24 30 C16 24 10 24 6 28 C12 26 18 28 24 34 Z" fill="#2E7D32" />
+      <Path d="M40 30 C48 24 54 24 58 28 C52 26 46 28 40 34 Z" fill="#4CAF50" />
+      <Ellipse cx="32" cy="36" rx="10" ry="12" fill="#C62828" />
+      <Ellipse cx="32" cy="40" rx="6" ry="7" fill="white" opacity="0.25" />
+      <Circle cx="32" cy="22" r="9" fill="#2E7D32" />
+      <Ellipse cx="28" cy="14" rx="3" ry="7" fill="#4CAF50" transform="rotate(-20 28 14)" />
+      <Ellipse cx="32" cy="13" rx="3" ry="7" fill="#2E7D32" />
+      <Ellipse cx="36" cy="14" rx="3" ry="7" fill="#4CAF50" transform="rotate(20 36 14)" />
+      <Circle cx="30" cy="21" r="3.5" fill="white" />
+      <Circle cx="30" cy="21" r="2" fill="#333" />
+      <Circle cx="30.5" cy="20.5" r="0.7" fill="white" />
+      <Path d="M24 25 L20 28 L24 27 Z" fill={C.sec} />
+    </Svg>
+  );
+}
+
+// ── 25. VEINTICINCO PERFECTOS ─────────────────────────────────
+// Diana de tiro con flecha
+function VeinticincoIcon({ size = 40 }) {
+  const C = COLORS.experto;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="20" ry="2.5" fill="rgba(82,54,0,0.15)" />
+      <Circle cx="32" cy="32" r="27" fill="white" stroke="#DDD" strokeWidth="1" />
+      <Circle cx="32" cy="32" r="21" fill="#D4543B" />
+      <Circle cx="32" cy="32" r="15" fill="white" />
+      <Circle cx="32" cy="32" r="10" fill="#D4543B" />
+      <Circle cx="32" cy="32" r="5.5" fill={C.sec} />
+      <Circle cx="32" cy="32" r="2" fill={C.acc} />
+      <Line x1="54" y1="10" x2="36" y2="28" stroke={C.acc} strokeWidth="2.5" strokeLinecap="round" />
+      <Polygon points="36,28 31,26 34,31" fill={C.acc} />
+      <Path d="M54 10 L58 6 L56 11 L60 12 Z" fill={C.pri} />
+      <Path d="M54 10 L50 6" fill="none" stroke="#4CAF50" strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M54 10 L52 14" fill="none" stroke="#4CAF50" strokeWidth="1.5" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// ── 26. CORRIDOS FAN ──────────────────────────────────────────
+// Guitarra sierreña (corridos tumbados)
+function CorridosFanIcon({ size = 40 }) {
+  const C = COLORS.categoria;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="14" ry="2.5" fill="rgba(212,84,59,0.15)" />
+      <Rect x="30" y="4" width="4" height="26" rx="1.5" fill="#A1887F" stroke={C.acc} strokeWidth="0.8" />
+      <Rect x="27" y="4" width="10" height="5" rx="1.5" fill="#8D6E63" stroke={C.acc} strokeWidth="0.8" />
+      <Circle cx="29" cy="5.5" r="1.5" fill={C.sec} />
+      <Circle cx="35" cy="5.5" r="1.5" fill={C.sec} />
+      <Line x1="30" y1="12" x2="34" y2="12" stroke={C.sec} strokeWidth="0.8" />
+      <Line x1="30" y1="18" x2="34" y2="18" stroke={C.sec} strokeWidth="0.8" />
+      <Line x1="30" y1="24" x2="34" y2="24" stroke={C.sec} strokeWidth="0.8" />
+      <Ellipse cx="32" cy="38" rx="9" ry="9" fill={C.pri} stroke={C.acc} strokeWidth="1.5" />
+      <Rect x="24" y="43" width="16" height="8" fill={C.pri} />
+      <Line x1="24" y1="43" x2="24" y2="51" stroke={C.acc} strokeWidth="1.5" />
+      <Line x1="40" y1="43" x2="40" y2="51" stroke={C.acc} strokeWidth="1.5" />
+      <Ellipse cx="32" cy="52" rx="12" ry="10" fill={C.pri} stroke={C.acc} strokeWidth="1.5" />
+      <Circle cx="32" cy="52" r="5" fill={C.acc} />
+      <Circle cx="32" cy="52" r="3.5" fill="none" stroke={C.sec} strokeWidth="0.8" />
+      <Rect x="28" y="57" width="8" height="2" rx="1" fill={C.acc} />
+      <Line x1="31" y1="8" x2="31" y2="59" stroke="rgba(255,200,100,0.5)" strokeWidth="0.8" />
+      <Line x1="32.5" y1="8" x2="32.5" y2="59" stroke="rgba(255,200,100,0.5)" strokeWidth="0.8" />
+      <Line x1="34" y1="8" x2="34" y2="59" stroke="rgba(255,200,100,0.5)" strokeWidth="0.8" />
+      <Circle cx="50" cy="12" r="3" fill={C.acc} />
+      <Line x1="53" y1="12" x2="53" y2="6" stroke={C.acc} strokeWidth="1.5" />
+      <Line x1="53" y1="6" x2="57" y2="8" stroke={C.acc} strokeWidth="1.5" />
+    </Svg>
+  );
+}
+
+// ── 27. DIGITAL MX ────────────────────────────────────────────
+// Teléfono con hashtag y estrellas
+function DigitalMxIcon({ size = 40 }) {
+  const C = COLORS.colecciones;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="16" ry="2.5" fill="rgba(42,129,186,0.15)" />
+      <Rect x="16" y="6" width="32" height="52" rx="5" fill={C.pri} stroke={C.acc} strokeWidth="1.5" />
+      <Rect x="19" y="12" width="26" height="38" rx="2" fill="#E3F2FD" />
+      <Circle cx="32" cy="9" r="2" fill={C.acc} />
+      <Circle cx="32" cy="54" r="3" fill={C.sec} stroke={C.acc} strokeWidth="0.8" />
+      <Line x1="26" y1="22" x2="26" y2="38" stroke={C.pri} strokeWidth="3" strokeLinecap="round" />
+      <Line x1="34" y1="20" x2="34" y2="36" stroke={C.pri} strokeWidth="3" strokeLinecap="round" />
+      <Line x1="22" y1="27" x2="38" y2="27" stroke={C.pri} strokeWidth="3" strokeLinecap="round" />
+      <Line x1="22" y1="32" x2="38" y2="32" stroke={C.pri} strokeWidth="3" strokeLinecap="round" />
+      <Circle cx="8" cy="18" r="4" fill={C.sec} stroke={C.acc} strokeWidth="0.8" />
+      <Line x1="8" y1="12" x2="8" y2="14" stroke={C.sec} strokeWidth="1.5" />
+      <Line x1="8" y1="22" x2="8" y2="24" stroke={C.sec} strokeWidth="1.5" />
+      <Line x1="2" y1="18" x2="4" y2="18" stroke={C.sec} strokeWidth="1.5" />
+      <Line x1="12" y1="18" x2="14" y2="18" stroke={C.sec} strokeWidth="1.5" />
+      <Circle cx="56" cy="28" r="3" fill={C.sec} stroke={C.acc} strokeWidth="0.8" />
+      <Circle cx="10" cy="34" r="2" fill={C.sec} opacity="0.6" />
+      <Circle cx="58" cy="14" r="2" fill={C.sec} opacity="0.6" />
+    </Svg>
+  );
+}
+
+// ── 28. CHILANGO MX ───────────────────────────────────────────
+// Ángel de la Independencia estilizado (CDMX)
+function ChilangoIcon({ size = 40 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="18" ry="2.5" fill="rgba(82,54,0,0.15)" />
+      <Rect x="16" y="54" width="32" height="6" rx="2" fill="#4A148C" />
+      <Rect x="20" y="50" width="24" height="6" rx="1" fill="#C62828" />
+      <Rect x="28" y="20" width="8" height="30" fill="#C62828" />
+      <Rect x="24" y="18" width="16" height="4" rx="1" fill="#FCD11D" stroke="#4A148C" strokeWidth="0.8" />
+      <Circle cx="32" cy="12" r="5" fill="#FCD11D" stroke="#4A148C" strokeWidth="0.8" />
+      <Path d="M27 12 C22 8 14 8 12 12 C16 10 22 10 27 15 Z" fill="#FCD11D" />
+      <Path d="M37 12 C42 8 50 8 52 12 C48 10 42 10 37 15 Z" fill="#FCD11D" />
+      <Rect x="31" y="14" width="2" height="5" fill="#8D6E63" />
+      <Circle cx="32" cy="13" r="2.5" fill="#E85D3A" />
+      <Circle cx="32" cy="12.5" r="1.5" fill="#FCD11D" />
+      <Path d="M28 9 C30 7 34 7 36 9" fill="none" stroke="#4CAF50" strokeWidth="1.5" strokeLinecap="round" />
+      <Circle cx="28" cy="9.5" r="1" fill="#4CAF50" />
+      <Circle cx="36" cy="9.5" r="1" fill="#4CAF50" />
+      <Line x1="28" y1="32" x2="36" y2="32" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
+      <Line x1="28" y1="40" x2="36" y2="40" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
+      <Line x1="28" y1="46" x2="36" y2="46" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
+    </Svg>
+  );
+}
+
+// ── 29. NORTEÑO MX ────────────────────────────────────────────
+// Sombrero vaquero norteño
+function NortenoIcon({ size = 40 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="28" ry="3" fill="rgba(82,54,0,0.15)" />
+      <Path d="M2 46 C2 42 14 40 32 40 C50 40 62 42 62 46 C62 50 50 52 32 52 C14 52 2 50 2 46 Z" fill="#6D4C41" stroke="#3E2723" strokeWidth="1.5" />
+      <Path d="M14 40 L18 16 L46 16 L50 40" fill="#6D4C41" stroke="#3E2723" strokeWidth="1.5" />
+      <Ellipse cx="32" cy="16" rx="14" ry="4" fill="#8D6E63" stroke="#3E2723" strokeWidth="1.5" />
+      <Path d="M18 37 L46 37" stroke="#FCD11D" strokeWidth="3.5" strokeLinecap="round" />
+      <Circle cx="32" cy="16" r="3" fill="#FCD11D" stroke="#3E2723" strokeWidth="0.8" />
+      <Line x1="24" y1="20" x2="22" y2="37" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+      <Line x1="32" y1="18" x2="32" y2="37" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+      <Line x1="40" y1="20" x2="42" y2="37" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+      <Path d="M2 46 C6 48 14 50 32 50 C50 50 58 48 62 46" fill="none" stroke="#3E2723" strokeWidth="0.8" />
+    </Svg>
+  );
+}
+
+// ── 30. JAROCHO MX ────────────────────────────────────────────
+// Arpa jarocha de Veracruz
+function JarochoIcon({ size = 40 }) {
+  const strings = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="18" ry="2.5" fill="rgba(21,101,192,0.15)" />
+      <Rect x="14" y="8" width="5" height="52" rx="2" fill="#1565C0" stroke="#0D47A1" strokeWidth="1" />
+      <Path d="M16 8 C22 2 42 4 50 14" fill="none" stroke="#1565C0" strokeWidth="5" strokeLinecap="round" />
+      <Path d="M50 14 C54 22 54 44 50 54" stroke="#1565C0" strokeWidth="7" strokeLinecap="round" fill="none" />
+      <Rect x="14" y="58" width="36" height="5" rx="2" fill="#0D47A1" />
+      {strings.map((i) => (
+        <Line
+          key={i}
+          x1={21 + i * 1.8}
+          y1={10 - i * 0.4}
+          x2={50}
+          y2={16 + i * 3.8}
+          stroke="#FCD11D"
+          strokeWidth={0.7 + i * 0.08}
+          opacity={0.85}
+        />
+      ))}
+      <Circle cx="16" cy="18" r="2.5" fill="#FCD11D" />
+      <Circle cx="16" cy="28" r="2.5" fill="#FCD11D" />
+      <Circle cx="16" cy="38" r="2.5" fill="#FCD11D" />
+    </Svg>
+  );
+}
+
+// ── 31. TAPATÍO MX ────────────────────────────────────────────
+// Copa de tequila con limón y sal (Jalisco)
+function TapatioIcon({ size = 40 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Ellipse cx="32" cy="62" rx="16" ry="2.5" fill="rgba(46,125,50,0.15)" />
+      <Path d="M20 24 L24 56 L42 56 L46 24 Z" fill="rgba(200,230,255,0.7)" stroke="#90A4AE" strokeWidth="1.5" />
+      <Rect x="24" y="54" width="18" height="4" rx="1" fill="#90A4AE" />
+      <Path d="M22 30 L25 56 L41 56 L44 30 Z" fill="#F4A020" opacity="0.75" />
+      <Line x1="23" y1="28" x2="25" y2="54" stroke="white" strokeWidth="1.5" opacity="0.3" strokeLinecap="round" />
+      <Path d="M6 20 C6 12 12 6 20 6 C28 6 34 12 34 20 C34 28 28 34 20 34 C12 34 6 28 6 20 Z" fill="#9CCC65" stroke="#558B2F" strokeWidth="1" />
+      <Circle cx="20" cy="20" r="6" fill="#DCEDC8" />
+      <Line x1="20" y1="6" x2="20" y2="34" stroke="#558B2F" strokeWidth="0.8" opacity="0.6" />
+      <Line x1="6" y1="20" x2="34" y2="20" stroke="#558B2F" strokeWidth="0.8" opacity="0.6" />
+      <Line x1="10" y1="10" x2="30" y2="30" stroke="#558B2F" strokeWidth="0.8" opacity="0.4" />
+      <Line x1="30" y1="10" x2="10" y2="30" stroke="#558B2F" strokeWidth="0.8" opacity="0.4" />
+      <Circle cx="50" cy="14" r="7" fill="#F5F5F5" stroke="#DDD" strokeWidth="1" />
+      <Circle cx="48" cy="12" r="1.2" fill="#C5C5C5" />
+      <Circle cx="52" cy="11" r="1" fill="#C5C5C5" />
+      <Circle cx="49" cy="16" r="1.1" fill="#C5C5C5" />
+      <Circle cx="53" cy="15" r="0.9" fill="#C5C5C5" />
+      <Circle cx="51" cy="19" r="1" fill="#C5C5C5" />
+      <Path d="M56 30 C54 26 58 22 56 18" fill="none" stroke="#2E7D32" strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M56 30 C60 28 64 26 62 22" fill="none" stroke="#4CAF50" strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M56 30 C52 28 48 26 48 22" fill="none" stroke="#2E7D32" strokeWidth="1.5" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 // ── MAPA DE ÍCONOS ────────────────────────────────────────────
 export const ACHIEVEMENT_ICONS = {
   primer_taco: PrimerTacoIcon,
   diez_palabras: DiezPalabrasIcon,
   cincuenta_palabras: CincuentaPalabrasIcon,
   cien_palabras: CienPalabrasIcon,
+  quinientas_palabras: QuinientasPalabrasIcon,
+  mil_palabras: MilPalabrasIcon,
   racha_3: Racha3Icon,
   racha_7: Racha7Icon,
   racha_30: Racha30Icon,
+  racha_60: Racha60Icon,
+  racha_100: Racha100Icon,
   primera_coleccion: PrimeraColeccionIcon,
   cincuenta_cartas: CincuentaCartasIcon,
   cinco_colecciones: CincoColeccionesIcon,
   nivel_perfecto: NivelPerfectoIcon,
   nivel_50: Nivel50Icon,
   nivel_100: Nivel100Icon,
+  nivel_150: Nivel150Icon,
+  nivel_200: Nivel200Icon,
+  combo_3: undefined,
+  combo_5: undefined,
+  combo_10: undefined,
+  tres_perfectos: undefined,
+  diez_perfectos: undefined,
+  veinticinco_perfectos: VeinticincoIcon,
   foodie_mx: FoodieMxIcon,
   mariachi_fan: MariachiFanIcon,
   historia_viva: HistoriaVivaIcon,
+  corridos_fan: CorridosFanIcon,
+  digital_mx: DigitalMxIcon,
+  chilango_mx: ChilangoIcon,
+  norteno_mx: NortenoIcon,
+  jarocho_mx: JarochoIcon,
+  tapatío_mx: TapatioIcon,
   invitar_3: Invitar3Icon,
   invitar_10: Invitar10Icon,
 };
@@ -797,18 +1159,31 @@ export const CATEGORY_BG_COLORS = {
   diez_palabras: "rgba(245,155,64,0.15)",
   cincuenta_palabras: "rgba(245,155,64,0.15)",
   cien_palabras: "rgba(245,155,64,0.15)",
+  quinientas_palabras: "rgba(245,155,64,0.15)",
+  mil_palabras: "rgba(245,155,64,0.15)",
   racha_3: "rgba(232,93,58,0.15)",
   racha_7: "rgba(232,93,58,0.15)",
   racha_30: "rgba(232,93,58,0.15)",
+  racha_60: "rgba(232,93,58,0.15)",
+  racha_100: "rgba(232,93,58,0.15)",
   primera_coleccion: "rgba(42,129,186,0.15)",
   cincuenta_cartas: "rgba(42,129,186,0.15)",
   cinco_colecciones: "rgba(42,129,186,0.15)",
   nivel_perfecto: "rgba(252,209,29,0.15)",
   nivel_50: "rgba(252,209,29,0.15)",
   nivel_100: "rgba(252,209,29,0.15)",
+  nivel_150: "rgba(252,209,29,0.15)",
+  nivel_200: "rgba(252,209,29,0.15)",
+  veinticinco_perfectos: "rgba(252,209,29,0.15)",
   foodie_mx: "rgba(212,84,59,0.15)",
   mariachi_fan: "rgba(212,84,59,0.15)",
   historia_viva: "rgba(212,84,59,0.15)",
+  corridos_fan: "rgba(212,84,59,0.15)",
+  digital_mx: "rgba(42,129,186,0.15)",
+  chilango_mx: "rgba(198,40,40,0.15)",
+  norteno_mx: "rgba(109,76,65,0.15)",
+  jarocho_mx: "rgba(21,101,192,0.15)",
+  "tapatío_mx": "rgba(46,125,50,0.15)",
   invitar_3: "rgba(42,129,186,0.15)",
   invitar_10: "rgba(42,129,186,0.15)",
 };

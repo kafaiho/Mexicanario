@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -15,6 +15,24 @@ crons.daily(
   "reset daily mini groups",
   { hourUTC: 6, minuteUTC: 0 },
   internal.league.resetDailyMini
+);
+
+// Weekly: Curador Seed Queue — lunes 08:05 UTC (02:05 CST)
+// Procesa 10 términos nuevos del SEED_QUEUE y los deja en staging para tu revisión.
+crons.weekly(
+  "curador semanal",
+  { dayOfWeek: "monday", hourUTC: 8, minuteUTC: 5 },
+  api.curator.processSeedQueue,
+  { batchSize: 10 },
+);
+
+// Weekly: Curador Tendencias MX — miércoles 08:05 UTC (02:05 CST)
+// Scraping Google Trends MX → filtra → Gemini valida → staging.
+crons.weekly(
+  "curador tendencias",
+  { dayOfWeek: "wednesday", hourUTC: 8, minuteUTC: 5 },
+  api.curator.processTrends,
+  {},
 );
 
 export default crons;

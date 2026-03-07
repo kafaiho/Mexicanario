@@ -86,7 +86,7 @@ export default function SettingsModal({
       pairs.forEach(([key, val]) => {
         if (val === null) return;
         const bool = val === "true";
-        if (key === "pref_music") setMusicOn(bool);
+        if (key === "pref_music") { setMusicOn(bool); setMusicEnabled(bool); }
         if (key === "pref_sound") { setSoundFx(bool); setSoundEnabled(bool); }
         if (key === "pref_notif") setNotifEnabled(bool);
       });

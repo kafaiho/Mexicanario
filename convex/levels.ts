@@ -13,160 +13,51 @@ function normalizeWord(str: string): string {
 export const getCurrentLevel = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    // If no userId is provided, return level 1 as default
-    if (!args.userId) {
-      const level1 = await ctx.db
-        .query("levels")
-        .filter((q) => q.eq(q.field("levelNumber"), 1))
-        .first();
-
-      if (!level1) {
-        return {
-          level: 1,
-          word: "Default",
-          meaning: "Default",
-          example: "Default",
-          region: "Default",
-          reward: { coins: 50, diamonds: 1 },
-          isLastLevel: false,
-          isDefaultLevel: true,
-        };
-      }
-
-      const word = await ctx.db.get(level1.wordId);
-      return {
-        level: 1,
-        word: word?.word || "Default",
-        meaning: word?.meaning || "Default",
-        example: word?.example || "Default",
-        reward: level1.reward,
-        isLastLevel: false,
-        isDefaultLevel: true,
-      };
-    }
-
-    const user = await ctx.db.get(args.userId);
-    if (!user) {
-      // If user not found, return level 1 as default
-      const level1 = await ctx.db
-        .query("levels")
-        .filter((q) => q.eq(q.field("levelNumber"), 1))
-        .first();
-
-      if (!level1) {
-        return {
-          level: 1,
-          word: "Default",
-          meaning: "Default",
-          example: "Default",
-          region: "Default",
-          reward: { coins: 50, diamonds: 1 },
-          isLastLevel: false,
-          isDefaultLevel: true,
-        };
-      }
-
-      const word = await ctx.db.get(level1.wordId);
-      return {
-        level: 1,
-        word: word?.word || "Default",
-        meaning: word?.meaning || "Default",
-        example: word?.example || "Default",
-        region: word?.region || "Default",
-        reward: level1.reward,
-        isLastLevel: false,
-        isDefaultLevel: true,
-      };
-    }
-
-    // Get user's current level from the users table
-    const currentLevel = user.currentLevel || 1;
-
-    // Get the level configuration from the database
-    const levelConfig = await ctx.db
-      .query("levels")
-      .filter((q) => q.eq(q.field("levelNumber"), currentLevel))
-      .first();
-
-    if (!levelConfig) {
-      // If level doesn't exist, return the last available level
-      const allLevels = await ctx.db.query("levels").collect();
-      if (allLevels.length === 0) {
-        return {
-          level: 1,
-          word: "Default",
-          meaning: "Default",
-          example: "Default",
-          region: "Default",
-          reward: { coins: 50, diamonds: 1 },
-          isLastLevel: true,
-          isDefaultLevel: false,
-        };
-      }
-
-      const lastAvailableLevel = Math.max(...allLevels.map(l => l.levelNumber));
-      const lastLevelConfig = allLevels.find(l => l.levelNumber === lastAvailableLevel);
-
-      if (!lastLevelConfig) {
-        return {
-          level: 1,
-          word: "Default",
-          meaning: "Default",
-          example: "Default",
-          region: "Default",
-          reward: { coins: 50, diamonds: 1 },
-          isLastLevel: true,
-          isDefaultLevel: false,
-        };
-      }
-
-      const word = await ctx.db.get(lastLevelConfig.wordId);
-      return {
-        level: lastAvailableLevel,
-        word: word?.word || "Default",
-        meaning: word?.meaning || "Default",
-        example: word?.example || "Default",
-        region: word?.region || "Default",
-        reward: lastLevelConfig.reward,
-        isLastLevel: true,
-        isDefaultLevel: false,
-      };
-    }
-
-    const word = await ctx.db.get(levelConfig.wordId);
-
-    // Task 6: Check for +18 category access
-    if (word?.category === "adulto") {
-      const unlocked = (user as any).adultContentUnlocked ?? [];
-      const categoryId = "content_" + ((word as any).pack ?? "insultos");
-      if (!unlocked.includes(categoryId) && !unlocked.includes("content_insultos") && !unlocked.includes("content_suegra")) {
-        // We return a flagged response instead of throwing to allow the UI to handle it gracefully
-        return {
-          level: currentLevel,
-          word: "BLOQUEADO",
-          meaning: "Contenido Premium +18",
-          example: "Para desbloquear esta categoría, ve a la tienda.",
-          region: word?.region || "México",
-          reward: levelConfig.reward,
-          isLastLevel: false,
-          isDefaultLevel: false,
-          isLocked: true,
-        };
-      }
-    }
-
     const allLevels = await ctx.db.query("levels").collect();
-    const maxLevel = Math.max(...allLevels.map(l => l.levelNumber));
+    const allWords = await ctx.db.query("words").collect();
+    const wordMap = new Map(allWords.map((w) => [w._id.toString(), w]));
+
+    const DEFAULT_RESPONSE = {
+      level: 1,
+      word: "Default",
+      meaning: "Default",
+      example: "Default",
+      region: "Default",
+      reward: { coins: 2, diamonds: 0 },
+      isLastLevel: false,
+      isDefaultLevel: true,
+    };
+
+    if (allLevels.length === 0) return DEFAULT_RESPONSE;
+
+    // Determine user's position (1-based) in the ordered level sequence
+    let position = 1;
+    let isDefaultLevel = true;
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        position = user.currentLevel || 1;
+        isDefaultLevel = false;
+      }
+    }
+
+    // Order levels per-user so creator/priority words appear first
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId?.toString() ?? "");
+    if (ordered.length === 0) return DEFAULT_RESPONSE;
+
+    const idx = Math.min(position - 1, ordered.length - 1);
+    const lvl = ordered[idx];
+    const word = wordMap.get(lvl.wordId.toString());
 
     return {
-      level: currentLevel,
+      level: position,
       word: word?.word || "Default",
       meaning: word?.meaning || "Default",
       example: word?.example || "Default",
       region: word?.region || "Default",
-      reward: levelConfig.reward,
-      isLastLevel: currentLevel >= maxLevel,
-      isDefaultLevel: false,
+      reward: lvl.reward,
+      isLastLevel: position >= ordered.length,
+      isDefaultLevel,
     };
   },
 });
@@ -177,74 +68,64 @@ export const checkLevelUp = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
 
-    // Get user's current level from the users table
     const currentLevel = user.currentLevel || 1;
 
-    // Check if next level exists
-    const nextLevelConfig = await ctx.db
-      .query("levels")
-      .filter((q) => q.eq(q.field("levelNumber"), currentLevel + 1))
-      .first();
+    const allLevels = await ctx.db.query("levels").collect();
+    const allWords = await ctx.db.query("words").collect();
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const totalLevels = ordered.length || 1;
 
-    if (nextLevelConfig) {
-      const reward = nextLevelConfig.reward;
+    if (currentLevel < totalLevels) {
+      // Reward comes from the next level in the ordered sequence
+      const nextIdx = currentLevel; // currentLevel is 1-based; next is at index currentLevel
+      const nextLevelDoc = ordered[nextIdx];
+      const reward = nextLevelDoc?.reward ?? { coins: 2, diamonds: 0 };
+      const nextLevel = currentLevel + 1;
+
       await ctx.db.patch(args.userId, {
         coins: user.coins + reward.coins,
         diamonds: user.diamonds + reward.diamonds,
-        currentLevel: currentLevel + 1,
+        currentLevel: nextLevel,
       });
 
-      return {
-        leveledUp: true,
-        newLevel: currentLevel + 1,
-        reward,
-      };
+      return { leveledUp: true, newLevel: nextLevel, reward };
     }
 
-    // Get max level for current level info
-    const allLevels = await ctx.db.query("levels").collect();
-    const maxLevel = allLevels.length > 0 ? Math.max(...allLevels.map(l => l.levelNumber)) : 1;
-
-    return {
-      leveledUp: false,
-      currentLevel: Math.min(currentLevel, maxLevel),
-    };
+    return { leveledUp: false, currentLevel: Math.min(currentLevel, totalLevels) };
   },
 });
 
 export const completeLevel = mutation({
   args: {
     userId: v.id("users"),
-    levelNumber: v.number(),
+    levelNumber: v.number(), // 1-based position in the ordered level sequence
     isPerfect: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
 
-    // Get the level configuration — fall back to default reward if not seeded yet
-    const levelConfig = await ctx.db
-      .query("levels")
-      .filter((q) => q.eq(q.field("levelNumber"), args.levelNumber))
-      .first();
+    const allLevels = await ctx.db.query("levels").collect();
+    const allWords = await ctx.db.query("words").collect();
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const totalLevels = ordered.length || 1;
 
-    // Graceful fallback so the app never crashes on an unseeded level
-    const DEFAULT_REWARD = { coins: 50, diamonds: 1 };
-    const reward = levelConfig?.reward ?? DEFAULT_REWARD;
+    // Get the reward for this position in the ordered sequence
+    const idx = Math.min(args.levelNumber - 1, ordered.length - 1);
+    const levelDoc = ordered[idx] ?? null;
+    const DEFAULT_REWARD = { coins: 2, diamonds: 0 };
+    const reward = levelDoc?.reward ?? DEFAULT_REWARD;
 
-    // Update user's current level if they completed the next level.
-    // Compare against the *effective* level (clamped to maxLevel) so users who
-    // surpassed the available word count are never stuck.
-    const allLevelsCount = await ctx.db.query("levels").collect();
-    const maxLevel = allLevelsCount.length || 1;
+    // Update user's position — args.levelNumber is the position they just completed.
+    // Clamp effectiveLevel so users past the total never get stuck.
     const currentLevel = user.currentLevel || 1;
-    const effectiveLevel = Math.min(currentLevel, maxLevel);
+    const effectiveLevel = Math.min(currentLevel, totalLevels);
     let levelUp = false;
     let nextLevel = currentLevel;
     if (args.levelNumber === effectiveLevel) {
       levelUp = true;
-      // When user finishes the last available word, loop back to level 1
-      nextLevel = currentLevel >= maxLevel ? 1 : currentLevel + 1;
+      // When user finishes the last word, stay at the last level (don't reset)
+      nextLevel = currentLevel >= totalLevels ? totalLevels : currentLevel + 1;
       const levelPatch: any = {
         currentLevel: nextLevel,
         tacos: ((user as any).tacos ?? 0) + 1,
@@ -255,23 +136,23 @@ export const completeLevel = mutation({
       await ctx.db.patch(args.userId, levelPatch);
     }
 
-    // Give rewards
-    const newCoins = (user.coins || 0) + reward.coins;
-    const newDiamonds = (user.diamonds || 0) + reward.diamonds;
-    await ctx.db.patch(args.userId, {
-      coins: newCoins,
-      diamonds: newDiamonds,
-    });
-
+    // Rewards are given client-side via updateUserCurrency (avoids double-counting)
     return {
       success: true,
       level: args.levelNumber,
       levelUp,
       newLevel: nextLevel,
       reward,
-      newCoins,
-      newDiamonds,
     };
+  },
+});
+
+/** Lightweight query — returns only the total level count (no ordering needed). */
+export const getLevelCount = query({
+  args: {},
+  handler: async (ctx) => {
+    const levels = await ctx.db.query("levels").collect();
+    return levels.length;
   },
 });
 
@@ -291,30 +172,11 @@ export const getAllLevels = query({
         ...lvl,
         word: normalizeWord(wordDoc?.word ?? `Nivel ${lvl.levelNumber}`),
         meaning: wordDoc?.meaning ?? "",
-        example: wordDoc?.example ?? "",
-        region: wordDoc?.region ?? "",
-        isAdult: wordDoc?.category === "adulto",
-        packId: (wordDoc as any)?.pack ?? null,
       };
     });
   },
 });
 
-// Fetch the first levelNumber of an adult pack (used for "¡Jugar ahora!" after purchase)
-export const getAdultPackFirstLevel = query({
-  args: { pack: v.string() },
-  handler: async (ctx, args) => {
-    const allLevels = await ctx.db.query("levels").collect();
-    const allWords  = await ctx.db.query("words").collect();
-    const wordMap   = new Map(allWords.map((w) => [w._id.toString(), w]));
-    for (const lvl of allLevels) {
-      const word = wordMap.get(lvl.wordId.toString());
-      if (word?.category === "adulto" && (word as any)?.pack === args.pack)
-        return lvl.levelNumber;
-    }
-    return null;
-  },
-});
 
 // Fetch a single level's word data by levelNumber (used for map repaso)
 export const getLevelByNumber = query({
@@ -588,5 +450,52 @@ export const seedLevels15_18 = mutation({
       }
     }
     return `Añadidas ${addedCount} palabras. Agrega un botón en MainMenuScreen para llamar a api.levels.createLevelsForAllWords después de esto si quieres actualizar los niveles.`;
+  },
+});
+
+/**
+ * Adds level documents for every word that does not yet have one.
+ * Safe: does NOT delete existing levels or change current user progress.
+ *
+ * Run from Convex dashboard: levels:addMissingLevels
+ */
+export const addMissingLevels = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const allWords = await ctx.db.query("words").collect();
+    const allLevels = await ctx.db.query("levels").collect();
+
+    // Build set of wordIds that already have a level document
+    const coveredWordIds = new Set(allLevels.map((l) => l.wordId.toString()));
+
+    // Determine next available levelNumber
+    const maxLevelNumber = allLevels.length > 0
+      ? Math.max(...allLevels.map((l) => l.levelNumber))
+      : 0;
+
+    let nextLevelNumber = maxLevelNumber + 1;
+    let added = 0;
+
+    for (const word of allWords) {
+      if (coveredWordIds.has(word._id.toString())) continue;
+
+      const coins = 2 + Math.floor((nextLevelNumber - 1) / 100);
+      const diamonds = Math.floor((nextLevelNumber - 1) / 200);
+
+      await ctx.db.insert("levels", {
+        levelNumber: nextLevelNumber,
+        wordId: word._id,
+        reward: { coins, diamonds },
+      });
+
+      nextLevelNumber++;
+      added++;
+    }
+
+    return {
+      added,
+      totalLevels: allLevels.length + added,
+      message: `Añadidos ${added} niveles nuevos. Total: ${allLevels.length + added} niveles.`,
+    };
   },
 });

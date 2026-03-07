@@ -47,6 +47,7 @@ const CATEGORY_ORDER = [
   "Combos",
   "Perfección",
   "Por Categoría",
+  "Regionalismo",
   "Social",
 ];
 
@@ -61,6 +62,10 @@ export default function AchievementsScreen() {
   const user = useQuery(api.users.getUser, userId ? { userId } : "skip");
   const collections = useQuery(
     api.collectionsQuery.getCollectionsWithProgress,
+    userId ? { userId } : "skip"
+  );
+  const regions = useQuery(
+    api.collectionsQuery.getRegionsWithProgress,
     userId ? { userId } : "skip"
   );
 
@@ -79,7 +84,7 @@ export default function AchievementsScreen() {
 
   // ── Compute achievements from real user data ────────────────────────────────
   const achievementsData = useMemo(() => {
-    const tacos       = user?.tacos ?? 0;
+    const wordsCompleted = Math.max(0, (user?.currentLevel ?? 1) - 1);
     const streak      = Math.max(user?.playStreakMax ?? 0, user?.playStreak ?? 0);
     const bestCombo   = user?.bestCombo ?? 0;
     const currentLvl  = user?.currentLevel ?? 1;
@@ -89,12 +94,20 @@ export default function AchievementsScreen() {
     const completedCats = (collections ?? []).filter(
       (c) => c.total > 0 && c.completed >= c.total
     ).length;
-    const comidaDone   = (collections ?? []).find((c) => c.name === "Comida")?.completed ?? 0;
-    const comidaTotal  = (collections ?? []).find((c) => c.name === "Comida")?.total ?? 1;
-    const musicaDone   = (collections ?? []).find((c) => c.name === "Música")?.completed ?? 0;
-    const musicaTotal  = (collections ?? []).find((c) => c.name === "Música")?.total ?? 1;
-    const historiaDone = (collections ?? []).find((c) => c.name === "Historia")?.completed ?? 0;
-    const historiaTotal= (collections ?? []).find((c) => c.name === "Historia")?.total ?? 1;
+    const comidaDone   = (collections ?? []).find((c) => c.name === "Comida Mexicana")?.completed ?? 0;
+    const comidaTotal  = (collections ?? []).find((c) => c.name === "Comida Mexicana")?.total ?? 1;
+    const musicaDone   = (collections ?? []).find((c) => c.name === "Música y Artistas")?.completed ?? 0;
+    const musicaTotal  = (collections ?? []).find((c) => c.name === "Música y Artistas")?.total ?? 1;
+    const historiaDone = (collections ?? []).find((c) => c.name === "Historia de México")?.completed ?? 0;
+    const historiaTotal= (collections ?? []).find((c) => c.name === "Historia de México")?.total ?? 1;
+    const digitalDone  = (collections ?? []).find((c) => c.name === "Mundo Digital")?.completed ?? 0;
+    const digitalTotal = (collections ?? []).find((c) => c.name === "Mundo Digital")?.total ?? 1;
+
+    // Regiones
+    const cdmxR    = (regions ?? []).find((r) => r.key === "cdmx");
+    const norteR   = (regions ?? []).find((r) => r.key === "norte");
+    const jarochoR = (regions ?? []).find((r) => r.key === "veracruz");
+    const tapatioR = (regions ?? []).find((r) => r.key === "jalisco");
 
     const mk = (current, target) => ({
       current: Math.min(current, target),
@@ -110,7 +123,7 @@ export default function AchievementsScreen() {
         icon: "🌮",
         name: "¡Órale, ándale!",
         description: "Resuelve tu primera palabra mexicana",
-        ...mk(tacos, 1),
+        ...mk(wordsCompleted, 1),
         reward: { coins: 25, diamonds: 0 },
       },
       {
@@ -119,7 +132,7 @@ export default function AchievementsScreen() {
         icon: "🌶️",
         name: "Ya va picando",
         description: "Resuelve 10 palabras",
-        ...mk(tacos, 10),
+        ...mk(wordsCompleted, 10),
         reward: { coins: 50, diamonds: 0 },
       },
       {
@@ -128,7 +141,7 @@ export default function AchievementsScreen() {
         icon: "🏙️",
         name: "Chilango de corazón",
         description: "Resuelve 50 palabras",
-        ...mk(tacos, 50),
+        ...mk(wordsCompleted, 50),
         reward: { coins: 150, diamonds: 1 },
       },
       {
@@ -137,7 +150,7 @@ export default function AchievementsScreen() {
         icon: "🦅",
         name: "Mero mero mexicano",
         description: "Resuelve 100 palabras",
-        ...mk(tacos, 100),
+        ...mk(wordsCompleted, 100),
         reward: { coins: 300, diamonds: 2 },
       },
       {
@@ -146,8 +159,26 @@ export default function AchievementsScreen() {
         icon: "🇲🇽",
         name: "Neta del mexica",
         description: "Resuelve 200 palabras mexicanas",
-        ...mk(tacos, 200),
+        ...mk(wordsCompleted, 200),
         reward: { coins: 500, diamonds: 4 },
+      },
+      {
+        id: "quinientas_palabras",
+        category: "Primeros Pasos",
+        icon: "🏛️",
+        name: "¡Pura lengua, wey!",
+        description: "Resuelve 500 palabras mexicanas",
+        ...mk(wordsCompleted, 500),
+        reward: { coins: 700, diamonds: 5 },
+      },
+      {
+        id: "mil_palabras",
+        category: "Primeros Pasos",
+        icon: "🐍",
+        name: "Enciclopedia del habla",
+        description: "Resuelve 1,000 palabras mexicanas",
+        ...mk(wordsCompleted, 1000),
+        reward: { coins: 1500, diamonds: 12 },
       },
       // ── RACHA DIARIA ──────────────────────────────────────────────────────
       {
@@ -186,6 +217,24 @@ export default function AchievementsScreen() {
         ...mk(streak, 30),
         reward: { coins: 500, diamonds: 5 },
       },
+      {
+        id: "racha_60",
+        category: "Racha Diaria",
+        icon: "🌵",
+        name: "¡Ni el diablo te quita la racha!",
+        description: "Juega 60 días seguidos",
+        ...mk(streak, 60),
+        reward: { coins: 800, diamonds: 7 },
+      },
+      {
+        id: "racha_100",
+        category: "Racha Diaria",
+        icon: "💀",
+        name: "Cien días sin rendirse",
+        description: "Juega 100 días seguidos",
+        ...mk(streak, 100),
+        reward: { coins: 1500, diamonds: 12 },
+      },
       // ── COLECCIONES ───────────────────────────────────────────────────────
       {
         id: "primera_coleccion",
@@ -202,7 +251,7 @@ export default function AchievementsScreen() {
         icon: "🃏",
         name: "El rey del álbum",
         description: "Desbloquea 50 cartas en la colección",
-        ...mk(tacos, 50),
+        ...mk(wordsCompleted, 50),
         reward: { coins: 400, diamonds: 3 },
       },
       {
@@ -211,7 +260,7 @@ export default function AchievementsScreen() {
         icon: "🎴",
         name: "El rey del mazo",
         description: "Desbloquea 100 cartas de colección",
-        ...mk(tacos, 100),
+        ...mk(wordsCompleted, 100),
         reward: { coins: 600, diamonds: 5 },
       },
       {
@@ -251,6 +300,24 @@ export default function AchievementsScreen() {
         ...mk(currentLvl, 100),
         reward: { coins: 1000, diamonds: 10 },
       },
+      {
+        id: "nivel_150",
+        category: "Nivel Experto",
+        icon: "🌙",
+        name: "Va que vuela",
+        description: "Llega al nivel 150",
+        ...mk(currentLvl, 150),
+        reward: { coins: 1800, diamonds: 14 },
+      },
+      {
+        id: "nivel_200",
+        category: "Nivel Experto",
+        icon: "🦜",
+        name: "El mero mero patrón",
+        description: "Llega al nivel 200",
+        ...mk(currentLvl, 200),
+        reward: { coins: 3000, diamonds: 20 },
+      },
       // ── COMBOS ────────────────────────────────────────────────────────────
       {
         id: "combo_3",
@@ -274,7 +341,7 @@ export default function AchievementsScreen() {
         id: "combo_10",
         category: "Combos",
         icon: "💥",
-        name: "¡Chingón total!",
+        name: "¡Crack total!",
         description: "Logra un combo de 10 respuestas perfectas",
         ...mk(bestCombo, 10),
         reward: { coins: 400, diamonds: 4 },
@@ -298,13 +365,22 @@ export default function AchievementsScreen() {
         ...mk(perfectLvls, 10),
         reward: { coins: 700, diamonds: 6 },
       },
+      {
+        id: "veinticinco_perfectos",
+        category: "Perfección",
+        icon: "🎯",
+        name: "Como rifle de agua",
+        description: "Completa 25 niveles sin cometer errores",
+        ...mk(perfectLvls, 25),
+        reward: { coins: 1200, diamonds: 10 },
+      },
       // ── POR CATEGORÍA ─────────────────────────────────────────────────────
       {
         id: "foodie_mx",
         category: "Por Categoría",
         icon: "🌮",
         name: "Al pastor, como siempre",
-        description: "Completa la colección de Comida",
+        description: "Completa la colección de Comida Mexicana",
         current: comidaDone,
         target: comidaTotal,
         completed: comidaTotal > 0 && comidaDone >= comidaTotal,
@@ -315,7 +391,7 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "🎺",
         name: "Corazón de mariachi",
-        description: "Completa la colección de Música",
+        description: "Completa la colección de Música y Artistas",
         current: musicaDone,
         target: musicaTotal,
         completed: musicaTotal > 0 && musicaDone >= musicaTotal,
@@ -326,11 +402,67 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "📜",
         name: "Historia viva",
-        description: "Completa la colección de Historia",
+        description: "Completa la colección de Historia de México",
         current: historiaDone,
         target: historiaTotal,
         completed: historiaTotal > 0 && historiaDone >= historiaTotal,
         reward: { coins: 150, diamonds: 1 },
+      },
+      {
+        id: "mundo_digital",
+        category: "Por Categoría",
+        icon: "📱",
+        name: "Siempre en tendencia",
+        description: "Completa la colección de Mundo Digital",
+        current: digitalDone,
+        target: digitalTotal,
+        completed: digitalTotal > 0 && digitalDone >= digitalTotal,
+        reward: { coins: 200, diamonds: 2 },
+      },
+      // ── REGIONALISMO ──────────────────────────────────────────────
+      {
+        id: "chilango_mx",
+        category: "Regionalismo",
+        icon: "🌆",
+        name: "Chilango confirmado",
+        description: "Completa todas las palabras de CDMX",
+        current: cdmxR?.completed ?? 0,
+        target: cdmxR?.total ?? 1,
+        completed: (cdmxR?.total ?? 0) > 0 && (cdmxR?.completed ?? 0) >= (cdmxR?.total ?? 1),
+        reward: { coins: 250, diamonds: 2 },
+      },
+      {
+        id: "norteno_mx",
+        category: "Regionalismo",
+        icon: "🤠",
+        name: "Del norte, con orgullo",
+        description: "Completa todas las palabras del Norte",
+        current: norteR?.completed ?? 0,
+        target: norteR?.total ?? 1,
+        completed: (norteR?.total ?? 0) > 0 && (norteR?.completed ?? 0) >= (norteR?.total ?? 1),
+        reward: { coins: 250, diamonds: 2 },
+      },
+      {
+        id: "jarocho_mx",
+        category: "Regionalismo",
+        icon: "🎺",
+        name: "Jarocho de abolengo",
+        description: "Completa todas las palabras de Veracruz",
+        current: jarochoR?.completed ?? 0,
+        target: jarochoR?.total ?? 1,
+        completed: (jarochoR?.total ?? 0) > 0 && (jarochoR?.completed ?? 0) >= (jarochoR?.total ?? 1),
+        reward: { coins: 250, diamonds: 2 },
+      },
+      {
+        id: "tapatío_mx",
+        category: "Regionalismo",
+        icon: "🌵",
+        name: "Tapatío de corazón",
+        description: "Completa todas las palabras de Jalisco",
+        current: tapatioR?.completed ?? 0,
+        target: tapatioR?.total ?? 1,
+        completed: (tapatioR?.total ?? 0) > 0 && (tapatioR?.completed ?? 0) >= (tapatioR?.total ?? 1),
+        reward: { coins: 250, diamonds: 2 },
       },
       // ── SOCIAL ────────────────────────────────────────────────────────────
       {
@@ -352,7 +484,7 @@ export default function AchievementsScreen() {
         reward: { coins: 500, diamonds: 5 },
       },
     ];
-  }, [user, collections]);
+  }, [user, collections, regions]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 

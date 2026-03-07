@@ -44,6 +44,13 @@ import { tapMedium, comboBurst } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 import useDevMode from "../hooks/useDevMode";
 
+// ProfileScreen loaded on-demand (same pattern as ShopScreen)
+let _ProfileScreen = null;
+const getProfileScreen = () => {
+  if (!_ProfileScreen) _ProfileScreen = require("../screens/ProfileScreen").default;
+  return _ProfileScreen;
+};
+
 const { width, height } = Dimensions.get("window");
 
 // ── Responsive sizing: todo relativo a width ────────────────────────────────
@@ -73,6 +80,7 @@ const S = {
 
 const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }, ref) {
   const coinPillRef    = useRef(null);
+  const diamondPillRef = useRef(null);
   const bounceScale    = useSharedValue(1);
 
   // ── Animaciones de botones izquierdos ────────────────────────────────────
@@ -90,7 +98,17 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
           settled = true;
           resolve(h > 0 ? { x, y, w, h } : null);
         });
-        // Safety: if callback never fires, resolve null after 300ms
+        setTimeout(() => { if (!settled) resolve(null); }, 300);
+      });
+    },
+    measureDiamondPill: () => {
+      if (!diamondPillRef.current) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        let settled = false;
+        diamondPillRef.current.measureInWindow((x, y, w, h) => {
+          settled = true;
+          resolve(h > 0 ? { x, y, w, h } : null);
+        });
         setTimeout(() => { if (!settled) resolve(null); }, 300);
       });
     },
@@ -115,8 +133,9 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
   const [showMexicanario, setShowMexicanario] = useState(false);
   const [showShop, setShowShop] = useState(false);
   const [showStreak, setShowStreak] = useState(false);
-  const [showFriends, setShowFriends] = useState(false);
-  const [showCuates,  setShowCuates]  = useState(false);
+  const [showFriends,       setShowFriends]       = useState(false);
+  const [showCuates,        setShowCuates]        = useState(false);
+  const [showProfileScreen, setShowProfileScreen] = useState(false);
 
   const { user } = useAuth();
   const devEnabled = useDevMode((s) => s.enabled);
@@ -180,8 +199,7 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
 
   const fmt = (num) => {
     if (num === undefined || num === null) return "0";
-    if (num >= 10000) return (num / 1000).toFixed(0) + "k";
-    if (num >= 1000) return (num / 1000).toFixed(1) + "k";
+    if (num >= 100000) return Math.round(num / 1000) + "k";
     return num.toString();
   };
 
@@ -252,11 +270,13 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
         {/* ── RIGHT ── */}
         <View style={styles.row}>
           {/* Diamonds */}
-          <TouchableOpacity style={styles.pill} onPress={() => { tapMedium(); setShowShop(true); }}>
-            <Image source={require("../../assets/icons/plus.png")} style={styles.plusIcon} />
-            <Text style={styles.pillText}>{fmt(user?.diamonds || 0)}</Text>
-            <Image source={require("../../assets/icons/diamond.png")} style={styles.pillIcon} />
-          </TouchableOpacity>
+          <View ref={diamondPillRef} collapsable={false}>
+            <TouchableOpacity style={styles.pill} onPress={() => { tapMedium(); setShowShop(true); }}>
+              <Image source={require("../../assets/icons/plus.png")} style={styles.plusIcon} />
+              <Text style={styles.pillText}>{fmt(user?.diamonds || 0)}</Text>
+              <Image source={require("../../assets/icons/diamond.png")} style={styles.pillIcon} />
+            </TouchableOpacity>
+          </View>
 
           {/* Coins — outer View for reliable measureInWindow, inner Reanimated.View for bounce */}
           <View ref={coinPillRef} collapsable={false}>
@@ -297,8 +317,9 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
       <Mexicanometro visible={showMexicanario} onClose={() => setShowMexicanario(false)} />
       {showShop && (() => { const ShopScreen = getShopScreen(); return <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />; })()}
       <StreakModal visible={showStreak} onClose={() => setShowStreak(false)} />
-      <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} />
-      <CuatesModal  visible={showCuates}  onClose={() => setShowCuates(false)} />
+      <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} onOpenProfile={() => { setShowFriends(false); setShowProfileScreen(true); }} />
+      <CuatesModal  visible={showCuates}  onClose={() => setShowCuates(false)} onOpenProfile={() => { setShowCuates(false); setShowProfileScreen(true); }} />
+      {showProfileScreen && (() => { const PS = getProfileScreen(); return <PS visible={showProfileScreen} onClose={() => setShowProfileScreen(false)} />; })()}
 
       {/* Dev mode toast */}
       {devToast && (

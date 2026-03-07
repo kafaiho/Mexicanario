@@ -75,7 +75,7 @@ export default function Calificar({ visible, onClose }) {
           <Text style={styles.headline}>¿Te está gustando? ⭐</Text>
           <Text style={styles.sub}>
             Tu calificación nos ayuda muchísimo a seguir mejorando el juego.
-            ¡Vale un chingo!
+            ¡Vale un montón!
           </Text>
 
           {/* Stars */}

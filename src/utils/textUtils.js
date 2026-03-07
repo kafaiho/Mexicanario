@@ -31,11 +31,27 @@ export const normalizeWordForDisplay = (word) => {
  */
 export const normalizeText = (text) => {
   if (!text) return '';
-  
-  return text
-    .normalize('NFD') // Decompose characters with accents (é → e + ́)
-    .replace(/[\u0300-\u036f]/g, '') // Remove diacritics (accents)
-    .toUpperCase(); // Convert to uppercase
+
+  let upperText = text.toUpperCase();
+
+  try {
+    if (typeof upperText.normalize === 'function') {
+      return upperText
+        .normalize('NFD') // Decompose characters with accents (é → e + ́)
+        .replace(/[\u0300-\u036f]/g, ''); // Remove diacritics (accents)
+    }
+  } catch (e) {
+    // Fallback if normalize is not supported or throws an error
+  }
+
+  // Manual fallback for common Spanish characters
+  return upperText
+    .replace(/[ÁÀÄÂ]/g, 'A')
+    .replace(/[ÉÈËÊ]/g, 'E')
+    .replace(/[ÍÌÏÎ]/g, 'I')
+    .replace(/[ÓÒÖÔ]/g, 'O')
+    .replace(/[ÚÙÜÛ]/g, 'U')
+    .replace(/Ñ/g, 'N');
 };
 
 /**
@@ -46,10 +62,10 @@ export const normalizeText = (text) => {
  */
 export const compareWordsFlexibly = (word1, word2) => {
   if (!word1 || !word2) return false;
-  
+
   const normalized1 = normalizeText(word1);
   const normalized2 = normalizeText(word2);
-  
+
   return normalized1 === normalized2;
 };
 
@@ -61,10 +77,10 @@ export const compareWordsFlexibly = (word1, word2) => {
  */
 export const containsWordFlexibly = (target, word) => {
   if (!target || !word) return false;
-  
+
   const normalizedTarget = normalizeText(target);
   const normalizedWord = normalizeText(word);
-  
+
   return normalizedWord.includes(normalizedTarget);
 };
 
@@ -75,7 +91,7 @@ export const containsWordFlexibly = (target, word) => {
  */
 export const formatForDisplay = (text) => {
   if (!text) return '';
-  
+
   // Keep original formatting but ensure first letter is uppercase
   return text.charAt(0).toUpperCase() + text.slice(1);
 };

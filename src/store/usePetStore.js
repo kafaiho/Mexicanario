@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { STAGE_THRESHOLDS, VINCULO_MAX } from '../theme/designTokens';
 import SKIN_CONFIG from '../constants/skinConfig';
+import { STAGE_THRESHOLDS, VINCULO_MAX } from '../theme/designTokens';
 
 export { SKIN_CONFIG };
 
@@ -48,7 +48,7 @@ const usePetStore = create(
         })),
 
       // Errores no afectan el vínculo
-      error: () => {},
+      error: () => { },
 
       // +2 por caricia, máximo 10 taps diarios
       caricia: () =>
@@ -72,17 +72,9 @@ const usePetStore = create(
           streak: days,
         })),
 
-      // -1/hora por inactividad — llamar periódicamente
+      // -1/hora por inactividad — desactivado por petición del usuario
       decay: () => {
-        const now = Date.now();
-        const horasInactivo = (now - get().lastDecayCheck) / 3_600_000;
-        const decayAmount = Math.floor(horasInactivo) * 1;
-        if (decayAmount > 0) {
-          set((s) => ({
-            vinculo: clamp(s.vinculo - decayAmount, 0, VINCULO_MAX),
-            lastDecayCheck: now,
-          }));
-        }
+        // Decay logic removed to not punish casual players
       },
 
       // Sync desde Convex al iniciar sesión

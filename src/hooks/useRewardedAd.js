@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import {
+  AdEventType,
   IS_MOCKED,
   RewardedAd,
   RewardedAdEventType,
@@ -38,38 +39,43 @@ export function useRewardedAd() {
 
     if (IS_MOCKED) return;
 
-    const ad = RewardedAd.createForAdRequest(REWARDED_ID, {
-      requestNonPersonalizedAdsOnly: false,
-    });
-    adRef.current = ad;
-    setReady(false);
-
-    const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      setReady(true);
-    });
-
-    const unsubEarned = ad.addAdEventListener(
-      RewardedAdEventType.EARNED_REWARD,
-      () => {
-        onRewardRef.current?.();
-        onRewardRef.current = null;
-        // Pre-cargar el siguiente anuncio
-        setTimeout(loadAd, 500);
-      }
-    );
-
-    const unsubError = ad.addAdEventListener(RewardedAdEventType.ERROR, () => {
+    try {
+      const ad = RewardedAd.createForAdRequest(REWARDED_ID, {
+        requestNonPersonalizedAdsOnly: false,
+      });
+      adRef.current = ad;
       setReady(false);
-      setTimeout(loadAd, 5000); // reintentar en 5 segundos
-    });
 
-    cleanupRef.current = () => {
-      unsubLoaded();
-      unsubEarned();
-      unsubError();
-    };
+      const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        setReady(true);
+      });
 
-    ad.load();
+      const unsubEarned = ad.addAdEventListener(
+        RewardedAdEventType.EARNED_REWARD,
+        () => {
+          onRewardRef.current?.();
+          onRewardRef.current = null;
+          // Pre-cargar el siguiente anuncio
+          setTimeout(loadAd, 500);
+        }
+      );
+
+      const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
+        setReady(false);
+        setTimeout(loadAd, 5000); // reintentar en 5 segundos
+      });
+
+      cleanupRef.current = () => {
+        unsubLoaded();
+        unsubEarned();
+        unsubError();
+      };
+
+      ad.load();
+    } catch (e) {
+      console.warn("[useRewardedAd] loadAd error:", e);
+      // Si falla la inicialización, la app sigue funcionando sin anuncios
+    }
   };
 
   useEffect(() => {

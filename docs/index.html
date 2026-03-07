@@ -1,11 +1,320 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=privacy-policy.html" />
-  <title>Mexicanario</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mexicanario — La Revolución Cultural en tu Bolsillo</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Aprende cultura mexicana mientras cuidas tu mascota virtual. Compite con tu ciudad en trivias únicas y evoluciona tu Alebrije. ¡Descarga Mexicanario hoy!">
+    <meta name="keywords" content="mexicanario, trivia mexicana, cultura de mexico, alebrijes, juego de palabras, mascota virtual, modismos mexicanos">
+    <meta name="author" content="Ka Fai Ho">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://mexicanario.com/">
+    <meta property="og:title" content="Mexicanario — Trivia, Cultura y Alebrijes">
+    <meta property="og:description" content="La app definitiva para conectar con tus raíces mexicanas. Juega, aprende y cuida a tu Alebrijito.">
+    <meta property="og:image" content="https://mexicanario.com/hero-alebrije.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://mexicanario.com/">
+    <meta property="twitter:title" content="Mexicanario — La Revolución Cultural">
+    <meta property="twitter:description" content="Aprende cultura mexicana mientras cuidas tu mascota virtual. Compite con tu ciudad en trivias únicas.">
+    <meta property="twitter:image" content="https://mexicanario.com/hero-alebrije.png">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Mexicanario",
+      "operatingSystem": "Android, iOS",
+      "applicationCategory": "GameApplication",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "1250"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Una aplicación de trivia sobre cultura mexicana con una mascota virtual evolucionable."
+    }
+    </script>
+
+    <style>
+        :root {
+            --primary: #e63946;
+            --secondary: #1a1a2e;
+            --accent: #ffb703;
+            --bg: #f9f6f0;
+            --text: #222;
+            --white: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: var(--secondary);
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        nav a {
+            color: var(--white);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--accent);
+        }
+
+        .hero {
+            padding: 150px 5% 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 80vh;
+            gap: 40px;
+        }
+
+        .hero-content {
+            flex: 1;
+            max-width: 600px;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            color: var(--secondary);
+        }
+
+        .hero-content p {
+            font-size: 1.25rem;
+            margin-bottom: 30px;
+            color: #555;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--white);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            color: var(--white);
+        }
+
+        .hero-image {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+
+        .hero-image img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 20px;
+            filter: drop-shadow(0 20px 50px rgba(0,0,0,0.1));
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .features {
+            padding: 100px 5%;
+            background: var(--white);
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title h2 {
+            font-size: 2.5rem;
+            color: var(--secondary);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            padding: 40px;
+            border-radius: 15px;
+            background: var(--bg);
+            transition: transform 0.3s;
+            text-align: center;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .feature-card h3 {
+            margin: 20px 0 10px;
+            color: var(--primary);
+        }
+
+        footer {
+            background: var(--secondary);
+            color: var(--white);
+            padding: 60px 5% 20px;
+            text-align: center;
+        }
+
+        .footer-links {
+            margin: 30px 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .footer-links a {
+            color: #aaa;
+            text-decoration: none;
+        }
+
+        .footer-links a:hover {
+            color: var(--white);
+        }
+
+        @media (max-width: 968px) {
+            .hero {
+                flex-direction: column-reverse;
+                text-align: center;
+                padding-top: 100px;
+            }
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+            .cta-buttons {
+                justify-content: center;
+            }
+        }
+    </style>
 </head>
 <body>
-  <p><a href="privacy-policy.html">Política de Privacidad</a></p>
+
+    <header>
+        <div class="logo">🇲🇽 Mexicanario</div>
+        <nav>
+            <a href="#inicio">Inicio</a>
+            <a href="#features">Características</a>
+            <a href="privacy-policy.html">Privacidad</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="inicio" class="hero">
+            <div class="hero-content">
+                <h1>Aprende Cultura Mexicana Jugando</h1>
+                <p>La app definitiva donde adivinas palabras, compites con tu ciudad y cuidas de tu propio Alebrije evolucionable.</p>
+                <div class="cta-buttons">
+                    <a href="#" class="btn btn-primary">Descargar en App Store</a>
+                    <a href="#" class="btn btn-secondary">Conseguir en Play Store</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <img src="hero-alebrije.png" alt="Mascota Alebrije de Mexicanario">
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="section-title">
+                <h2>¿Qué hay en el Mexicanario?</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3>🦅 Mascota Evolucionable</h3>
+                    <p>Cuida a tu Alebrijito. Cada palabra que adivinas lo hace crecer y evolucionar en una criatura majestuosa.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🏙️ Orgullo Local</h3>
+                    <p>Representa a tu ciudad y escala en los leaderboards globales. ¡Demuestra quién conoce mejor sus raíces!</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🌶️ Retos Diarios</h3>
+                    <p>Mantén tu racha viva y desbloquea contenido exclusivo sobre gastronomía, historia y modismos.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="logo">🇲🇽 Mexicanario</div>
+        <p>Conectando a los mexicanos con sus raíces, un juego a la vez.</p>
+        <div class="footer-links">
+            <a href="privacy-policy.html">Política de Privacidad</a>
+            <a href="mailto:kafaihoz@gmail.com">Contacto</a>
+        </div>
+        <p style="font-size: 0.8rem; color: #666;">&copy; 2026 Mexicanario. Todos los derechos reservados.</p>
+    </footer>
+
 </body>
 </html>

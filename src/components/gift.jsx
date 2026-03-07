@@ -19,7 +19,7 @@ import { REAL_WIDTH, REAL_HEIGHT, TABLET_MODE } from '../utils/tabletSetup';
 
 const { width, height } = Dimensions.get('window');
 
-const TACOS_PER_REWARD = 4;
+const TACOS_PER_REWARD = 12;
 const REWARD_COINS = 100;
 
 const getCoinPillFallback = () => {
@@ -38,10 +38,8 @@ export default function GiftModel({ visible, onClose }) {
   if (!visible) return null;
 
   const tacos = user?.tacos ?? 0;
-  const lastClaimed = user?.lastGiftClaimed ?? 0;
-  const nextRewardAt = lastClaimed + TACOS_PER_REWARD;
-  const tacosNeeded = Math.max(0, nextRewardAt - tacos);
-  const canClaim = tacosNeeded === 0;
+  const tacosNeeded = Math.max(0, TACOS_PER_REWARD - tacos);
+  const canClaim = tacos >= TACOS_PER_REWARD;
 
   async function handleClaim() {
     if (!canClaim || !userId) return;
@@ -82,7 +80,7 @@ export default function GiftModel({ visible, onClose }) {
 
           {/* Taco progress */}
           <Text style={s.tacoProgress}>
-            {Math.min(tacos - lastClaimed, TACOS_PER_REWARD)} / {TACOS_PER_REWARD} 🌮
+            {Math.min(tacos, TACOS_PER_REWARD)} / {TACOS_PER_REWARD} 🌮
           </Text>
 
           {/* Reward info */}

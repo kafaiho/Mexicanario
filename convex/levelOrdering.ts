@@ -49,16 +49,23 @@ export function shuffleSeeded<T>(arr: T[], seed: number): T[] {
   return out;
 }
 
+// ─── Pinned positions ─────────────────────────────────────────────────────────
+// Words that must always appear at a specific 1-based position for every user.
+// Streamers category removed (IP risk), so no pins currently needed.
+const PINNED_POSITIONS: Record<string, number> = {};
+
+function normWord(s: string): string {
+  return s.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
 // ─── Main ordering function ───────────────────────────────────────────────────
 
 type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any };
-type WordDoc  = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string };
+type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string };
 
 /**
- * Returns levels in gameplay order:
  *   positions 1-STARTER_COUNT → easy words sorted by length (same for all users)
  *   positions STARTER_COUNT+1 → rest, seeded-shuffled per user
- *   positions at the END      → adult words: insultos first, then suegra (always last)
  *
  * @param levels   All level documents from DB
  * @param words    All word documents from DB
@@ -72,28 +79,20 @@ export function getOrderedLevels(
 ): LevelDoc[] {
   const wordMap = new Map(words.map((w) => [w._id.toString(), w]));
 
-  const easyLevels: LevelDoc[]    = [];
-  const hardLevels: LevelDoc[]    = [];
-  const insultoLevels: LevelDoc[] = [];
-  const suegrasLevels: LevelDoc[] = [];
+  const easyLevels: LevelDoc[] = [];
+  const hardLevels: LevelDoc[] = [];
 
   for (const lvl of levels) {
+    if (!lvl.wordId) continue; // skip levels with missing wordId
     const w = wordMap.get(lvl.wordId.toString());
-    if (w?.category === "adulto") {
-      // Adult levels always go last, separated by pack
-      if (w.pack === "suegra") {
-        suegrasLevels.push(lvl);
-      } else {
-        insultoLevels.push(lvl);
-      }
-    } else if (w && isEasyWord(w.word, w.region, w.difficulty)) {
+    if (w && isEasyWord(w.word, w.region, w.difficulty)) {
       easyLevels.push(lvl);
     } else {
       hardLevels.push(lvl);
     }
   }
 
-  // Shortest word first = easiest to type
+  // Sort easy words by length: shortest first so players start with simple words
   easyLevels.sort((a, b) => {
     const wa = wordMap.get(a.wordId.toString());
     const wb = wordMap.get(b.wordId.toString());
@@ -102,15 +101,29 @@ export function getOrderedLevels(
 
   const seed = hashStr(userId);
   const starterLevels = easyLevels.slice(0, STARTER_COUNT);
-  const overflowEasy  = userId
+  const overflowEasy = userId
     ? shuffleSeeded(easyLevels.slice(STARTER_COUNT), seed + 1)
     : easyLevels.slice(STARTER_COUNT);
-  const shuffledHard  = userId
+  const shuffledHard = userId
     ? shuffleSeeded(hardLevels, seed)
     : hardLevels.sort((a, b) => a.levelNumber - b.levelNumber);
 
-  // Adult levels always come at the end: insultos first, then suegra
-  return [...starterLevels, ...shuffledHard, ...overflowEasy, ...insultoLevels, ...suegrasLevels];
+  const result = [...starterLevels, ...shuffledHard, ...overflowEasy];
+
+  // Pin specific words to fixed positions (sorted by target position to avoid offsets)
+  const pins = Object.entries(PINNED_POSITIONS).sort((a, b) => a[1] - b[1]);
+  for (const [wordName, targetPos] of pins) {
+    const norm = normWord(wordName);
+    const currentIdx = result.findIndex((lvl) => {
+      const w = wordMap.get(lvl.wordId.toString());
+      return w ? normWord(w.word) === norm : false;
+    });
+    if (currentIdx === -1) continue; // word not in DB yet
+    const [pinned] = result.splice(currentIdx, 1);
+    result.splice(Math.min(targetPos - 1, result.length), 0, pinned);
+  }
+
+  return result;
 }
 
 /**

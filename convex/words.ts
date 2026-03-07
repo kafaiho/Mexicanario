@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getOrderedLevels, completedWordIds } from "./levelOrdering";
+import { completedWordIds, getOrderedLevels } from "./levelOrdering";
 
 // Get all words
 export const getAllWords = query({
@@ -18,11 +18,11 @@ export const getWordsWithProgress = query({
     const currentLevel = user?.currentLevel ?? 1;
 
     const allLevels = await ctx.db.query("levels").collect();
-    const allWords  = await ctx.db.query("words").collect();
+    const allWords = await ctx.db.query("words").collect();
 
     // Use the same ordering as gameplay for accurate unlock status
     const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
-    const done    = completedWordIds(ordered, currentLevel);
+    const done = completedWordIds(ordered, currentLevel);
 
     return allWords.map((w) => ({
       ...w,
@@ -157,7 +157,7 @@ export const getWordCount = query({
   },
 });
 
-const sampleWords = [
+export const sampleWords = [
   {
     "Palabra": "Chido",
     "Significado": "Algo bueno o bonito",
@@ -1236,44 +1236,44 @@ export const seedLevels52to56 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 52 – Instrumentos mexicanos (Música) ────────────────────────
-      { word: "Guitarron",      meaning: "Bajo acústico del mariachi",                  example: "El guitarrón le da el ritmo grave al mariachi",      region: "Jalisco"      },
-      { word: "Vihuela",        meaning: "Guitarra pequeña de 5 cuerdas del mariachi",  example: "La vihuela marca el ritmo en el mariachi",           region: "Jalisco"      },
-      { word: "Arpa jarocha",   meaning: "Arpa del son jarocho veracruzano",            example: "El arpa jarocha suena en La Bamba",                  region: "Veracruz"     },
-      { word: "Marimba",        meaning: "Instrumento de percusión del sureste",        example: "La marimba alegra las fiestas de Chiapas",           region: "Chiapas-Oax." },
-      { word: "Tambora",        meaning: "Tambor grande de la banda sinaloense",        example: "La tambora retumba en la banda norteña",             region: "Sinaloa"      },
-      { word: "Requinto",       meaning: "Guitarra pequeña del trío romántico",         example: "El requinto suena en los tríos como Los Panchos",    region: "Nacional"     },
+      { word: "Guitarron", meaning: "Bajo acústico del mariachi", example: "El guitarrón le da el ritmo grave al mariachi", region: "Jalisco" },
+      { word: "Vihuela", meaning: "Guitarra pequeña de 5 cuerdas del mariachi", example: "La vihuela marca el ritmo en el mariachi", region: "Jalisco" },
+      { word: "Arpa jarocha", meaning: "Arpa del son jarocho veracruzano", example: "El arpa jarocha suena en La Bamba", region: "Veracruz" },
+      { word: "Marimba", meaning: "Instrumento de percusión del sureste", example: "La marimba alegra las fiestas de Chiapas", region: "Chiapas-Oax." },
+      { word: "Tambora", meaning: "Tambor grande de la banda sinaloense", example: "La tambora retumba en la banda norteña", region: "Sinaloa" },
+      { word: "Requinto", meaning: "Guitarra pequeña del trío romántico", example: "El requinto suena en los tríos como Los Panchos", region: "Nacional" },
 
       // ── Nivel 53 – Santos y devoción (Religión) ───────────────────────────
-      { word: "Virgen de Guadalupe", meaning: "Patrona de México venerada el 12 de diciembre", example: "Millones van a la Basílica el 12 de diciembre", region: "Nacional"   },
-      { word: "San Judas Tadeo",     meaning: "Santo de las causas difíciles e imposibles",     example: "Los jóvenes llevan imágenes de San Judas",     region: "CDMX"       },
-      { word: "La Santa Muerte",     meaning: "Figura de devoción popular mexicana",            example: "La Santa Muerte tiene altares en todo México", region: "CDMX"       },
-      { word: "Cristo Rey",          meaning: "Celebración en el Cerro del Cubilete",           example: "Miles peregrinan a Cristo Rey en Guanajuato",  region: "Guanajuato" },
-      { word: "San Miguel Arcangel", meaning: "Arcángel patrono de muchos pueblos",             example: "San Miguel Arcángel es patrono de Michoacán",  region: "Nacional"   },
-      { word: "Nino Dios",           meaning: "Figura del niño Jesús en los nacimientos",       example: "El Niño Dios se viste el 24 de diciembre",     region: "Nacional"   },
+      { word: "Virgen de Guadalupe", meaning: "Patrona de México venerada el 12 de diciembre", example: "Millones van a la Basílica el 12 de diciembre", region: "Nacional" },
+      { word: "San Judas Tadeo", meaning: "Santo de las causas difíciles e imposibles", example: "Los jóvenes llevan imágenes de San Judas", region: "CDMX" },
+      { word: "La Santa Muerte", meaning: "Figura de devoción popular mexicana", example: "La Santa Muerte tiene altares en todo México", region: "CDMX" },
+      { word: "Cristo Rey", meaning: "Celebración en el Cerro del Cubilete", example: "Miles peregrinan a Cristo Rey en Guanajuato", region: "Guanajuato" },
+      { word: "San Miguel Arcangel", meaning: "Arcángel patrono de muchos pueblos", example: "San Miguel Arcángel es patrono de Michoacán", region: "Nacional" },
+      { word: "Nino Dios", meaning: "Figura del niño Jesús en los nacimientos", example: "El Niño Dios se viste el 24 de diciembre", region: "Nacional" },
 
       // ── Nivel 54 – Héroes nacionales (Historia) ───────────────────────────
-      { word: "Benito Juarez",          meaning: "Presidente indígena y gran reformador",          example: "Benito Juárez dijo 'El respeto al derecho ajeno'",  region: "Oaxaca"      },
-      { word: "Miguel Hidalgo",         meaning: "Padre de la Independencia de México",            example: "Hidalgo tocó la campana el 16 de septiembre",       region: "Guanajuato"  },
-      { word: "Emiliano Zapata",        meaning: "Líder agrario de la Revolución Mexicana",        example: "Zapata gritó '¡Tierra y Libertad!'",                region: "Morelos"     },
-      { word: "Sor Juana Ines",         meaning: "Poetisa y monja del Virreinato de México",       example: "Sor Juana Inés fue la primera gran escritora",       region: "CDMX"        },
-      { word: "Josefa Ortiz",           meaning: "La Corregidora que avisó del plan de Independencia", example: "La Corregidora arriesgó su vida por México",  region: "Querétaro"   },
-      { word: "Jose Maria Morelos",     meaning: "Héroe de la Independencia mexicana",             example: "Morelos fue fusilado en 1815 por la Independencia",  region: "Michoacán"   },
+      { word: "Benito Juarez", meaning: "Presidente indígena y gran reformador", example: "Benito Juárez dijo 'El respeto al derecho ajeno'", region: "Oaxaca" },
+      { word: "Miguel Hidalgo", meaning: "Padre de la Independencia de México", example: "Hidalgo tocó la campana el 16 de septiembre", region: "Guanajuato" },
+      { word: "Emiliano Zapata", meaning: "Líder agrario de la Revolución Mexicana", example: "Zapata gritó '¡Tierra y Libertad!'", region: "Morelos" },
+      { word: "Sor Juana Ines", meaning: "Poetisa y monja del Virreinato de México", example: "Sor Juana Inés fue la primera gran escritora", region: "CDMX" },
+      { word: "Josefa Ortiz", meaning: "La Corregidora que avisó del plan de Independencia", example: "La Corregidora arriesgó su vida por México", region: "Querétaro" },
+      { word: "Jose Maria Morelos", meaning: "Héroe de la Independencia mexicana", example: "Morelos fue fusilado en 1815 por la Independencia", region: "Michoacán" },
 
       // ── Nivel 55 – Cine mexicano moderno (Artistas) ───────────────────────
-      { word: "Amores Perros",      meaning: "Película mexicana de Alejandro González Iñárritu",  example: "Amores Perros fue premiada en Cannes",             region: "CDMX"    },
-      { word: "Y tu mama tambien",  meaning: "Película de Alfonso Cuarón con Bernal y Toledo",   example: "Y tu mamá también fue un fenómeno cultural",       region: "Nacional" },
-      { word: "Roma",               meaning: "Película de Alfonso Cuarón ganadora del Oscar",    example: "Roma ganó 3 premios Oscar en 2019",               region: "CDMX"    },
-      { word: "Guillermo del Toro", meaning: "Director mexicano de El laberinto del Fauno",      example: "Guillermo del Toro ganó el Oscar por La Forma del Agua", region: "Jalisco" },
-      { word: "Inarritu",           meaning: "Director de Birdman y The Revenant",               example: "Iñárritu ganó el Oscar dos años seguidos",         region: "CDMX"    },
-      { word: "Alfonso Cuaron",     meaning: "Director mexicano ganador del Oscar",              example: "Alfonso Cuarón dirigió Harry Potter y el prisionero", region: "CDMX"  },
+      { word: "Amores Perros", meaning: "Película mexicana de Alejandro González Iñárritu", example: "Amores Perros fue premiada en Cannes", region: "CDMX" },
+      { word: "Y tu mama tambien", meaning: "Película de Alfonso Cuarón con Bernal y Toledo", example: "Y tu mamá también fue un fenómeno cultural", region: "Nacional" },
+      { word: "Roma", meaning: "Película de Alfonso Cuarón ganadora del Oscar", example: "Roma ganó 3 premios Oscar en 2019", region: "CDMX" },
+      { word: "Guillermo del Toro", meaning: "Director mexicano de El laberinto del Fauno", example: "Guillermo del Toro ganó el Oscar por La Forma del Agua", region: "Jalisco" },
+      { word: "Inarritu", meaning: "Director de Birdman y The Revenant", example: "Iñárritu ganó el Oscar dos años seguidos", region: "CDMX" },
+      { word: "Alfonso Cuaron", meaning: "Director mexicano ganador del Oscar", example: "Alfonso Cuarón dirigió Harry Potter y el prisionero", region: "CDMX" },
 
       // ── Nivel 56 – Ropa y accesorios tradicionales (Arte popular) ─────────
-      { word: "Sombrero charro",  meaning: "Sombrero ancho del mariachi y charro",      example: "El sombrero charro va bordado en plata",             region: "Jalisco"  },
-      { word: "China poblana",    meaning: "Traje femenino típico de Puebla",           example: "La china poblana lleva falda bordada y blusa blanca", region: "Puebla"   },
-      { word: "Traje de charro",  meaning: "Vestimenta del charro mexicano",            example: "El traje de charro tiene bordados en plata",         region: "Jalisco"  },
-      { word: "Sarape",           meaning: "Manta de lana rayada y muy colorida",       example: "El sarape de Saltillo es el más famoso",             region: "Coahuila" },
-      { word: "Quechquemitl",     meaning: "Prenda triangular de comunidades indígenas",example: "El quechquémitl se usa en Hidalgo y Puebla",         region: "Centro"   },
-      { word: "Jorongo",          meaning: "Poncho de lana con rayas de colores",       example: "El jorongo abriga en las noches frías del campo",    region: "Nacional" },
+      { word: "Sombrero charro", meaning: "Sombrero ancho del mariachi y charro", example: "El sombrero charro va bordado en plata", region: "Jalisco" },
+      { word: "China poblana", meaning: "Traje femenino típico de Puebla", example: "La china poblana lleva falda bordada y blusa blanca", region: "Puebla" },
+      { word: "Traje de charro", meaning: "Vestimenta del charro mexicano", example: "El traje de charro tiene bordados en plata", region: "Jalisco" },
+      { word: "Sarape", meaning: "Manta de lana rayada y muy colorida", example: "El sarape de Saltillo es el más famoso", region: "Coahuila" },
+      { word: "Quechquemitl", meaning: "Prenda triangular de comunidades indígenas", example: "El quechquémitl se usa en Hidalgo y Puebla", region: "Centro" },
+      { word: "Jorongo", meaning: "Poncho de lana con rayas de colores", example: "El jorongo abriga en las noches frías del campo", region: "Nacional" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1319,44 +1319,44 @@ export const seedLevels47to51 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 47 – Antojitos de feria (Comida) ────────────────────────────
-      { word: "Elote asado",        meaning: "Maíz asado con mayonesa, queso y chile",      example: "En la feria comí un elote asado con todo",           region: "Todo México"  },
-      { word: "Churro",             meaning: "Masa frita con azúcar y canela",               example: "Los churros del parque siempre están calientitos",   region: "Nacional"     },
-      { word: "Algodon de azucar",  meaning: "Dulce esponjoso de azúcar hilada",             example: "El algodón de azúcar se deshace en la boca",         region: "Ferias"       },
-      { word: "Nieve de garrafa",   meaning: "Helado artesanal servido en vasito",           example: "Pedí nieve de garrafa de limón con chile",           region: "Todo México"  },
-      { word: "Pepino con chile",   meaning: "Pepino fresco con limón, sal y chile piquín", example: "El pepino con chile es el snack de las tardes",       region: "Nacional"     },
-      { word: "Raspado",            meaning: "Hielo raspado con jarabe de sabores y fruta",  example: "El raspado de tamarindo estaba buenísimo",           region: "Todo México"  },
+      { word: "Elote asado", meaning: "Maíz asado con mayonesa, queso y chile", example: "En la feria comí un elote asado con todo", region: "Todo México" },
+      { word: "Churro", meaning: "Masa frita con azúcar y canela", example: "Los churros del parque siempre están calientitos", region: "Nacional" },
+      { word: "Algodon de azucar", meaning: "Dulce esponjoso de azúcar hilada", example: "El algodón de azúcar se deshace en la boca", region: "Ferias" },
+      { word: "Nieve de garrafa", meaning: "Helado artesanal servido en vasito", example: "Pedí nieve de garrafa de limón con chile", region: "Todo México" },
+      { word: "Pepino con chile", meaning: "Pepino fresco con limón, sal y chile piquín", example: "El pepino con chile es el snack de las tardes", region: "Nacional" },
+      { word: "Raspado", meaning: "Hielo raspado con jarabe de sabores y fruta", example: "El raspado de tamarindo estaba buenísimo", region: "Todo México" },
 
       // ── Nivel 48 – Cómics mexicanos (Entretenimiento) ─────────────────────
-      { word: "Kaliman",       meaning: "Superhéroe mexicano con turbante blanco",        example: "Kalimán usaba su inteligencia más que la fuerza",    region: "Nacional"     },
-      { word: "Memin Pinguin", meaning: "Personaje cómico querido por generaciones",      example: "Memín Pinguín apareció en los años 40",              region: "CDMX"         },
-      { word: "La Familia Burron", meaning: "Cómic de vecindad más popular de México",   example: "La Familia Burrón retrataba la vida popular",        region: "Nacional"     },
-      { word: "El Payo",       meaning: "Vaquero justiciero del cómic mexicano",          example: "El Payo defendía a los humildes del rancho",         region: "Norte"        },
-      { word: "Fantomas",      meaning: "Antihéroe ladrón de cómic mexicano",             example: "Fantomas robaba a los ricos con elegancia",          region: "Nacional"     },
-      { word: "Chanoc",        meaning: "Aventurero pescador del cómic mexicano",         example: "Chanoc luchaba contra tiburones en el mar",          region: "Veracruz"     },
+      { word: "Kaliman", meaning: "Superhéroe mexicano con turbante blanco", example: "Kalimán usaba su inteligencia más que la fuerza", region: "Nacional" },
+      { word: "Memin Pinguin", meaning: "Personaje cómico querido por generaciones", example: "Memín Pinguín apareció en los años 40", region: "CDMX" },
+      { word: "La Familia Burron", meaning: "Cómic de vecindad más popular de México", example: "La Familia Burrón retrataba la vida popular", region: "Nacional" },
+      { word: "El Payo", meaning: "Vaquero justiciero del cómic mexicano", example: "El Payo defendía a los humildes del rancho", region: "Norte" },
+      { word: "Fantomas", meaning: "Antihéroe ladrón de cómic mexicano", example: "Fantomas robaba a los ricos con elegancia", region: "Nacional" },
+      { word: "Chanoc", meaning: "Aventurero pescador del cómic mexicano", example: "Chanoc luchaba contra tiburones en el mar", region: "Veracruz" },
 
       // ── Nivel 49 – Remedios de abuela (Tradición) ─────────────────────────
-      { word: "Vicks VapoRub",   meaning: "Ungüento para la tos y el catarro",             example: "La abuela me untó Vicks en el pecho para la gripa",  region: "Nacional"     },
-      { word: "Agua de tila",    meaning: "Té relajante para los nervios",                 example: "Tómate un agua de tila para los nervios",            region: "Todo México"  },
-      { word: "Sábila",          meaning: "Planta para quemaduras y piel",                 example: "Me puse sábila en la quemadura del sol",             region: "Todo México"  },
-      { word: "Limón con sal",   meaning: "Remedio para dolor de garganta o cruda",        example: "Tómate un limón con sal para la cruda",              region: "Nacional"     },
-      { word: "Gordolobo",       meaning: "Hierba tradicional para la tos",                example: "El té de gordolobo quita la tos",                    region: "Centro-Norte" },
-      { word: "Ruda",            meaning: "Planta usada contra el mal de ojo",             example: "La abuela pasaba la ruda para quitar el mal de ojo", region: "Nacional"     },
+      { word: "Vicks VapoRub", meaning: "Ungüento para la tos y el catarro", example: "La abuela me untó Vicks en el pecho para la gripa", region: "Nacional" },
+      { word: "Agua de tila", meaning: "Té relajante para los nervios", example: "Tómate un agua de tila para los nervios", region: "Todo México" },
+      { word: "Sábila", meaning: "Planta para quemaduras y piel", example: "Me puse sábila en la quemadura del sol", region: "Todo México" },
+      { word: "Limón con sal", meaning: "Remedio para dolor de garganta o cruda", example: "Tómate un limón con sal para la cruda", region: "Nacional" },
+      { word: "Gordolobo", meaning: "Hierba tradicional para la tos", example: "El té de gordolobo quita la tos", region: "Centro-Norte" },
+      { word: "Ruda", meaning: "Planta usada contra el mal de ojo", example: "La abuela pasaba la ruda para quitar el mal de ojo", region: "Nacional" },
 
       // ── Nivel 50 – Refranes mexicanos (Lenguaje) ──────────────────────────
-      { word: "Al que madruga",        meaning: "Refrán sobre el esfuerzo temprano",       example: "Al que madruga, Dios lo ayuda, dijo mi mamá",        region: "Todo México"  },
-      { word: "Camarón que se duerme", meaning: "Refrán sobre estar siempre alerta",       example: "Camarón que se duerme, se lo lleva la corriente",    region: "Nacional"     },
-      { word: "El que con lobos anda", meaning: "Refrán sobre las malas compañías",        example: "El que con lobos anda, a aullar se enseña",          region: "Nacional"     },
-      { word: "Más vale tarde",        meaning: "Refrán sobre que no es tarde para nada",  example: "Más vale tarde que nunca, ¿verdad?",                 region: "Todo México"  },
-      { word: "En boca cerrada",       meaning: "Refrán sobre saber callar",               example: "En boca cerrada no entran moscas",                   region: "Nacional"     },
-      { word: "No hay mal que dure",   meaning: "Refrán de esperanza ante las dificultades",example: "No hay mal que dure cien años ni cuerpo que lo aguante", region: "Nacional" },
+      { word: "Al que madruga", meaning: "Refrán sobre el esfuerzo temprano", example: "Al que madruga, Dios lo ayuda, dijo mi mamá", region: "Todo México" },
+      { word: "Camarón que se duerme", meaning: "Refrán sobre estar siempre alerta", example: "Camarón que se duerme, se lo lleva la corriente", region: "Nacional" },
+      { word: "El que con lobos anda", meaning: "Refrán sobre las malas compañías", example: "El que con lobos anda, a aullar se enseña", region: "Nacional" },
+      { word: "Más vale tarde", meaning: "Refrán sobre que no es tarde para nada", example: "Más vale tarde que nunca, ¿verdad?", region: "Todo México" },
+      { word: "En boca cerrada", meaning: "Refrán sobre saber callar", example: "En boca cerrada no entran moscas", region: "Nacional" },
+      { word: "No hay mal que dure", meaning: "Refrán de esperanza ante las dificultades", example: "No hay mal que dure cien años ni cuerpo que lo aguante", region: "Nacional" },
 
       // ── Nivel 51 – Festivales y ferias (Cultura) ──────────────────────────
-      { word: "Guelaguetza",         meaning: "Festival de danzas indígenas en Oaxaca",      example: "La Guelaguetza reúne a comunidades de todo Oaxaca",   region: "Oaxaca"      },
-      { word: "Festival Cervantino", meaning: "Festival cultural internacional en Guanajuato",example: "El Festival Cervantino trae artistas del mundo",      region: "Guanajuato"  },
-      { word: "Feria de San Marcos", meaning: "La feria más importante de México",           example: "La Feria de San Marcos dura un mes entero",          region: "Aguascalientes" },
-      { word: "Carnaval de Veracruz",meaning: "El carnaval más grande y famoso de México",  example: "El Carnaval de Veracruz llena el malecón de música",  region: "Veracruz"    },
-      { word: "Dia de Guadalupe",    meaning: "Celebración del 12 de diciembre a la Virgen", example: "Millones peregrinan el 12 de diciembre a la Basílica",region: "Nacional"    },
-      { word: "Semana Santa",        meaning: "Semana de Cuaresma con procesiones y tradiciones",example: "En Semana Santa íbamos a la playa o a misa",      region: "Todo México" },
+      { word: "Guelaguetza", meaning: "Festival de danzas indígenas en Oaxaca", example: "La Guelaguetza reúne a comunidades de todo Oaxaca", region: "Oaxaca" },
+      { word: "Festival Cervantino", meaning: "Festival cultural internacional en Guanajuato", example: "El Festival Cervantino trae artistas del mundo", region: "Guanajuato" },
+      { word: "Feria de San Marcos", meaning: "La feria más importante de México", example: "La Feria de San Marcos dura un mes entero", region: "Aguascalientes" },
+      { word: "Carnaval de Veracruz", meaning: "El carnaval más grande y famoso de México", example: "El Carnaval de Veracruz llena el malecón de música", region: "Veracruz" },
+      { word: "Dia de Guadalupe", meaning: "Celebración del 12 de diciembre a la Virgen", example: "Millones peregrinan el 12 de diciembre a la Basílica", region: "Nacional" },
+      { word: "Semana Santa", meaning: "Semana de Cuaresma con procesiones y tradiciones", example: "En Semana Santa íbamos a la playa o a misa", region: "Todo México" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1402,44 +1402,44 @@ export const seedLevels42to46 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 42 – Chiles de México (Comida) ──────────────────────────────
-      { word: "Chile habanero",  meaning: "Chile muy picoso del sureste",              example: "El chile habanero me hizo llorar de lo picoso",   region: "Yucatán"     },
-      { word: "Chile serrano",   meaning: "Chile verde delgado y picante",             example: "La salsa de chile serrano acompaña todo",        region: "Todo México" },
-      { word: "Chile poblano",   meaning: "Chile grande para rajas o rellenos",        example: "Las rajas de chile poblano van con crema",       region: "Puebla"      },
-      { word: "Chile chipotle",  meaning: "Chile jalapeño ahumado en adobo",           example: "La salsa chipotle le da sabor ahumado al taco",  region: "Nacional"    },
-      { word: "Chile de arbol",  meaning: "Chile rojo seco y muy picante",             example: "La salsa de chile de árbol pica bastante",       region: "Todo México" },
-      { word: "Chile ancho",     meaning: "Chile mulato seco de sabor dulzón",         example: "El chile ancho va en moles y adobos",            region: "Nacional"    },
+      { word: "Chile habanero", meaning: "Chile muy picoso del sureste", example: "El chile habanero me hizo llorar de lo picoso", region: "Yucatán" },
+      { word: "Chile serrano", meaning: "Chile verde delgado y picante", example: "La salsa de chile serrano acompaña todo", region: "Todo México" },
+      { word: "Chile poblano", meaning: "Chile grande para rajas o rellenos", example: "Las rajas de chile poblano van con crema", region: "Puebla" },
+      { word: "Chile chipotle", meaning: "Chile jalapeño ahumado en adobo", example: "La salsa chipotle le da sabor ahumado al taco", region: "Nacional" },
+      { word: "Chile de arbol", meaning: "Chile rojo seco y muy picante", example: "La salsa de chile de árbol pica bastante", region: "Todo México" },
+      { word: "Chile ancho", meaning: "Chile mulato seco de sabor dulzón", example: "El chile ancho va en moles y adobos", region: "Nacional" },
 
       // ── Nivel 43 – Telenovelas icónicas (Entretenimiento) ─────────────────
-      { word: "Rosa Salvaje",              meaning: "Telenovela de Verónica Castro de los 80s",    example: "Rosa Salvaje fue la telenovela del año",         region: "Nacional"    },
-      { word: "Cuna de lobos",             meaning: "Telenovela de suspenso de los 80s",           example: "Catalina Creel con su parche fue icónica",       region: "Nacional"    },
-      { word: "Los ricos también lloran",  meaning: "Telenovela exportada al mundo entero",        example: "Los ricos también lloran se vio en Rusia",       region: "Nacional"    },
-      { word: "La usurpadora",             meaning: "Telenovela de gemelas con Gabriela Spanic",  example: "La usurpadora tenía a dos gemelas idénticas",    region: "Nacional"    },
-      { word: "Thalia",                    meaning: "Actriz y cantante icónica de telenovelas",   example: "Thalía actuó en María la del Barrio",            region: "CDMX"        },
-      { word: "Veronica Castro",           meaning: "Actriz de la Época Dorada de telenovelas",  example: "Verónica Castro fue la Rosa Salvaje",            region: "CDMX"        },
+      { word: "Rosa Salvaje", meaning: "Telenovela de Verónica Castro de los 80s", example: "Rosa Salvaje fue la telenovela del año", region: "Nacional" },
+      { word: "Cuna de lobos", meaning: "Telenovela de suspenso de los 80s", example: "Catalina Creel con su parche fue icónica", region: "Nacional" },
+      { word: "Los ricos también lloran", meaning: "Telenovela exportada al mundo entero", example: "Los ricos también lloran se vio en Rusia", region: "Nacional" },
+      { word: "La usurpadora", meaning: "Telenovela de gemelas con Gabriela Spanic", example: "La usurpadora tenía a dos gemelas idénticas", region: "Nacional" },
+      { word: "Thalia", meaning: "Actriz y cantante icónica de telenovelas", example: "Thalía actuó en María la del Barrio", region: "CDMX" },
+      { word: "Veronica Castro", meaning: "Actriz de la Época Dorada de telenovelas", example: "Verónica Castro fue la Rosa Salvaje", region: "CDMX" },
 
       // ── Nivel 44 – Grupero y tropical (Música) ────────────────────────────
-      { word: "Los Bukis",          meaning: "Grupo emblemático de Marco Antonio Solís",   example: "Los Bukis llenaron el estadio Azteca",         region: "Michoacán"   },
-      { word: "Bronco",             meaning: "Grupo norteño que pegó en toda América",     example: "Bronco cantó Que no quede huella",             region: "Nuevo León"  },
-      { word: "Los Angeles Azules", meaning: "Cumbia del DF que conquistó el mundo",      example: "Los Ángeles Azules tocaron en el Zócalo",      region: "CDMX"        },
-      { word: "Los Yonics",         meaning: "Grupo romántico de los 80 y 90",            example: "Los Yonics sonaban en cada fiesta de quince",  region: "Guadalajara" },
-      { word: "Selena",             meaning: "Reina del tex-mex adorada en México",       example: "Selena vendió millones de discos en México",   region: "Frontera"    },
-      { word: "Jenni Rivera",       meaning: "La diva de la banda sinaloense",            example: "Jenni Rivera es leyenda del regional mexicano",region: "Sinaloa"     },
+      { word: "Los Bukis", meaning: "Grupo emblemático de Marco Antonio Solís", example: "Los Bukis llenaron el estadio Azteca", region: "Michoacán" },
+      { word: "Bronco", meaning: "Grupo norteño que pegó en toda América", example: "Bronco cantó Que no quede huella", region: "Nuevo León" },
+      { word: "Los Angeles Azules", meaning: "Cumbia del DF que conquistó el mundo", example: "Los Ángeles Azules tocaron en el Zócalo", region: "CDMX" },
+      { word: "Los Yonics", meaning: "Grupo romántico de los 80 y 90", example: "Los Yonics sonaban en cada fiesta de quince", region: "Guadalajara" },
+      { word: "Selena", meaning: "Reina del tex-mex adorada en México", example: "Selena vendió millones de discos en México", region: "Frontera" },
+      { word: "Jenni Rivera", meaning: "La diva de la banda sinaloense", example: "Jenni Rivera es leyenda del regional mexicano", region: "Sinaloa" },
 
       // ── Nivel 45 – La escuela mexicana (Nostalgia escolar) ────────────────
-      { word: "Cuaderno Scribe",   meaning: "El cuaderno rayado más famoso de México",         example: "Forré mi cuaderno Scribe con papel contact",       region: "Todo México" },
-      { word: "Recreo escolar",    meaning: "El descanso más esperado del día en la escuela",  example: "En el recreo jugábamos y comprábamos en la coope", region: "Nacional"    },
-      { word: "Cooperativa",       meaning: "Tienda de la escuela donde comprabas en recreo",  example: "En la cooperativa vendían tortas y paletas",       region: "Nacional"    },
-      { word: "Conaliteg",         meaning: "Los libros de texto gratuitos de la SEP",         example: "El Conaliteg nos daban gratis al inicio del año",  region: "Nacional"    },
-      { word: "Lonchera",          meaning: "Recipiente para llevar el almuerzo a la escuela", example: "Mi lonchera tenía sándwich y jugo",               region: "Escolar"     },
-      { word: "Escolta",           meaning: "Grupo de alumnos que porta la bandera",           example: "Ser parte de la escolta era un honor",            region: "Nacional"    },
+      { word: "Cuaderno Scribe", meaning: "El cuaderno rayado más famoso de México", example: "Forré mi cuaderno Scribe con papel contact", region: "Todo México" },
+      { word: "Recreo escolar", meaning: "El descanso más esperado del día en la escuela", example: "En el recreo jugábamos y comprábamos en la coope", region: "Nacional" },
+      { word: "Cooperativa", meaning: "Tienda de la escuela donde comprabas en recreo", example: "En la cooperativa vendían tortas y paletas", region: "Nacional" },
+      { word: "Conaliteg", meaning: "Los libros de texto gratuitos de la SEP", example: "El Conaliteg nos daban gratis al inicio del año", region: "Nacional" },
+      { word: "Lonchera", meaning: "Recipiente para llevar el almuerzo a la escuela", example: "Mi lonchera tenía sándwich y jugo", region: "Escolar" },
+      { word: "Escolta", meaning: "Grupo de alumnos que porta la bandera", example: "Ser parte de la escolta era un honor", region: "Nacional" },
 
       // ── Nivel 46 – Transporte popular (Cultura urbana) ────────────────────
-      { word: "Pesero",     meaning: "Microbús de transporte urbano en CDMX",       example: "El pesero siempre va lleno a reventar",         region: "CDMX"        },
-      { word: "Metro CDMX", meaning: "Sistema de transporte subterráneo de la capital", example: "El metro es la forma más rápida de cruzar el DF",region: "CDMX"     },
-      { word: "Mototaxi",   meaning: "Taxi de tres ruedas muy popular en pueblos",  example: "El mototaxi me dejó en la puerta de la casa",   region: "Sur-Centro"  },
-      { word: "Combi",      meaning: "Furgoneta de transporte colectivo",           example: "La combi se llenó en el mercado",               region: "Todo México" },
-      { word: "Bicitaxi",   meaning: "Bicicleta con carrito para pasajeros",       example: "El bicitaxi me cobró diez pesos",               region: "Centro"      },
-      { word: "Trolebus",   meaning: "Autobús eléctrico clásico de CDMX",          example: "El trolebús recorre Eje Central desde hace décadas", region: "CDMX"   },
+      { word: "Pesero", meaning: "Microbús de transporte urbano en CDMX", example: "El pesero siempre va lleno a reventar", region: "CDMX" },
+      { word: "Metro CDMX", meaning: "Sistema de transporte subterráneo de la capital", example: "El metro es la forma más rápida de cruzar el DF", region: "CDMX" },
+      { word: "Mototaxi", meaning: "Taxi de tres ruedas muy popular en pueblos", example: "El mototaxi me dejó en la puerta de la casa", region: "Sur-Centro" },
+      { word: "Combi", meaning: "Furgoneta de transporte colectivo", example: "La combi se llenó en el mercado", region: "Todo México" },
+      { word: "Bicitaxi", meaning: "Bicicleta con carrito para pasajeros", example: "El bicitaxi me cobró diez pesos", region: "Centro" },
+      { word: "Trolebus", meaning: "Autobús eléctrico clásico de CDMX", example: "El trolebús recorre Eje Central desde hace décadas", region: "CDMX" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1485,44 +1485,44 @@ export const seedLevels37to41 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 37 – Fiestas y tradiciones (Tradiciones) ────────────────────
-      { word: "Piñata",               meaning: "Figura de cartón rellena de dulces y fruta",       example: "Dale dale dale a la piñata en la posada",             region: "Todo México"  },
-      { word: "Quinceañera",          meaning: "Celebración de los 15 años de una chica",          example: "La quinceañera bailó el vals con su chambelán",        region: "Nacional"     },
-      { word: "Posada navideña",      meaning: "Festejo de 9 noches antes de Navidad",             example: "En la posada cantamos y rompimos la piñata",           region: "Todo México"  },
-      { word: "Grito de Independencia", meaning: "Celebración del 15 de septiembre",              example: "El presidente dio el Grito desde el Zócalo",           region: "Nacional"     },
-      { word: "Kermes",               meaning: "Feria escolar con juegos, comida y rifas",         example: "En la kermes de la escuela gané un juguete",           region: "Infantil"     },
-      { word: "Altar de muertos",     meaning: "Ofrenda con fotos, flores y comida del difunto",  example: "Pusimos el altar de muertos con la foto del abuelo",   region: "Nacional"     },
+      { word: "Piñata", meaning: "Figura de cartón rellena de dulces y fruta", example: "Dale dale dale a la piñata en la posada", region: "Todo México" },
+      { word: "Quinceañera", meaning: "Celebración de los 15 años de una chica", example: "La quinceañera bailó el vals con su chambelán", region: "Nacional" },
+      { word: "Posada navideña", meaning: "Festejo de 9 noches antes de Navidad", example: "En la posada cantamos y rompimos la piñata", region: "Todo México" },
+      { word: "Grito de Independencia", meaning: "Celebración del 15 de septiembre", example: "El presidente dio el Grito desde el Zócalo", region: "Nacional" },
+      { word: "Kermes", meaning: "Feria escolar con juegos, comida y rifas", example: "En la kermes de la escuela gané un juguete", region: "Infantil" },
+      { word: "Altar de muertos", meaning: "Ofrenda con fotos, flores y comida del difunto", example: "Pusimos el altar de muertos con la foto del abuelo", region: "Nacional" },
 
       // ── Nivel 38 – Bebidas tradicionales (Bebidas) ────────────────────────
-      { word: "Horchata",        meaning: "Bebida fría de arroz con canela",              example: "Pedí una horchata bien fría en la taquería",         region: "Todo México"  },
-      { word: "Agua de jamaica", meaning: "Agua fresca de flor de jamaica",               example: "El agua de jamaica estaba bien ácida",               region: "Nacional"     },
-      { word: "Tepache",         meaning: "Bebida fermentada de piña con piloncillo",     example: "El tepache se vende en los mercados",                region: "CDMX"         },
-      { word: "Tejuino",         meaning: "Bebida de maíz fermentado con limón y sal",   example: "El tejuino con nieve de limón está buenísimo",       region: "Jalisco"      },
-      { word: "Pulque",          meaning: "Bebida fermentada del agave",                 example: "Tomamos pulque en una pulquería del centro",         region: "Hidalgo-CDMX" },
-      { word: "Michelada",       meaning: "Cerveza con jugo de limón, sal y chile",      example: "La michelada es perfecta para el calor",             region: "Todo México"  },
+      { word: "Horchata", meaning: "Bebida fría de arroz con canela", example: "Pedí una horchata bien fría en la taquería", region: "Todo México" },
+      { word: "Agua de jamaica", meaning: "Agua fresca de flor de jamaica", example: "El agua de jamaica estaba bien ácida", region: "Nacional" },
+      { word: "Tepache", meaning: "Bebida fermentada de piña con piloncillo", example: "El tepache se vende en los mercados", region: "CDMX" },
+      { word: "Tejuino", meaning: "Bebida de maíz fermentado con limón y sal", example: "El tejuino con nieve de limón está buenísimo", region: "Jalisco" },
+      { word: "Pulque", meaning: "Bebida fermentada del agave", example: "Tomamos pulque en una pulquería del centro", region: "Hidalgo-CDMX" },
+      { word: "Michelada", meaning: "Cerveza con jugo de limón, sal y chile", example: "La michelada es perfecta para el calor", region: "Todo México" },
 
       // ── Nivel 39 – Deporte mexicano (Deporte) ─────────────────────────────
-      { word: "Charreria",          meaning: "Deporte ecuestre nacional de México",         example: "La charrería es el deporte nacional oficial",        region: "Jalisco"  },
-      { word: "Julio Cesar Chavez", meaning: "Campeón mundial de box mexicano",             example: "Julio César Chávez ganó 3 títulos mundiales",        region: "Sinaloa"  },
-      { word: "Hugo Sanchez",       meaning: "Futbolista mexicano considerado el mejor",    example: "Hugo Sánchez metió un golazo de chilena en el Real", region: "CDMX"     },
-      { word: "Pelota mixteca",     meaning: "Deporte prehispánico de pelota sin manos",   example: "La pelota mixteca se juega en Oaxaca todavía",      region: "Oaxaca"   },
-      { word: "Beisbol norteno",    meaning: "Deporte muy popular en el norte de México",  example: "En Sonora el béisbol es más popular que el fútbol",  region: "Norte"    },
-      { word: "Ana Guevara",        meaning: "Velocista y medallista olímpica mexicana",   example: "Ana Guevara ganó plata olímpica en Atenas 2004",    region: "Sonora"   },
+      { word: "Charreria", meaning: "Deporte ecuestre nacional de México", example: "La charrería es el deporte nacional oficial", region: "Jalisco" },
+      { word: "Julio Cesar Chavez", meaning: "Campeón mundial de box mexicano", example: "Julio César Chávez ganó 3 títulos mundiales", region: "Sinaloa" },
+      { word: "Hugo Sanchez", meaning: "Futbolista mexicano considerado el mejor", example: "Hugo Sánchez metió un golazo de chilena en el Real", region: "CDMX" },
+      { word: "Pelota mixteca", meaning: "Deporte prehispánico de pelota sin manos", example: "La pelota mixteca se juega en Oaxaca todavía", region: "Oaxaca" },
+      { word: "Beisbol norteno", meaning: "Deporte muy popular en el norte de México", example: "En Sonora el béisbol es más popular que el fútbol", region: "Norte" },
+      { word: "Ana Guevara", meaning: "Velocista y medallista olímpica mexicana", example: "Ana Guevara ganó plata olímpica en Atenas 2004", region: "Sonora" },
 
       // ── Nivel 40 – Lugares y barrios icónicos (Cultura urbana) ────────────
-      { word: "Tianguis",   meaning: "Mercado ambulante semanal tradicional",        example: "Fuimos al tianguis del domingo a comprar ropa",   region: "Todo México" },
-      { word: "Xochimilco", meaning: "Canales de trajineras en CDMX",               example: "Rentamos una trajinera en Xochimilco",            region: "CDMX"        },
-      { word: "Garibaldi",  meaning: "Plaza donde van los mariachis de CDMX",       example: "Le llevamos serenata con mariachi de Garibaldi",  region: "CDMX"        },
-      { word: "El Zocalo",  meaning: "Plaza principal y corazón de México",         example: "El Zócalo se llena el 15 de septiembre",          region: "CDMX"        },
-      { word: "Tepito",     meaning: "Barrio bravo y mercado popular de CDMX",      example: "En Tepito encuentras de todo",                    region: "CDMX"        },
-      { word: "La Merced",  meaning: "Mercado enorme y tradicional del centro",     example: "Compramos frutas y verduras en La Merced",        region: "CDMX"        },
+      { word: "Tianguis", meaning: "Mercado ambulante semanal tradicional", example: "Fuimos al tianguis del domingo a comprar ropa", region: "Todo México" },
+      { word: "Xochimilco", meaning: "Canales de trajineras en CDMX", example: "Rentamos una trajinera en Xochimilco", region: "CDMX" },
+      { word: "Garibaldi", meaning: "Plaza donde van los mariachis de CDMX", example: "Le llevamos serenata con mariachi de Garibaldi", region: "CDMX" },
+      { word: "El Zocalo", meaning: "Plaza principal y corazón de México", example: "El Zócalo se llena el 15 de septiembre", region: "CDMX" },
+      { word: "Tepito", meaning: "Barrio bravo y mercado popular de CDMX", example: "En Tepito encuentras de todo", region: "CDMX" },
+      { word: "La Merced", meaning: "Mercado enorme y tradicional del centro", example: "Compramos frutas y verduras en La Merced", region: "CDMX" },
 
       // ── Nivel 41 – Cocina de abuela (Comida nostálgica) ───────────────────
-      { word: "Sopa de fideos",    meaning: "Sopa frita con jitomate y caldo",              example: "La sopa de fideos de la abuela es la mejor",      region: "Todo México" },
-      { word: "Arroz rojo",        meaning: "Arroz frito con jitomate y ajo",               example: "El arroz rojo acompañó los frijoles",             region: "Nacional"    },
-      { word: "Frijoles de olla",  meaning: "Frijoles cocidos a fuego lento con epazote",  example: "Los frijoles de olla huelen desde la calle",      region: "Todo México" },
-      { word: "Caldo de pollo",    meaning: "Caldo reconfortante con verduras y pollo",    example: "Cuando estaba enfermo me daban caldo de pollo",   region: "Nacional"    },
-      { word: "Enchiladas verdes", meaning: "Tortillas bañadas en salsa verde con pollo",  example: "Las enchiladas verdes son domingo en casa",       region: "Todo México" },
-      { word: "Chiles en nogada",  meaning: "Platillo tricolor símbolo de Independencia",  example: "Los chiles en nogada se comen en septiembre",     region: "Puebla"      },
+      { word: "Sopa de fideos", meaning: "Sopa frita con jitomate y caldo", example: "La sopa de fideos de la abuela es la mejor", region: "Todo México" },
+      { word: "Arroz rojo", meaning: "Arroz frito con jitomate y ajo", example: "El arroz rojo acompañó los frijoles", region: "Nacional" },
+      { word: "Frijoles de olla", meaning: "Frijoles cocidos a fuego lento con epazote", example: "Los frijoles de olla huelen desde la calle", region: "Todo México" },
+      { word: "Caldo de pollo", meaning: "Caldo reconfortante con verduras y pollo", example: "Cuando estaba enfermo me daban caldo de pollo", region: "Nacional" },
+      { word: "Enchiladas verdes", meaning: "Tortillas bañadas en salsa verde con pollo", example: "Las enchiladas verdes son domingo en casa", region: "Todo México" },
+      { word: "Chiles en nogada", meaning: "Platillo tricolor símbolo de Independencia", example: "Los chiles en nogada se comen en septiembre", region: "Puebla" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1568,44 +1568,44 @@ export const seedLevels32to36 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 32 – Personajes de la tele (Entretenimiento) ────────────────
-      { word: "Chespirito",        meaning: "Actor y comediante creador del Chavo",           example: "Chespirito hizo reír a generaciones",               region: "CDMX"        },
-      { word: "Chabelo",           meaning: "Conductor del programa dominical más longevo",   example: "Chabelo regalaba juguetes cada domingo",             region: "CDMX"        },
-      { word: "El Chavo del 8",    meaning: "Personaje de la vecindad más famosa de México",  example: "El Chavo vivía en un barril y era muy inocente",     region: "Todo México"  },
-      { word: "La Chilindrina",    meaning: "La niña traviesa de la vecindad",                example: "La Chilindrina siempre le echaba la culpa al Chavo", region: "Todo México"  },
-      { word: "Don Ramon",         meaning: "El vecino sin trabajo del Chavo del 8",          example: "Don Ramón nunca pagaba la renta",                    region: "Todo México"  },
-      { word: "Viruta y Capulina", meaning: "Dúo cómico del cine mexicano",                  example: "Viruta y Capulina hacían reír al cine entero",       region: "Época de Oro" },
+      { word: "Chespirito", meaning: "Actor y comediante creador del Chavo", example: "Chespirito hizo reír a generaciones", region: "CDMX" },
+      { word: "Chabelo", meaning: "Conductor del programa dominical más longevo", example: "Chabelo regalaba juguetes cada domingo", region: "CDMX" },
+      { word: "El Chavo del 8", meaning: "Personaje de la vecindad más famosa de México", example: "El Chavo vivía en un barril y era muy inocente", region: "Todo México" },
+      { word: "La Chilindrina", meaning: "La niña traviesa de la vecindad", example: "La Chilindrina siempre le echaba la culpa al Chavo", region: "Todo México" },
+      { word: "Don Ramon", meaning: "El vecino sin trabajo del Chavo del 8", example: "Don Ramón nunca pagaba la renta", region: "Todo México" },
+      { word: "Viruta y Capulina", meaning: "Dúo cómico del cine mexicano", example: "Viruta y Capulina hacían reír al cine entero", region: "Época de Oro" },
 
       // ── Nivel 33 – Lucha libre (Deporte) ──────────────────────────────────
-      { word: "Lucha libre",   meaning: "Deporte y espectáculo mexicano con máscaras",    example: "La lucha libre llena arenas cada semana",          region: "Todo México" },
-      { word: "El Santo",      meaning: "Luchador enmascarado más icónico de México",     example: "El Santo nunca se quitó la máscara en público",    region: "Todo México" },
-      { word: "Blue Demon",    meaning: "Leyenda del ring con máscara azul",              example: "Blue Demon fue el eterno rival del Santo",         region: "CDMX"        },
-      { word: "Mil Mascaras",  meaning: "Luchador famoso por sus múltiples disfraces",    example: "Mil Máscaras luchó en Japón y Europa",             region: "San Luis Potosí" },
-      { word: "Hijo del Santo", meaning: "Luchador heredero de la leyenda del Santo",    example: "El Hijo del Santo siguió el legado de su padre",   region: "Todo México" },
-      { word: "Arena Mexico",  meaning: "Catedral de la lucha libre en CDMX",            example: "La Arena México se llena cada viernes",            region: "CDMX"        },
+      { word: "Lucha libre", meaning: "Deporte y espectáculo mexicano con máscaras", example: "La lucha libre llena arenas cada semana", region: "Todo México" },
+      { word: "El Santo", meaning: "Luchador enmascarado más icónico de México", example: "El Santo nunca se quitó la máscara en público", region: "Todo México" },
+      { word: "Blue Demon", meaning: "Leyenda del ring con máscara azul", example: "Blue Demon fue el eterno rival del Santo", region: "CDMX" },
+      { word: "Mil Mascaras", meaning: "Luchador famoso por sus múltiples disfraces", example: "Mil Máscaras luchó en Japón y Europa", region: "San Luis Potosí" },
+      { word: "Hijo del Santo", meaning: "Luchador heredero de la leyenda del Santo", example: "El Hijo del Santo siguió el legado de su padre", region: "Todo México" },
+      { word: "Arena Mexico", meaning: "Catedral de la lucha libre en CDMX", example: "La Arena México se llena cada viernes", region: "CDMX" },
 
       // ── Nivel 34 – Geografía y naturaleza (Naturaleza) ────────────────────
-      { word: "Popocatepetl",    meaning: "Volcán activo más famoso de México",            example: "El Popocatépetl hizo erupción esta mañana",       region: "Puebla-CDMX"  },
-      { word: "Cenote",          meaning: "Hoyo natural de agua subterránea",              example: "Nadamos en un cenote en Yucatán",                 region: "Yucatán"      },
-      { word: "Barranca del Cobre", meaning: "Cañón más grande que el Grand Canyon",      example: "La Barranca del Cobre está en Chihuahua",         region: "Chihuahua"    },
-      { word: "Laguna de Bacalar", meaning: "Lago de los siete colores",                  example: "Bacalar tiene aguas azules increíbles",           region: "Quintana Roo" },
-      { word: "Selva Lacandona", meaning: "Selva tropical más grande del sur",            example: "La Selva Lacandona alberga jaguares y guacamayas",region: "Chiapas"      },
-      { word: "Iztaccihuatl",    meaning: "Volcán con forma de mujer dormida",            example: "El Iztaccíhuatl y el Popo son pareja legendaria", region: "Puebla-CDMX"  },
+      { word: "Popocatepetl", meaning: "Volcán activo más famoso de México", example: "El Popocatépetl hizo erupción esta mañana", region: "Puebla-CDMX" },
+      { word: "Cenote", meaning: "Hoyo natural de agua subterránea", example: "Nadamos en un cenote en Yucatán", region: "Yucatán" },
+      { word: "Barranca del Cobre", meaning: "Cañón más grande que el Grand Canyon", example: "La Barranca del Cobre está en Chihuahua", region: "Chihuahua" },
+      { word: "Laguna de Bacalar", meaning: "Lago de los siete colores", example: "Bacalar tiene aguas azules increíbles", region: "Quintana Roo" },
+      { word: "Selva Lacandona", meaning: "Selva tropical más grande del sur", example: "La Selva Lacandona alberga jaguares y guacamayas", region: "Chiapas" },
+      { word: "Iztaccihuatl", meaning: "Volcán con forma de mujer dormida", example: "El Iztaccíhuatl y el Popo son pareja legendaria", region: "Puebla-CDMX" },
 
       // ── Nivel 35 – Artesanías mexicanas (Arte popular) ────────────────────
-      { word: "Alebrijes",   meaning: "Figuras fantásticas de papel maché o madera",  example: "Compré un alebrije de jaguar en Oaxaca",        region: "Oaxaca-CDMX"  },
-      { word: "Talavera",    meaning: "Cerámica pintada a mano de Puebla",            example: "La cocina tenía azulejos de talavera",          region: "Puebla"       },
-      { word: "Barro negro", meaning: "Cerámica negra brillante de Oaxaca",           example: "El barro negro de San Marcos es único",         region: "Oaxaca"       },
-      { word: "Papel picado", meaning: "Decoración de papel de colores perforado",   example: "El papel picado adornaba la fiesta de quince",  region: "Todo México"  },
-      { word: "Huipil",      meaning: "Vestido bordado tradicional de comunidades indígenas", example: "La señora llevaba un huipil muy colorido",region: "Sur de México"},
-      { word: "Reboso",      meaning: "Manta tejida para cargar o cubrirse",          example: "La abuela siempre cargaba su reboso",           region: "Nacional"     },
+      { word: "Alebrijes", meaning: "Figuras fantásticas de papel maché o madera", example: "Compré un alebrije de jaguar en Oaxaca", region: "Oaxaca-CDMX" },
+      { word: "Talavera", meaning: "Cerámica pintada a mano de Puebla", example: "La cocina tenía azulejos de talavera", region: "Puebla" },
+      { word: "Barro negro", meaning: "Cerámica negra brillante de Oaxaca", example: "El barro negro de San Marcos es único", region: "Oaxaca" },
+      { word: "Papel picado", meaning: "Decoración de papel de colores perforado", example: "El papel picado adornaba la fiesta de quince", region: "Todo México" },
+      { word: "Huipil", meaning: "Vestido bordado tradicional de comunidades indígenas", example: "La señora llevaba un huipil muy colorido", region: "Sur de México" },
+      { word: "Reboso", meaning: "Manta tejida para cargar o cubrirse", example: "La abuela siempre cargaba su reboso", region: "Nacional" },
 
       // ── Nivel 36 – Modismos mexicanos (Lenguaje) ──────────────────────────
-      { word: "Órale",      meaning: "Expresión de acuerdo, sorpresa o ánimo",   example: "Órale, ya nos vamos",                        region: "Todo México" },
-      { word: "Chido",      meaning: "Adjetivo que significa excelente o cool",  example: "Ese carro está muy chido",                   region: "Juvenil"     },
-      { word: "Güey",       meaning: "Término coloquial entre amigos",           example: "Güey, ya es tardísimo",                      region: "Todo México" },
-      { word: "Nel pastel", meaning: "Forma divertida de decir que no",          example: "¿Vas a venir? Nel pastel, estoy ocupado",    region: "Callejero"   },
-      { word: "A toda madre", meaning: "Expresión para algo excelente",          example: "La fiesta estuvo a toda madre",              region: "Todo México" },
-      { word: "Qué onda",   meaning: "Saludo informal o pregunta de estado",     example: "¿Qué onda? ¿Cómo estás?",                   region: "Todo México" },
+      { word: "Órale", meaning: "Expresión de acuerdo, sorpresa o ánimo", example: "Órale, ya nos vamos", region: "Todo México" },
+      { word: "Chido", meaning: "Adjetivo que significa excelente o cool", example: "Ese carro está muy chido", region: "Juvenil" },
+      { word: "Güey", meaning: "Término coloquial entre amigos", example: "Güey, ya es tardísimo", region: "Todo México" },
+      { word: "Nel pastel", meaning: "Forma divertida de decir que no", example: "¿Vas a venir? Nel pastel, estoy ocupado", region: "Callejero" },
+      { word: "A toda madre", meaning: "Expresión para algo excelente", example: "La fiesta estuvo a toda madre", region: "Todo México" },
+      { word: "Qué onda", meaning: "Saludo informal o pregunta de estado", example: "¿Qué onda? ¿Cómo estás?", region: "Todo México" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1647,44 +1647,44 @@ export const seedLevels57to61 = mutation({
   handler: async (ctx) => {
     const newWords = [
       // ── Nivel 57 – Pan dulce (Pan Dulce) ──────────────────────────────────
-      { word: "Concha",      meaning: "Pan dulce con costra de azúcar en forma de caracol",              example: "Me comí una concha de chocolate en la mañana",          region: "Todo México"  },
-      { word: "Cuernito",    meaning: "Pan dulce en forma de cuerno bañado en azúcar o mantequilla",     example: "El cuernito de la panadería estaba recién horneado",    region: "Todo México"  },
-      { word: "Polvorón",    meaning: "Galleta arenosa de manteca que se deshace en la boca",            example: "El polvorón se deshizo apenas lo mordí",                region: "Nacional"     },
-      { word: "Garibaldi",   meaning: "Pan redondo cubierto de mermelada de chabacano y chochitos",      example: "El garibaldi es el favorito de los niños en la fiesta", region: "CDMX"         },
-      { word: "Cochito",     meaning: "Pan de piloncillo con forma de cochinito, típico del sur",         example: "Los cochitos de Chiapas son famosos en todo el país",   region: "Chiapas"      },
-      { word: "Oreja",       meaning: "Pan hojaldrado en forma de oreja bañado en azúcar",               example: "La oreja es crujiente por fuera y suave por dentro",    region: "Todo México"  },
+      { word: "Concha", meaning: "Pan dulce con costra de azúcar en forma de caracol", example: "Me comí una concha de chocolate en la mañana", region: "Todo México" },
+      { word: "Cuernito", meaning: "Pan dulce en forma de cuerno bañado en azúcar o mantequilla", example: "El cuernito de la panadería estaba recién horneado", region: "Todo México" },
+      { word: "Polvorón", meaning: "Galleta arenosa de manteca que se deshace en la boca", example: "El polvorón se deshizo apenas lo mordí", region: "Nacional" },
+      { word: "Garibaldi", meaning: "Pan redondo cubierto de mermelada de chabacano y chochitos", example: "El garibaldi es el favorito de los niños en la fiesta", region: "CDMX" },
+      { word: "Cochito", meaning: "Pan de piloncillo con forma de cochinito, típico del sur", example: "Los cochitos de Chiapas son famosos en todo el país", region: "Chiapas" },
+      { word: "Oreja", meaning: "Pan hojaldrado en forma de oreja bañado en azúcar", example: "La oreja es crujiente por fuera y suave por dentro", region: "Todo México" },
 
       // ── Nivel 58 – Palabras náhuatl (Náhuatl) ────────────────────────────
-      { word: "Copal",       meaning: "Resina aromática sagrada usada en rituales prehispánicos",        example: "El copal se quema en los altares del Día de Muertos",   region: "Prehispánico" },
-      { word: "Temazcal",    meaning: "Baño de vapor prehispánico con fines rituales y medicinales",     example: "El temazcal purifica el cuerpo y el espíritu",          region: "Nacional"     },
-      { word: "Metate",      meaning: "Piedra plana volcánica para moler granos y semillas",             example: "La abuela molía el maíz en el metate cada mañana",     region: "Prehispánico" },
-      { word: "Molcajete",   meaning: "Mortero de piedra volcánica para preparar salsas y guacamole",   example: "La salsa verde en molcajete sabe diferente",            region: "Todo México"  },
-      { word: "Petate",      meaning: "Estera tejida de palma usada para dormir o cargar cosas",        example: "Dormía en un petate bajo las estrellas del rancho",     region: "Nacional"     },
-      { word: "Huarache",    meaning: "Sandalia de cuero trenzado originaria del México prehispánico",  example: "Los huaraches son cómodos para el calor del verano",    region: "Nacional"     },
+      { word: "Copal", meaning: "Resina aromática sagrada usada en rituales prehispánicos", example: "El copal se quema en los altares del Día de Muertos", region: "Prehispánico" },
+      { word: "Temazcal", meaning: "Baño de vapor prehispánico con fines rituales y medicinales", example: "El temazcal purifica el cuerpo y el espíritu", region: "Nacional" },
+      { word: "Metate", meaning: "Piedra plana volcánica para moler granos y semillas", example: "La abuela molía el maíz en el metate cada mañana", region: "Prehispánico" },
+      { word: "Molcajete", meaning: "Mortero de piedra volcánica para preparar salsas y guacamole", example: "La salsa verde en molcajete sabe diferente", region: "Todo México" },
+      { word: "Petate", meaning: "Estera tejida de palma usada para dormir o cargar cosas", example: "Dormía en un petate bajo las estrellas del rancho", region: "Nacional" },
+      { word: "Huarache", meaning: "Sandalia de cuero trenzado originaria del México prehispánico", example: "Los huaraches son cómodos para el calor del verano", region: "Nacional" },
 
       // ── Nivel 59 – Leyendas mexicanas (Leyendas) ──────────────────────────
-      { word: "La Llorona",  meaning: "Espíritu de mujer que llora por sus hijos perdidos en el río",   example: "De noche se escucha el llanto de la Llorona en el río", region: "Todo México"  },
-      { word: "Nagual",      meaning: "Ser sobrenatural con poder de transformarse en animal",           example: "El nagual del pueblo se convertía en jaguar al anochecer", region: "Prehispánico" },
-      { word: "Chaneque",    meaning: "Ser mítico guardián del monte que puede robar el alma",          example: "El chaneque asustó al niño que entró al bosque solo",   region: "Sur México"   },
-      { word: "Alux",        meaning: "Duende maya protector de los campos y la naturaleza",            example: "Los mayas dejan ofrendas al alux para proteger su milpa", region: "Yucatán"    },
-      { word: "Encanto",     meaning: "Lugar mágico oculto donde se puede quedar atrapada una persona", example: "Se perdió en el monte; dicen que cayó en un encanto",   region: "Nacional"     },
-      { word: "Wirikuta",    meaning: "Lugar sagrado huichol donde nació el sol y se busca el peyote",  example: "La peregrinación a Wirikuta es sagrada para los wixáritari", region: "San Luis Potosí" },
+      { word: "La Llorona", meaning: "Espíritu de mujer que llora por sus hijos perdidos en el río", example: "De noche se escucha el llanto de la Llorona en el río", region: "Todo México" },
+      { word: "Nagual", meaning: "Ser sobrenatural con poder de transformarse en animal", example: "El nagual del pueblo se convertía en jaguar al anochecer", region: "Prehispánico" },
+      { word: "Chaneque", meaning: "Ser mítico guardián del monte que puede robar el alma", example: "El chaneque asustó al niño que entró al bosque solo", region: "Sur México" },
+      { word: "Alux", meaning: "Duende maya protector de los campos y la naturaleza", example: "Los mayas dejan ofrendas al alux para proteger su milpa", region: "Yucatán" },
+      { word: "Encanto", meaning: "Lugar mágico oculto donde se puede quedar atrapada una persona", example: "Se perdió en el monte; dicen que cayó en un encanto", region: "Nacional" },
+      { word: "Wirikuta", meaning: "Lugar sagrado huichol donde nació el sol y se busca el peyote", example: "La peregrinación a Wirikuta es sagrada para los wixáritari", region: "San Luis Potosí" },
 
       // ── Nivel 60 – Jerga callejera (Jerga) ───────────────────────────────
-      { word: "Bato",        meaning: "Tipo, cuate; forma afectiva de referirse a alguien",             example: "Ese bato siempre me ayuda cuando lo necesito",          region: "Callejero"    },
-      { word: "Cantón",      meaning: "Casa, vivienda; lugar donde vive alguien",                       example: "Nos quedamos a cenar en el cantón de mi primo",         region: "Callejero"    },
-      { word: "Jale",        meaning: "Trabajo, empleo; actividad laboral",                             example: "Consiguió un buen jale en la ciudad",                   region: "Callejero"    },
-      { word: "Feria",       meaning: "Dinero, lana; billete o moneda en sentido coloquial",            example: "No traigo feria, ¿me prestas para el camión?",          region: "Callejero"    },
-      { word: "Chamba",      meaning: "Trabajo o empleo informal; actividad remunerada",                example: "Encontró chamba de mesero en el centro",                region: "Todo México"  },
-      { word: "Palomilla",   meaning: "Grupo de amigos inseparables; bola de cuates de barrio",         example: "Salí con toda la palomilla a la feria del pueblo",      region: "Callejero"    },
+      { word: "Bato", meaning: "Tipo, cuate; forma afectiva de referirse a alguien", example: "Ese bato siempre me ayuda cuando lo necesito", region: "Callejero" },
+      { word: "Cantón", meaning: "Casa, vivienda; lugar donde vive alguien", example: "Nos quedamos a cenar en el cantón de mi primo", region: "Callejero" },
+      { word: "Jale", meaning: "Trabajo, empleo; actividad laboral", example: "Consiguió un buen jale en la ciudad", region: "Callejero" },
+      { word: "Feria", meaning: "Dinero, lana; billete o moneda en sentido coloquial", example: "No traigo feria, ¿me prestas para el camión?", region: "Callejero" },
+      { word: "Chamba", meaning: "Trabajo o empleo informal; actividad remunerada", example: "Encontró chamba de mesero en el centro", region: "Todo México" },
+      { word: "Palomilla", meaning: "Grupo de amigos inseparables; bola de cuates de barrio", example: "Salí con toda la palomilla a la feria del pueblo", region: "Callejero" },
 
       // ── Nivel 61 – Arquitectura colonial (Colonial) ───────────────────────
-      { word: "Atrio",       meaning: "Espacio abierto enfrente de una iglesia colonial",               example: "Jugábamos en el atrio de la iglesia los domingos",      region: "Colonial"     },
-      { word: "Claustro",    meaning: "Patio interior cuadrado con corredores en conventos coloniales", example: "El claustro del convento está lleno de plantas antiguas", region: "Colonial"   },
-      { word: "Campanario",  meaning: "Torre donde se ubican las campanas de una iglesia",              example: "El campanario se escucha desde toda la ciudad",          region: "Colonial"     },
-      { word: "Portada",     meaning: "Fachada decorativa principal tallada en piedra de una iglesia",  example: "La portada barroca de la catedral es impresionante",    region: "Colonial"     },
-      { word: "Sagrario",    meaning: "Capilla lateral de una catedral donde se guarda el Santísimo",   example: "El sagrario está iluminado todo el día con velas",      region: "Colonial"     },
-      { word: "Pilastra",    meaning: "Columna rectangular adosada a un muro en edificios coloniales",  example: "Las pilastras del palacio están talladas con motivos indígenas", region: "Colonial" },
+      { word: "Atrio", meaning: "Espacio abierto enfrente de una iglesia colonial", example: "Jugábamos en el atrio de la iglesia los domingos", region: "Colonial" },
+      { word: "Claustro", meaning: "Patio interior cuadrado con corredores en conventos coloniales", example: "El claustro del convento está lleno de plantas antiguas", region: "Colonial" },
+      { word: "Campanario", meaning: "Torre donde se ubican las campanas de una iglesia", example: "El campanario se escucha desde toda la ciudad", region: "Colonial" },
+      { word: "Portada", meaning: "Fachada decorativa principal tallada en piedra de una iglesia", example: "La portada barroca de la catedral es impresionante", region: "Colonial" },
+      { word: "Sagrario", meaning: "Capilla lateral de una catedral donde se guarda el Santísimo", example: "El sagrario está iluminado todo el día con velas", region: "Colonial" },
+      { word: "Pilastra", meaning: "Columna rectangular adosada a un muro en edificios coloniales", example: "Las pilastras del palacio están talladas con motivos indígenas", region: "Colonial" },
     ];
 
     // Remove duplicates (idempotent)
@@ -1718,6 +1718,45 @@ export const seedLevels57to61 = mutation({
     }
 
     return { success: true, total: inserted.length, inserted };
+  },
+});
+
+/**
+ * Creates levels for ALL words that don't have a level yet.
+ * Safe to run multiple times — skips words that already have a level.
+ */
+export const createMissingLevels = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const allWords = await ctx.db.query("words").collect();
+    const allLevels = await ctx.db.query("levels").collect();
+
+    // Set of wordIds that already have a level
+    const coveredWordIds = new Set(allLevels.map((l) => l.wordId.toString()));
+
+    // Words without a level
+    const missing = allWords.filter((w) => !coveredWordIds.has(w._id.toString()));
+
+    if (missing.length === 0) return { added: 0, message: "All words already have levels." };
+
+    // Start from maxLevelNumber + 1
+    const maxLevel = allLevels.reduce((m, l) => Math.max(m, l.levelNumber), 0);
+    let nextLevel = maxLevel + 1;
+
+    let added = 0;
+    for (const word of missing) {
+      const coins = 50 + Math.floor((nextLevel - 1) / 10) * 25;
+      const diamonds = 1 + Math.floor((nextLevel - 1) / 50);
+      await ctx.db.insert("levels", {
+        levelNumber: nextLevel,
+        wordId: word._id,
+        reward: { coins, diamonds },
+      });
+      nextLevel++;
+      added++;
+    }
+
+    return { added, newMaxLevel: nextLevel - 1 };
   },
 });
 

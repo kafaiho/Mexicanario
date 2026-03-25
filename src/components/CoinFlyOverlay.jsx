@@ -75,8 +75,8 @@ function CoinFly({ coin, onCoinArrived, isFirst }) {
 // ── Impact particle burst ─────────────────────────────────────────────────────
 function ImpactParticles({ x, y }) {
   const particles = useMemo(() =>
-    Array.from({ length: 8 }, (_, i) => {
-      const angle = (i / 8) * Math.PI * 2;
+    Array.from({ length: 5 }, (_, i) => {
+      const angle = (i / 5) * Math.PI * 2;
       const dist = 14 + Math.random() * 16;
       return {
         anim: new Animated.Value(0),
@@ -129,7 +129,7 @@ function ImpactParticles({ x, y }) {
 }
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
-export default function CoinFlyOverlay({ coins, particles, onCoinArrived }) {
+function CoinFlyOverlay({ coins, particles, onCoinArrived }) {
   return (
     <View style={styles.overlay} pointerEvents="none">
       {coins.map((coin, idx) => (
@@ -152,3 +152,5 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
 });
+
+export default React.memo(CoinFlyOverlay);

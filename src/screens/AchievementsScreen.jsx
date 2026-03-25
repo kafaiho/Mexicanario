@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { ACHIEVEMENT_ICONS } from "../components/AchievementIcons";
 import CoinFlyOverlay from "../components/CoinFlyOverlay";
@@ -26,11 +27,6 @@ import { TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
 const STORAGE_KEY = "mx_claimed_achievements";
-
-// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
-const TOP_SAFE   = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
-const TOP_BAR_H  = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
-const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 32 : 14));
 
 // ── Paleta Mexicanometro ──────────────────────────────────────────────────────
 const BROWN = "#8B4513";
@@ -52,6 +48,12 @@ const CATEGORY_ORDER = [
 ];
 
 export default function AchievementsScreen() {
+  const insets = useSafeAreaInsets();
+  // TopBar uses its own topPad (~32px Android) regardless of insets, so we must clear it
+  const topBarPad = Math.max(20, height * 0.04);
+  const HEADER_TOP = Math.round(
+    Math.max(insets.top, topBarPad) + width * 0.075 + width * 0.025 + (TABLET_MODE ? 36 : 18)
+  );
   const { userId } = useAuth();
   const [claimedIds, setClaimedIds] = useState(new Set());
   const [claiming, setClaiming] = useState(null);
@@ -702,7 +704,7 @@ export default function AchievementsScreen() {
 
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.container}
       resizeMode="cover"
     >
@@ -714,7 +716,7 @@ export default function AchievementsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { marginTop: HEADER_TOP }]}>
           <Text style={styles.headerEmoji}>🏆</Text>
           <Text style={styles.headerTitle}>LOGROS</Text>
           <Text style={styles.headerSubtitle}>
@@ -763,7 +765,6 @@ const styles = StyleSheet.create({
   // ── Header ──
   header: {
     alignItems: "center",
-    marginTop: HEADER_TOP,
     marginBottom: height * 0.005,
     backgroundColor: "#FFE4B5",
     marginHorizontal: width * 0.02,

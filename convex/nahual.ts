@@ -110,7 +110,7 @@ export const getLeaderboard = query({
           rank:   i + 1,
           userId: row.userId,
           name:   user?.name   ?? "Jugador",
-          avatar: user?.avatar ?? "🌮",
+          avatar: (user?.avatar && user.avatar !== "default") ? user.avatar : "🌮",
           score:  row.score,
         };
       })

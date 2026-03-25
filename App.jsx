@@ -50,6 +50,7 @@ import MapScreen from "./src/screens/MapScreen";
 import MascotaScreen from "./src/screens/MascotaScreen";
 import ShopScreen from "./src/screens/ShopScreen";
 import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
+import PvPScreen from "./src/screens/PvPScreen";
 import { tapLight } from "./src/services/haptics";
 import { playBGM, playSound, preloadSounds, setMusicEnabled, setSoundEnabled, unloadSounds } from "./src/utils/soundManager";
 
@@ -525,7 +526,7 @@ function AppContent() {
   }, [userId]);
 
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen authReady={false} />;
   }
 
   if (error) {
@@ -565,7 +566,7 @@ function AppContent() {
 
   return (
     <NavigationContainer linking={linking}>
-      <SystemBars style={{ statusBar: "light", navigationBar: "dark" }} />
+      <SystemBars hidden={true} style={{ statusBar: "light", navigationBar: "dark" }} />
       <RemoteConfigBoundary>
         <RemoteConfigFetcher onConfig={setRemoteConfig} />
       </RemoteConfigBoundary>
@@ -581,6 +582,7 @@ function AppContent() {
           <Stack.Screen name="Gameplay" component={GameplayScreen} />
           <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
           <Stack.Screen name="Map" component={MapScreen} />
+          <Stack.Screen name="PvP" component={PvPScreen} />
         </>
       </Stack.Navigator>
     </NavigationContainer>

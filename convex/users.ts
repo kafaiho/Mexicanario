@@ -243,24 +243,117 @@ export const resetLevel = mutation({
   },
 });
 
+// ── Time helpers (duplicated from league.ts to avoid cross-file deps) ───────
+const CST_OFFSET_MS = -6 * 60 * 60 * 1000;
+
+function nowCST(): Date {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utc + CST_OFFSET_MS);
+}
+
+function getWeekId(): string {
+  const d = nowCST();
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const dayOfYear = Math.floor((d.getTime() - jan4.getTime()) / 86400000) + 4;
+  const weekNum = Math.ceil(dayOfYear / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+function getMonthId(): string {
+  const d = nowCST();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // ─── XP Cultural ─────────────────────────────────────────────────────────────
-// Suma XP al perfil del jugador.
+// Suma XP al perfil del jugador + trackea XP semanal/mensual.
 // amount: +10 por palabra, +5 sin errores, +15 nivel perfecto.
 export const addXp = mutation({
   args: { userId: v.id("users"), amount: v.number() },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) return;
+
+    // Server-side validation: clamp XP amount to reasonable range (1-50 per word)
+    const amount = Math.max(0, Math.min(Math.round(args.amount), 50));
+    if (amount <= 0) return;
+
+    const weekId = getWeekId();
+    const monthId = getMonthId();
+
+    // Auto-reset weekly/monthly counters when period changes
+    const currentWeekXp =
+      (user as any).xpThisWeekId === weekId ? ((user as any).xpThisWeek ?? 0) : 0;
+    const currentMonthXp =
+      (user as any).xpThisMonthId === monthId ? ((user as any).xpThisMonth ?? 0) : 0;
+
+    const oldXp = user.xp ?? 0;
+    const newXp = oldXp + amount;
+
     await ctx.db.patch(args.userId, {
-      xp: (user.xp ?? 0) + args.amount,
-    });
+      xp: newXp,
+      xpThisWeek: currentWeekXp + amount,
+      xpThisWeekId: weekId,
+      xpThisMonth: currentMonthXp + amount,
+      xpThisMonthId: monthId,
+    } as any);
+
+    // Also upsert weeklyFriendScores for cuates leaderboard
+    const existing = await ctx.db
+      .query("weeklyFriendScores")
+      .withIndex("by_user_week", (q: any) => q.eq("userId", args.userId).eq("weekId", weekId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        xpThisWeek: existing.xpThisWeek + amount,
+        wordsThisWeek: existing.wordsThisWeek + 1,
+        bestComboThisWeek: Math.max(existing.bestComboThisWeek, (user as any).bestCombo ?? 0),
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("weeklyFriendScores", {
+        userId: args.userId,
+        weekId,
+        xpThisWeek: amount,
+        wordsThisWeek: 1,
+        bestComboThisWeek: (user as any).bestCombo ?? 0,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { oldXp, newXp };
   },
 });
 
-// ─── Global Rank (combined score) ────────────────────────────────────────────
+// ─── Global Rank (O(1) cache lookup) ─────────────────────────────────────────
 export const getGlobalRank = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    // Try cached rank first (O(1))
+    const cached = await ctx.db
+      .query("userRankCache")
+      .withIndex("by_user_period", (q) =>
+        q.eq("userId", args.userId).eq("periodType", "alltime").eq("periodId", "alltime")
+      )
+      .first();
+
+    if (cached) {
+      // Get total players from snapshot
+      const snapshot = await ctx.db
+        .query("rankingSnapshots")
+        .withIndex("by_period", (q) => q.eq("periodType", "alltime").eq("periodId", "alltime"))
+        .first();
+
+      return {
+        globalRank: cached.rank,
+        totalPlayers: snapshot?.totalPlayers ?? cached.rank,
+        percentile: cached.percentile,
+        score: cached.score,
+      };
+    }
+
+    // Fallback: compute on-the-fly (only before first cron run)
     const allUsers = await ctx.db.query("users").collect();
 
     const scored = allUsers.map((u) => {
@@ -286,10 +379,71 @@ export const getGlobalRank = query({
   },
 });
 
-// ─── Global Leaderboard (top 50) ────────────────────────────────────────────
+// ─── Global Leaderboard (O(1) snapshot lookup) ──────────────────────────────
 export const getGlobalLeaderboard = query({
-  args: { userId: v.optional(v.id("users")) },
+  args: {
+    userId: v.optional(v.id("users")),
+    periodType: v.optional(v.string()),  // "alltime" | "weekly" | "monthly"
+    periodId: v.optional(v.string()),    // "alltime" | "2026-W09" | "2026-03"
+  },
   handler: async (ctx, args) => {
+    const pType = args.periodType ?? "alltime";
+    const pId = args.periodId ?? "alltime";
+
+    // Try cached snapshot first (O(1))
+    const snapshot = await ctx.db
+      .query("rankingSnapshots")
+      .withIndex("by_period", (q) => q.eq("periodType", pType).eq("periodId", pId))
+      .first();
+
+    if (snapshot) {
+      const rankings = JSON.parse(snapshot.rankings);
+      const top50 = rankings.slice(0, 50);
+
+      // Get caller's cached rank
+      let myRank = null;
+      let myEntry = null;
+      if (args.userId) {
+        const cachedRank = await ctx.db
+          .query("userRankCache")
+          .withIndex("by_user_period", (q) =>
+            q.eq("userId", args.userId!).eq("periodType", pType).eq("periodId", pId)
+          )
+          .first();
+
+        if (cachedRank) {
+          myRank = cachedRank.rank;
+          // Find in top 50 or build from user data
+          const inTop = top50.find((e: any) => e.userId === (args.userId as string));
+          if (inTop) {
+            myEntry = inTop;
+          } else {
+            const user = await ctx.db.get(args.userId!);
+            if (user) {
+              myEntry = {
+                userId: user._id as string,
+                name: (user as any).username ?? user.name ?? "Jugador",
+                avatar: (user.avatar && user.avatar !== "default") ? user.avatar : "🌮",
+                level: user.currentLevel ?? 1,
+                xp: user.xp ?? 0,
+                score: cachedRank.score,
+              };
+            }
+          }
+        }
+      }
+
+      return {
+        leaderboard: top50,
+        totalPlayers: snapshot.totalPlayers,
+        myRank,
+        myEntry,
+        periodType: pType,
+        periodId: pId,
+      };
+    }
+
+    // Fallback: compute on-the-fly (only before first cron run)
     const allUsers = await ctx.db.query("users").collect();
 
     const scored = allUsers
@@ -303,8 +457,8 @@ export const getGlobalLeaderboard = query({
           ((u.perfectLevels ?? 0) * 3);
         return {
           userId: u._id as string,
-          name: u.username ?? u.name ?? "Jugador",
-          avatar: u.avatar ?? "🌮",
+          name: (u as any).username ?? u.name ?? "Jugador",
+          avatar: (u.avatar && u.avatar !== "default") ? u.avatar : "🌮",
           level: u.currentLevel ?? 1,
           xp: u.xp ?? 0,
           score,
@@ -314,7 +468,6 @@ export const getGlobalLeaderboard = query({
     scored.sort((a, b) => b.score - a.score);
     const top50 = scored.slice(0, 50);
 
-    // Find caller's position
     let myRank = null;
     let myEntry = null;
     if (args.userId) {
@@ -326,7 +479,14 @@ export const getGlobalLeaderboard = query({
       }
     }
 
-    return { leaderboard: top50, totalPlayers: scored.length, myRank, myEntry };
+    return {
+      leaderboard: top50,
+      totalPlayers: scored.length,
+      myRank,
+      myEntry,
+      periodType: pType,
+      periodId: pId,
+    };
   },
 });
 

@@ -193,7 +193,7 @@ function SetupScreen({ userId }) {
 }
 
 // ─── Stage Dots ───────────────────────────────────────────────────────────────
-function StageDots({ currentStage }) {
+const StageDots = React.memo(function StageDots({ currentStage }) {
   return (
     <View style={styles.dotsRow}>
       {[1, 2, 3, 4, 5, 6].map((s) => {
@@ -220,7 +220,7 @@ function StageDots({ currentStage }) {
       })}
     </View>
   );
-}
+});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MascotaScreen() {
@@ -379,7 +379,7 @@ export default function MascotaScreen() {
   }
   if (!pet?.hasPet) {
     return (
-      <ImageBackground source={require("../../assets/images/bg.png")} style={styles.screen} resizeMode="cover">
+      <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.screen} resizeMode="cover">
         <SafeAreaView style={{ flex: 1 }}>
           <SetupScreen userId={userId} />
         </SafeAreaView>
@@ -389,7 +389,7 @@ export default function MascotaScreen() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <ImageBackground source={require("../../assets/images/bg.png")} style={styles.screen} resizeMode="cover">
+    <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.screen} resizeMode="cover">
       <TopBar />
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -680,7 +680,7 @@ export default function MascotaScreen() {
           <Modal visible transparent animationType="fade" onRequestClose={() => setSwitchTarget(null)}>
             <View style={styles.switchModalOverlay}>
               <ImageBackground
-                source={require("../../assets/images/bg.png")}
+                source={require("../../assets/images/bg.webp")}
                 style={styles.switchModalCard}
                 imageStyle={{ borderRadius: 22 }}
                 resizeMode="cover"

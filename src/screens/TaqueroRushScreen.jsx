@@ -10,8 +10,10 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
+import { playBGM, stopBGM } from "../utils/soundManager";
 
 const { width, height } = Dimensions.get("window");
 
@@ -49,6 +51,10 @@ function scoreMsg(n) {
 }
 
 export default function TaqueroRushScreen({ navigation }) {
+    // BGM — minigame track
+    useEffect(() => { playBGM("minigame"); return () => { stopBGM(); playBGM("menu"); }; }, []);
+
+    const insets = useSafeAreaInsets();
     const { userId } = useAuth();
     const [isPlaying, setIsPlaying] = useState(false);
     const [timeLeft, setTimeLeft] = useState(30);
@@ -152,12 +158,12 @@ export default function TaqueroRushScreen({ navigation }) {
     };
 
     return (
-        <ImageBackground source={require("../../assets/images/bg.png")} style={styles.root} resizeMode="cover">
+        <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.root} resizeMode="cover">
             <View style={styles.darkOverlay} />
 
             {/* ── Menú ── */}
             {!isPlaying && !isGameOver && (
-                <View style={styles.cardOverlay}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
                     <View style={styles.card}>
                         <Text style={styles.cardBigEmoji}>🌮</Text>
                         <Text style={styles.cardTitle}>¡Taquero Rush!</Text>
@@ -177,7 +183,7 @@ export default function TaqueroRushScreen({ navigation }) {
             {/* ── En juego ── */}
             {isPlaying && (
                 <View style={StyleSheet.absoluteFillObject}>
-                    <View style={styles.hud}>
+                    <View style={[styles.hud, { top: insets.top + 10 }]}>
                         <Text style={styles.hudText}>🌮 {score}</Text>
                         <Text style={[styles.hudText, timeLeft <= 5 && { color: RED }]}>⏱️ {timeLeft}s</Text>
                         <TouchableOpacity style={styles.exitBtn} onPress={() => { setIsPlaying(false); navigation.goBack(); }}>
@@ -246,7 +252,7 @@ export default function TaqueroRushScreen({ navigation }) {
 
             {/* ── Game over + leaderboard ── */}
             {isGameOver && (
-                <View style={styles.cardOverlay}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
                     <View style={styles.card}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingBottom: 8 }}>
                             <Text style={styles.cardBigEmoji}>👨‍🍳</Text>
@@ -314,7 +320,7 @@ const styles = StyleSheet.create({
     darkOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,3,0,0.72)" },
 
     hud: {
-        position: "absolute", top: 54, left: 18, right: 18,
+        position: "absolute", left: 18, right: 18,
         flexDirection: "row", alignItems: "center", gap: 12,
     },
     hudText: { color: WHEAT, fontWeight: "900", fontSize: width * 0.048, backgroundColor: "rgba(139,69,19,0.7)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5 },

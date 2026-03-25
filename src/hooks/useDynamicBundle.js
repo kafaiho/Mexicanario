@@ -3,6 +3,17 @@ import { useEffect, useState } from 'react';
 // Diferentes ofertas simuladas para generar contraste (gangas vs premium)
 const BUNDLE_POOL = [
     {
+        id: "bundle_0_launch",
+        title: "Pack de Lanzamiento",
+        priceText: "$ 2.990",
+        badge: "OFERTA ESPECIAL",
+        rewards: [
+            { id: "coins", icon: "🪙", qty: 1000 },
+            { id: "diamonds", icon: "💎", qty: 50 },
+            { id: "truco_hint", icon: "💡", qty: 5 },
+        ]
+    },
+    {
         id: "bundle_1_starter",
         title: "Pack de Arranque",
         priceText: "$ 19.900",

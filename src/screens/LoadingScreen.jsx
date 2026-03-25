@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Animated,
     Dimensions,
@@ -11,34 +11,58 @@ import {
 
 const { width, height } = Dimensions.get('window');
 
-export default function LoadingScreen() {
-  const [progress] = useState(new Animated.Value(0));
-  const [loadingText, setLoadingText] = useState('Loading...');
+/**
+ * LoadingScreen — shown while auth is in progress.
+ *
+ * @param {{ authReady?: boolean }} props
+ *   authReady: true once auth has completed (drives progress to 100%).
+ *              Falls back to a 4s timed animation if not provided (backwards compat).
+ */
+export default function LoadingScreen({ authReady }) {
+  const progress = useRef(new Animated.Value(0)).current;
   const [percentage, setPercentage] = useState(0);
+  const [statusText, setStatusText] = useState('Conectando...');
+  const slowTimerRef = useRef(null);
 
+  // Phase 1: animate to 70% quickly (1.5s) — "connecting" phase
   useEffect(() => {
     Animated.timing(progress, {
-      toValue: 1,
-      duration: 3000,
+      toValue: 0.7,
+      duration: 1500,
       useNativeDriver: false,
     }).start();
 
-    const interval = setInterval(() => {
-      setPercentage((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 1;
-      });
-    }, 30);
+    // If still loading after 4s, show "taking longer" message
+    slowTimerRef.current = setTimeout(() => {
+      setStatusText('La conexión está tardando...');
+    }, 4000);
 
-    return () => clearInterval(interval);
+    return () => clearTimeout(slowTimerRef.current);
+  }, []);
+
+  // Phase 2: when auth completes, snap to 100%
+  useEffect(() => {
+    if (!authReady) return;
+    clearTimeout(slowTimerRef.current);
+    setStatusText('¡Listo!');
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: false,
+    }).start();
+  }, [authReady]);
+
+  // Sync percentage counter with animated value
+  useEffect(() => {
+    const id = progress.addListener(({ value }) => {
+      setPercentage(Math.round(value * 100));
+    });
+    return () => progress.removeListener(id);
   }, []);
 
   return (
     <ImageBackground
-      source={require('../../assets/images/bg.png')}
+      source={require('../../assets/images/bg.webp')}
       style={styles.container}
       resizeMode="cover"
     >
@@ -53,7 +77,7 @@ export default function LoadingScreen() {
 
       {/* Loading bar */}
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingLabel}>{loadingText}</Text>
+        <Text style={styles.loadingLabel}>{statusText}</Text>
         <View style={styles.progressBarContainer}>
           <Animated.View
             style={[

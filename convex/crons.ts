@@ -35,4 +35,41 @@ crons.weekly(
   {},
 );
 
+// Every 30 min: Recompute global/weekly/monthly ranking snapshots + user rank caches
+crons.interval(
+  "recompute rankings",
+  { minutes: 30 },
+  internal.rankings.recomputeAll
+);
+
+// Daily: Expire old friend challenges and refund coins — 06:10 UTC (00:10 CST)
+crons.daily(
+  "expire old challenges",
+  { hourUTC: 6, minuteUTC: 10 },
+  internal.friends.expireOldChallenges
+);
+
+// Every 5 min: Cleanup stale PvP queue entries
+crons.interval(
+  "cleanup pvp queue",
+  { minutes: 5 },
+  internal.pvp.cleanupQueue
+);
+
+// Every 30s: Auto-finish timed-out PvP matches
+crons.interval(
+  "finish timed out pvp matches",
+  { seconds: 30 },
+  internal.pvp.finishTimedOutMatches
+);
+
+// Quarterly: Process seasonal reset — 1st day of each quarter at 07:00 UTC (01:00 CST)
+// Runs on: Jan 1, Apr 1, Jul 1, Oct 1
+// Since Convex doesn't have quarterly cron, use monthly and check inside
+crons.monthly(
+  "process seasonal reset",
+  { day: 1, hourUTC: 7, minuteUTC: 0 },
+  internal.league.processSeasonEnd
+);
+
 export default crons;

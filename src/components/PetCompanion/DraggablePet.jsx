@@ -372,7 +372,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   // Track last shown index per category to avoid immediate repeats
   const lastIdxRef = useRef({ tap: -1, bottom: -1, top: -1, side: -1 });
 
-  // Home Y is always the same — lower 92% of safe zone
+  // Home Y is always the same — lower 92% of safe zone (above keyboard)
   const getHomeY = (w, h, sz) => {
     const topBarBottom = (Platform.OS === 'ios' ? h * 0.058 : h * 0.04) + w * 0.1 + 8;
     const safeH = h - KEYBOARD_ZONE_H - topBarBottom;
@@ -412,6 +412,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     setBubble(gameBubble);
     clearTimeout(bubbleTimer.current);
     bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
+    return () => clearTimeout(bubbleTimer.current);
   }, [gameBubble]);
 
   // Detect when current word matches this pet's name → special reaction
@@ -420,10 +421,11 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     if (!currentWord || !petType) return;
     const wordClean = currentWord.replace(/\s/g, '').toLowerCase();
     const matches = wordClean.includes(petType.toLowerCase());
+    let delayTimer;
     if (matches && !shownSelfRef.current) {
       shownSelfRef.current = true;
       // Small delay so the word loads before the mascot reacts
-      setTimeout(() => {
+      delayTimer = setTimeout(() => {
         const idx = Math.floor(Math.random() * SELF_PHRASES.length);
         setBubble(SELF_PHRASES[idx]);
         clearTimeout(bubbleTimer.current);
@@ -438,6 +440,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     } else if (!matches) {
       shownSelfRef.current = false;
     }
+    return () => { clearTimeout(delayTimer); clearTimeout(bubbleTimer.current); };
   }, [currentWord, petType]);
 
   // Idle breathing + floating loop
@@ -464,9 +467,10 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       dimsRef.current = getScreenDims();
       const { w, h } = dimsRef.current;
       const sz = petSizeRef.current;
+      const maxX = w - sz;
       const currentX = pan.x._value;
       const goLeft = currentX + sz / 2 < w / 2;
-      const homeX = goLeft ? Math.round(w * 0.07) : Math.round(w * 0.86);
+      const homeX = goLeft ? Math.round(maxX * 0.07) : Math.round(maxX * 0.86);
       pan.setValue({ x: homeX, y: getHomeY(w, h, sz) });
     });
     return () => sub?.remove();
@@ -501,11 +505,11 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   const bounceHome = useCallback(() => {
     const { w, h } = dimsRef.current;
     const sz = petSizeRef.current;
-    const currentX = pan.x._value; // already flattened before bounceHome is called
-    // Guard against NaN/Infinity from extreme pan values
-    const safeX = isFinite(currentX) ? currentX : w * 0.86;
+    const currentX = pan.x._value;
+    const maxX = w - sz;
+    const safeX = isFinite(currentX) ? currentX : maxX * 0.86;
     const goLeft = safeX + sz / 2 < w / 2;
-    const homeX = goLeft ? Math.round(w * 0.07) : Math.round(w * 0.86);
+    const homeX = goLeft ? Math.round(maxX * 0.07) : Math.round(maxX * 0.86);
     const homeY = getHomeY(w, h, sz);
     try {
       Animated.spring(pan, {
@@ -550,8 +554,9 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         const rawX = ox + gs.dx;
         const rawY = oy + gs.dy;
 
-        // Clamp to safe zone — pet cannot enter keyboard, topbar, or off-screen
-        const safeX = Math.max(0, Math.min(rawX, w - sz));
+        // Clamp to safe zone — pet stays above keyboard, below topbar, on-screen
+        const maxX = w - sz;
+        const safeX = Math.max(0, Math.min(rawX, maxX));
         const safeY = Math.max(topBarBottom, Math.min(rawY, h - KEYBOARD_ZONE_H - sz));
 
         // Move the pet (value = safePos - offset, since effective = offset + value)
@@ -606,7 +611,6 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         const finalY = pan.y._value;
 
         const inKeyboardZone = finalY > h - KEYBOARD_ZONE_H - sz;
-        // aboveTopBar: also catches the clamped case where user pushed pet into top zone
         const aboveTopBar = finalY < topBarBottom || topZoneHitRef.current;
         const tooFarLeft = finalX < w * 0.08;
         const tooFarRight = finalX + sz > w * 0.92;

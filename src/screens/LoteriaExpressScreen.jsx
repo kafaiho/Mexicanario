@@ -9,10 +9,14 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
+import { useScreenDims } from "../hooks/useScreenDims";
+import { playBGM, stopBGM } from "../utils/soundManager";
+import { TABLET_MODE } from "../utils/tabletSetup";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const BROWN = "#8B4513";
 const AMBER = "#D2691E";
@@ -23,19 +27,64 @@ const RED = "#C0392B";
 const GREEN = "#27AE60";
 const PURPLE = "#8E44AD";
 
+// Cap font multiplier for tablet — use width but clamp the base
+const W = TABLET_MODE ? Math.min(width, 420) : width;
+
 const LOTERIA_CARDS = [
     { id: 1, name: "El Gallo", icon: "🐓" },
-    { id: 2, name: "El Catrín", icon: "🎩" },
-    { id: 3, name: "La Sirena", icon: "🧜‍♀️" },
-    { id: 4, name: "La Calavera", icon: "💀" },
-    { id: 5, name: "La Chalupa", icon: "🛶" },
-    { id: 6, name: "La Estrella", icon: "⭐" },
-    { id: 7, name: "El Diablo", icon: "😈" },
-    { id: 8, name: "La Luna", icon: "🌙" },
-    { id: 9, name: "El Borracho", icon: "🍺" },
-    { id: 10, name: "El Corazón", icon: "❤️" },
-    { id: 11, name: "El Sol", icon: "☀️" },
-    { id: 12, name: "La Corona", icon: "👑" },
+    { id: 2, name: "El Diablito", icon: "😈" },
+    { id: 3, name: "La Dama", icon: "👸" },
+    { id: 4, name: "El Catrín", icon: "🎩" },
+    { id: 5, name: "El Paraguas", icon: "☂️" },
+    { id: 6, name: "La Sirena", icon: "🧜‍♀️" },
+    { id: 7, name: "La Escalera", icon: "🪜" },
+    { id: 8, name: "La Botella", icon: "🍾" },
+    { id: 9, name: "El Barril", icon: "🪣" },
+    { id: 10, name: "El Árbol", icon: "🌳" },
+    { id: 11, name: "El Melón", icon: "🍈" },
+    { id: 12, name: "El Valiente", icon: "🗡️" },
+    { id: 13, name: "El Gorrito", icon: "🧢" },
+    { id: 14, name: "La Muerte", icon: "💀" },
+    { id: 15, name: "La Pera", icon: "🍐" },
+    { id: 16, name: "La Bandera", icon: "🇲🇽" },
+    { id: 17, name: "El Bandolón", icon: "🎸" },
+    { id: 18, name: "El Violoncello", icon: "🎻" },
+    { id: 19, name: "La Garza", icon: "🦢" },
+    { id: 20, name: "El Pájaro", icon: "🦜" },
+    { id: 21, name: "La Mano", icon: "✋" },
+    { id: 22, name: "La Bota", icon: "👢" },
+    { id: 23, name: "La Luna", icon: "🌙" },
+    { id: 24, name: "El Cotorro", icon: "🦚" },
+    { id: 25, name: "El Borracho", icon: "🍻" },
+    { id: 26, name: "El Negrito", icon: "🎭" },
+    { id: 27, name: "El Corazón", icon: "❤️" },
+    { id: 28, name: "La Sandía", icon: "🍉" },
+    { id: 29, name: "El Tambor", icon: "🥁" },
+    { id: 30, name: "El Camarón", icon: "🦐" },
+    { id: 31, name: "Las Jaras", icon: "🏹" },
+    { id: 32, name: "El Músico", icon: "🎺" },
+    { id: 33, name: "La Araña", icon: "🕷️" },
+    { id: 34, name: "El Soldado", icon: "💂" },
+    { id: 35, name: "La Estrella", icon: "⭐" },
+    { id: 36, name: "El Cazo", icon: "🫕" },
+    { id: 37, name: "El Mundo", icon: "🌎" },
+    { id: 38, name: "El Apache", icon: "🪶" },
+    { id: 39, name: "El Nopal", icon: "🌵" },
+    { id: 40, name: "El Alacrán", icon: "🦂" },
+    { id: 41, name: "La Rosa", icon: "🌹" },
+    { id: 42, name: "La Calavera", icon: "🩻" },
+    { id: 43, name: "La Campana", icon: "🔔" },
+    { id: 44, name: "El Cantarito", icon: "🏺" },
+    { id: 45, name: "El Venado", icon: "🦌" },
+    { id: 46, name: "El Sol", icon: "☀️" },
+    { id: 47, name: "La Corona", icon: "👑" },
+    { id: 48, name: "La Chalupa", icon: "⛵" },
+    { id: 49, name: "El Pino", icon: "🌲" },
+    { id: 50, name: "El Pescado", icon: "🐟" },
+    { id: 51, name: "La Palma", icon: "🌴" },
+    { id: 52, name: "La Maceta", icon: "🪴" },
+    { id: 53, name: "El Arpa", icon: "🪗" },
+    { id: 54, name: "La Rana", icon: "🐸" },
 ];
 
 const TABS = [
@@ -51,6 +100,10 @@ function scoreMsg(n) {
 }
 
 export default function LoteriaExpressScreen({ navigation }) {
+    // BGM — minigame track
+    useEffect(() => { playBGM("minigame"); return () => { stopBGM(); playBGM("menu"); }; }, []);
+
+    const insets = useSafeAreaInsets();
     const { userId } = useAuth();
     const [isPlaying, setIsPlaying] = useState(false);
     const [timeLeft, setTimeLeft] = useState(30);
@@ -58,8 +111,12 @@ export default function LoteriaExpressScreen({ navigation }) {
     const [isGameOver, setIsGameOver] = useState(false);
     const [targetCard, setTargetCard] = useState(null);
     const [options, setOptions] = useState([]);
-    const [flash, setFlash] = useState(null); // null | "correct" | "wrong"
+    const [flash, setFlash] = useState(null);
     const [tab, setTab] = useState("daily");
+
+    // Detect landscape on tablet using shared hook (updates on rotation)
+    const screenDims = useScreenDims();
+    const isLandscape = TABLET_MODE && screenDims.width > screenDims.height;
 
     const submitScore = useMutation(api.loteria.submitScore);
     const leaderboard = useQuery(api.loteria.getLeaderboard, isGameOver ? { type: tab } : "skip");
@@ -110,19 +167,23 @@ export default function LoteriaExpressScreen({ navigation }) {
         setTimeout(() => { setFlash(null); generateRound(); }, 350);
     };
 
+    // ── Dynamic card sizing ──
+    const cardMaxW = isLandscape ? 160 : undefined;
+    const iconSize = isLandscape ? 48 : W * 0.13;
+    const cardNameSize = isLandscape ? 14 : W * 0.038;
+
     return (
-        <ImageBackground source={require("../../assets/images/bg.png")} style={styles.root} resizeMode="cover">
+        <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.root} resizeMode="cover">
             <View style={styles.darkOverlay} />
 
-            {/* flash feedback overlay */}
             {flash && (
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: flash === "correct" ? "rgba(39,174,96,0.25)" : "rgba(192,57,43,0.25)", zIndex: 50 }]} pointerEvents="none" />
             )}
 
             {/* ── Menú ── */}
             {!isPlaying && !isGameOver && (
-                <View style={styles.cardOverlay}>
-                    <View style={styles.card}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+                    <View style={[styles.card, isLandscape && styles.cardLandscape]}>
                         <Text style={styles.cardBigEmoji}>🃏</Text>
                         <Text style={styles.cardTitle}>¡Lotería Exprés!</Text>
                         <Text style={styles.cardDesc}>
@@ -142,7 +203,7 @@ export default function LoteriaExpressScreen({ navigation }) {
             {/* ── En juego ── */}
             {isPlaying && targetCard && (
                 <View style={StyleSheet.absoluteFillObject}>
-                    <View style={styles.hud}>
+                    <View style={[styles.hud, { top: insets.top + 10 }]}>
                         <Text style={styles.hudText}>🃏 {score}</Text>
                         <Text style={[styles.hudText, timeLeft <= 5 && { backgroundColor: "rgba(192,57,43,0.85)" }]}>⏱️ {timeLeft}s</Text>
                         <TouchableOpacity style={styles.exitBtn} onPress={() => { setIsPlaying(false); navigation.goBack(); }}>
@@ -150,17 +211,30 @@ export default function LoteriaExpressScreen({ navigation }) {
                         </TouchableOpacity>
                     </View>
 
-                    <View style={styles.gameInner}>
-                        <View style={styles.targetBox}>
-                            <Text style={styles.targetSub}>¡Corre y se va con...!</Text>
-                            <Text style={styles.targetName}>{targetCard.name.toUpperCase()}</Text>
+                    <View style={[
+                        styles.gameInner,
+                        isLandscape && styles.gameInnerLandscape,
+                    ]}>
+                        <View style={[styles.targetBox, isLandscape && styles.targetBoxLandscape]}>
+                            <Text style={[styles.targetSub, isLandscape && { fontSize: 14 }]}>¡Corre y se va con...!</Text>
+                            <Text style={[styles.targetName, isLandscape && styles.targetNameLandscape]}>{targetCard.name.toUpperCase()}</Text>
                         </View>
 
-                        <View style={styles.cardsGrid}>
+                        <View style={[
+                            styles.cardsGrid,
+                            isLandscape && styles.cardsGridLandscape,
+                        ]}>
                             {options.map((card, idx) => (
-                                <TouchableOpacity key={idx} style={styles.gameCard} onPress={() => handleTap(card.id)}>
-                                    <Text style={styles.cardIcon}>{card.icon}</Text>
-                                    <Text style={styles.cardName}>{card.name}</Text>
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={[
+                                        styles.gameCard,
+                                        isLandscape && { width: cardMaxW, aspectRatio: 0.9 },
+                                    ]}
+                                    onPress={() => handleTap(card.id)}
+                                >
+                                    <Text style={[styles.cardIcon, { fontSize: iconSize }]}>{card.icon}</Text>
+                                    <Text style={[styles.cardName, { fontSize: cardNameSize }]}>{card.name}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -170,10 +244,10 @@ export default function LoteriaExpressScreen({ navigation }) {
 
             {/* ── Game over + leaderboard ── */}
             {isGameOver && (
-                <View style={styles.cardOverlay}>
-                    <View style={styles.card}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+                    <View style={[styles.card, isLandscape && styles.cardLandscape]}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingBottom: 8 }}>
-                            <Text style={styles.cardBigEmoji}>🎉</Text>
+                            <Text style={[styles.cardBigEmoji, isLandscape && { fontSize: 48 }]}>🎉</Text>
                             <Text style={styles.cardTitle}>¡Lotería!</Text>
 
                             <View style={styles.resultBox}>
@@ -234,54 +308,106 @@ const styles = StyleSheet.create({
     root: { flex: 1 },
     darkOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,3,0,0.72)" },
 
-    hud: { position: "absolute", top: 54, left: 18, right: 18, flexDirection: "row", alignItems: "center", gap: 12 },
-    hudText: { color: WHEAT, fontWeight: "900", fontSize: width * 0.048, backgroundColor: "rgba(139,69,19,0.7)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5 },
+    hud: { position: "absolute", left: 18, right: 18, flexDirection: "row", alignItems: "center", gap: 12, zIndex: 10 },
+    hudText: { color: WHEAT, fontWeight: "900", fontSize: W * 0.048, backgroundColor: "rgba(139,69,19,0.7)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5 },
     exitBtn: { marginLeft: "auto", backgroundColor: "rgba(192,57,43,0.9)", width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
     exitBtnText: { color: "#fff", fontWeight: "900", fontSize: 17 },
 
+    // ── Game area ──
     gameInner: { flex: 1, justifyContent: "center", paddingHorizontal: 16, paddingTop: 100, gap: 20 },
+    gameInnerLandscape: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingTop: 70,
+        paddingHorizontal: 40,
+        gap: 30,
+    },
     targetBox: { backgroundColor: "rgba(255,228,181,0.15)", borderRadius: 20, padding: 20, alignItems: "center", borderWidth: 2, borderColor: GOLD },
-    targetSub: { color: WHEAT, fontSize: width * 0.038, fontWeight: "600", marginBottom: 6, opacity: 0.7 },
-    targetName: { color: GOLD, fontSize: width * 0.075, fontWeight: "900", letterSpacing: 1 },
+    targetBoxLandscape: {
+        width: '30%',
+        padding: 16,
+    },
+    targetSub: { color: WHEAT, fontSize: W * 0.038, fontWeight: "600", marginBottom: 6, opacity: 0.7 },
+    targetName: { color: GOLD, fontSize: W * 0.075, fontWeight: "900", letterSpacing: 1 },
+    targetNameLandscape: { fontSize: 28 },
 
     cardsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10 },
-    gameCard: { width: "48%", aspectRatio: 0.85, backgroundColor: WHEAT, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: AMBER, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
-    cardIcon: { fontSize: width * 0.13, marginBottom: 8 },
-    cardName: { fontSize: width * 0.038, fontWeight: "800", color: BROWN, textAlign: "center" },
+    cardsGridLandscape: {
+        flex: 1,
+        flexWrap: "nowrap",
+        justifyContent: "center",
+        gap: 14,
+    },
+    gameCard: {
+        width: "48%",
+        aspectRatio: 0.85,
+        backgroundColor: WHEAT,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: AMBER,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 6,
+    },
+    cardIcon: { fontSize: W * 0.13, marginBottom: 8 },
+    cardName: { fontSize: W * 0.038, fontWeight: "800", color: BROWN, textAlign: "center" },
 
-    cardOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "center", alignItems: "center", paddingHorizontal: 16, paddingVertical: 20 },
-    card: { backgroundColor: WHEAT, borderRadius: 24, borderWidth: 3, borderColor: BROWN, padding: 18, width: "100%", maxWidth: 440, maxHeight: height * 0.88, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 14 },
-    cardBigEmoji: { fontSize: width * 0.16, textAlign: "center", marginBottom: 4 },
-    cardTitle: { fontSize: width * 0.055, fontWeight: "900", color: BROWN, textAlign: "center", marginBottom: 8 },
-    cardDesc: { fontSize: width * 0.036, color: AMBER, textAlign: "center", lineHeight: width * 0.052, marginBottom: 16, fontWeight: "600" },
+    // ── Overlays (menu, game over) ──
+    cardOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "center", alignItems: "center", paddingHorizontal: 16, paddingVertical: 20, zIndex: 20 },
+    card: {
+        backgroundColor: WHEAT,
+        borderRadius: 24,
+        borderWidth: 3,
+        borderColor: BROWN,
+        padding: 18,
+        width: "100%",
+        maxWidth: 440,
+        maxHeight: "88%",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+        elevation: 14,
+    },
+    cardLandscape: {
+        maxWidth: 480,
+        maxHeight: "94%",
+    },
+    cardBigEmoji: { fontSize: W * 0.16, textAlign: "center", marginBottom: 4 },
+    cardTitle: { fontSize: W * 0.055, fontWeight: "900", color: BROWN, textAlign: "center", marginBottom: 8 },
+    cardDesc: { fontSize: W * 0.036, color: AMBER, textAlign: "center", lineHeight: W * 0.052, marginBottom: 16, fontWeight: "600" },
     startBtn: { backgroundColor: GOLD, borderRadius: 50, paddingVertical: 13, paddingHorizontal: 28, width: "100%", alignItems: "center", marginBottom: 10, borderWidth: 2, borderColor: AMBER },
-    startBtnText: { color: BROWN, fontSize: width * 0.046, fontWeight: "900" },
+    startBtnText: { color: BROWN, fontSize: W * 0.046, fontWeight: "900" },
     backBtn: { paddingVertical: 8, paddingHorizontal: 16 },
-    backBtnText: { color: AMBER, fontSize: width * 0.036, fontWeight: "700" },
+    backBtnText: { color: AMBER, fontSize: W * 0.036, fontWeight: "700" },
 
     resultBox: { flexDirection: "row", alignItems: "center", backgroundColor: WHEAT2, borderRadius: 16, borderWidth: 2, borderColor: AMBER, paddingHorizontal: 22, paddingVertical: 10, marginBottom: 10, gap: 10 },
-    resultNum: { fontSize: width * 0.13, fontWeight: "900", color: AMBER, lineHeight: width * 0.14 },
-    resultLabel: { fontSize: width * 0.038, color: BROWN, fontWeight: "700" },
-    resultMsg: { fontSize: width * 0.035, color: AMBER, fontWeight: "700", textAlign: "center", marginBottom: 14 },
+    resultNum: { fontSize: W * 0.13, fontWeight: "900", color: AMBER, lineHeight: W * 0.14 },
+    resultLabel: { fontSize: W * 0.038, color: BROWN, fontWeight: "700" },
+    resultMsg: { fontSize: W * 0.035, color: AMBER, fontWeight: "700", textAlign: "center", marginBottom: 14 },
 
     myBestRow: { flexDirection: "row", width: "100%", backgroundColor: WHEAT2, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(139,69,19,0.3)", marginBottom: 14, overflow: "hidden" },
     myBestItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
-    myBestVal: { fontSize: width * 0.062, fontWeight: "900", color: BROWN },
-    myBestLabel: { fontSize: width * 0.028, color: AMBER, fontWeight: "700", marginTop: 2 },
+    myBestVal: { fontSize: W * 0.062, fontWeight: "900", color: BROWN },
+    myBestLabel: { fontSize: W * 0.028, color: AMBER, fontWeight: "700", marginTop: 2 },
 
     tabRow: { flexDirection: "row", width: "100%", backgroundColor: WHEAT2, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(139,69,19,0.25)", marginBottom: 10, overflow: "hidden" },
     tabBtn: { flex: 1, paddingVertical: 9, alignItems: "center" },
     tabBtnActive: { backgroundColor: AMBER },
-    tabText: { fontSize: width * 0.03, fontWeight: "700", color: AMBER },
+    tabText: { fontSize: W * 0.03, fontWeight: "700", color: AMBER },
     tabTextActive: { color: "#fff" },
 
     lbList: { width: "100%", marginBottom: 14 },
-    lbLoading: { color: AMBER, textAlign: "center", fontSize: width * 0.035, paddingVertical: 12 },
-    lbEmpty: { color: AMBER, textAlign: "center", fontSize: width * 0.033, paddingVertical: 12, fontWeight: "600" },
+    lbLoading: { color: AMBER, textAlign: "center", fontSize: W * 0.035, paddingVertical: 12 },
+    lbEmpty: { color: AMBER, textAlign: "center", fontSize: W * 0.033, paddingVertical: 12, fontWeight: "600" },
     lbRow: { flexDirection: "row", alignItems: "center", paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10, marginBottom: 4, backgroundColor: WHEAT2, borderWidth: 1, borderColor: "rgba(139,69,19,0.15)", gap: 8 },
     lbRowMe: { backgroundColor: "#FFF8DC", borderColor: GOLD, borderWidth: 2 },
-    lbRank: { width: 32, textAlign: "center", fontSize: width * 0.035, fontWeight: "900", color: BROWN },
-    lbAvatar: { fontSize: width * 0.055 },
-    lbName: { flex: 1, fontSize: width * 0.033, fontWeight: "700", color: BROWN },
-    lbScore: { fontSize: width * 0.035, fontWeight: "900", color: AMBER },
+    lbRank: { width: 32, textAlign: "center", fontSize: W * 0.035, fontWeight: "900", color: BROWN },
+    lbAvatar: { fontSize: W * 0.055 },
+    lbName: { flex: 1, fontSize: W * 0.033, fontWeight: "700", color: BROWN },
+    lbScore: { fontSize: W * 0.035, fontWeight: "900", color: AMBER },
 });

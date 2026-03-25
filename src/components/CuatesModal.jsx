@@ -1,17 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAction, useMutation, useQuery } from "convex/react";
+import * as LocalAuthentication from "expo-local-authentication";
+import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Modal,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { api } from "../../convex/_generated/api";
@@ -40,7 +44,12 @@ const INVITE_MSG =
   "¡Está de pelos, descárgalo ya! 🌮🇲🇽";
 
 export default function CuatesModal({ visible, onClose, onOpenProfile }) {
-  const { userId, user, restoreAccount, saveCredentials } = useAuth();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isLandscape = winW > winH;
+  const cardW = isLandscape ? Math.min(winW * 0.55, 520) : Math.min(winW * 0.92, 440);
+  const cardMaxH = isLandscape ? winH * 0.92 : winH * 0.82;
+
+  const { userId, user, restoreAccount, saveCredentials, logout } = useAuth();
 
   // Tabs de autenticación
   const [authTab, setAuthTab] = useState("login");  // "login" | "register" | "forgot"
@@ -64,18 +73,87 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
 
   const [busy, setBusy] = useState(false);
 
+  // Biometric login
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricStatus, setBiometricStatus] = useState(null); // null | "scanning" | "success" | "fail"
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      try {
+        const savedEmail = await SecureStore.getItemAsync("mexicanario_email");
+        const savedPass = await SecureStore.getItemAsync("mexicanario_pass");
+        if (!savedEmail || !savedPass) { setBiometricAvailable(false); return; }
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        if (!hasHw) { setBiometricAvailable(false); return; }
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setBiometricAvailable(enrolled);
+      } catch {
+        setBiometricAvailable(false);
+      }
+    })();
+  }, [visible]);
+
+  async function handleBiometricLogin() {
+    setBusy(true);
+    setBiometricStatus("scanning");
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Inicia sesión en Mexicanario",
+        cancelLabel: "Cancelar",
+      });
+      if (!result.success) {
+        setBiometricStatus("fail");
+        setTimeout(() => setBiometricStatus(null), 1500);
+        setBusy(false);
+        return;
+      }
+      // Face verified — now log in
+      setBiometricStatus("success");
+      const savedEmail = await SecureStore.getItemAsync("mexicanario_email");
+      const savedPass = await SecureStore.getItemAsync("mexicanario_pass");
+      if (!savedEmail || !savedPass) {
+        Alert.alert("¡Aguas!", "No se encontraron credenciales guardadas.");
+        setBiometricStatus(null);
+        setBusy(false);
+        return;
+      }
+      const res = await loginWithEmail({ email: savedEmail, password: savedPass });
+      await restoreAccount(res.userId);
+      await saveCredentials(savedEmail, savedPass);
+      // Keep success visible briefly before transitioning
+      await new Promise((r) => setTimeout(r, 900));
+      setBiometricStatus(null);
+    } catch (e) {
+      setBiometricStatus("fail");
+      setTimeout(() => setBiometricStatus(null), 1500);
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "No se pudo entrar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [busyFriendId, setBusyFriendId] = useState(null);
+
   // ── Mutaciones Convex ───────────────────────────────────────────────────────
   const registerAccount = useAction(api.friends.registerAccount);
   const loginWithEmail = useMutation(api.friends.loginWithEmail);
   const setUsernameM = useMutation(api.friends.setUsername);
   const requestReset = useAction(api.friends.requestPasswordReset);
   const resetPassword = useMutation(api.friends.resetPassword);
+  const addFriendM = useMutation(api.friends.addFriend);
 
   // ── Queries reactivas ───────────────────────────────────────────────────────
   const checkUsername = useQuery(
     api.friends.checkUsername,
     username.length >= 3 ? { username } : "skip"
   );
+
+  const myFriends = useQuery(
+    api.friends.getMyFriends,
+    userId ? { userId } : "skip"
+  );
+  const friendIds = new Set((myFriends ?? []).map((f) => String(f.friendId)));
 
   // Debounce de búsqueda
   useEffect(() => {
@@ -102,6 +180,8 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
     setResetStep(1);
     setHomeTab("invite");
     setReward(null);
+    setBiometricStatus(null);
+    setBusyFriendId(null);
     onClose();
   }
 
@@ -240,6 +320,42 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
     }
   }
 
+  function handleLogout() {
+    Alert.alert(
+      "Cerrar sesión",
+      "¿Seguro que quieres salir de tu cuenta?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            handleClose();
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleAddFriend(friendId) {
+    setBusyFriendId(String(friendId));
+    try {
+      const res = await addFriendM({ userId, friendId });
+      if (res?.status === "auto_accepted" || res?.status === "accepted") {
+        Alert.alert("¡Órale!", "¡Ya son cuates! 🤝");
+      } else if (res?.status === "already_friends") {
+        Alert.alert("Ya es tu cuate", "Ya están conectados.");
+      } else {
+        Alert.alert("Solicitud enviada", "Tu solicitud fue enviada. Cuando la acepte, serán cuates. 🌮");
+      }
+    } catch (e) {
+      Alert.alert("¡Aguas!", e.message ?? "No se pudo agregar");
+    } finally {
+      setBusyFriendId(null);
+    }
+  }
+
   async function handleInvite() {
     try {
       await Share.share({ message: INVITE_MSG, title: "¡Juega Mexicanario!" });
@@ -267,7 +383,7 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
       onRequestClose={handleClose}
     >
       <View style={s.overlay}>
-        <View style={s.card}>
+        <View style={[s.card, { width: cardW, maxHeight: cardMaxH }]}>
           {/* ── Header ── */}
           <View style={s.header}>
             <Text style={s.headerEmoji}>🤝</Text>
@@ -368,6 +484,35 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
                       : <Text style={s.actionBtnText}>Entrar 🌮</Text>
                     }
                   </TouchableOpacity>
+                  {biometricAvailable && (
+                    biometricStatus ? (
+                      <View style={s.biometricFeedback}>
+                        <Text style={s.biometricEmoji}>
+                          {biometricStatus === "scanning" ? "🔍" : biometricStatus === "success" ? "✅" : "❌"}
+                        </Text>
+                        <Text style={s.biometricStatusText}>
+                          {biometricStatus === "scanning"
+                            ? "Verificando tu cara..."
+                            : biometricStatus === "success"
+                              ? "¡Identidad verificada!"
+                              : "No se pudo verificar"}
+                        </Text>
+                        {biometricStatus === "success" && (
+                          <Text style={s.biometricSubText}>Entrando a tu cuenta...</Text>
+                        )}
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={s.biometricBtn}
+                        onPress={handleBiometricLogin}
+                        disabled={busy}
+                      >
+                        <Text style={s.biometricBtnText}>
+                          {Platform.OS === "ios" ? "Entrar con Face ID 👤" : "Entrar con huella 👆"}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
                   <TouchableOpacity onPress={() => setAuthTab("forgot")} style={[s.switchLink, { paddingVertical: 4 }]}>
                     <Text style={[s.switchLinkText, { color: BROWN, opacity: 0.8 }]}>¿Olvidaste tu contraseña?</Text>
                   </TouchableOpacity>
@@ -605,25 +750,47 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
                       </View>
                     )}
                     {/* Resultados */}
-                    {searchResults?.map((u) => (
-                      <View key={String(u.userId)} style={s.resultRow}>
-                        <View style={s.resultAvatar}>
-                          <Text style={s.resultAvatarText}>
-                            {u.avatar === "default" || !u.avatar ? "🌮" : u.avatar}
-                          </Text>
+                    {searchResults?.map((u) => {
+                      const already = friendIds.has(String(u.userId));
+                      const loading = busyFriendId === String(u.userId);
+                      return (
+                        <View key={String(u.userId)} style={s.resultRow}>
+                          <View style={s.resultAvatar}>
+                            <Text style={s.resultAvatarText}>
+                              {u.avatar === "default" || !u.avatar ? "🌮" : u.avatar}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.resultUsername}>@{u.username}</Text>
+                            <Text style={s.resultName}>{u.name}</Text>
+                          </View>
+                          {already ? (
+                            <View style={s.foundBadge}>
+                              <Text style={s.foundBadgeText}>✓ Cuate</Text>
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[s.addFriendBtn, loading && { opacity: 0.6 }]}
+                              onPress={() => handleAddFriend(u.userId)}
+                              disabled={loading}
+                            >
+                              {loading
+                                ? <ActivityIndicator color={BROWN} size="small" />
+                                : <Text style={s.addFriendBtnText}>+ Agregar</Text>
+                              }
+                            </TouchableOpacity>
+                          )}
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.resultUsername}>@{u.username}</Text>
-                          <Text style={s.resultName}>{u.name}</Text>
-                        </View>
-                        <View style={s.foundBadge}>
-                          <Text style={s.foundBadgeText}>🎉 Encontrado</Text>
-                        </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </ScrollView>
                 </View>
               )}
+
+              {/* ── Cerrar sesión ── */}
+              <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+                <Text style={s.logoutBtnText}>Cerrar sesión</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -633,7 +800,6 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
 }
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
-const CARD_W = Math.min(width * 0.92, 440);
 
 const s = StyleSheet.create({
   overlay: {
@@ -644,8 +810,7 @@ const s = StyleSheet.create({
     paddingHorizontal: width * 0.04,
   },
   card: {
-    width: CARD_W,
-    maxHeight: height * 0.82,
+    // width & maxHeight set dynamically via inline style (orientation-aware)
     backgroundColor: WHEAT,
     borderRadius: 24,
     borderWidth: 3,
@@ -783,6 +948,50 @@ const s = StyleSheet.create({
     fontFamily: FONTS.bodyBold,
     color: BROWN,
     fontSize: width * 0.042,
+  },
+
+  // Botón biométrico
+  biometricBtn: {
+    backgroundColor: BROWN,
+    borderRadius: 50,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#6B3410",
+    marginBottom: 8,
+  },
+  biometricBtnText: {
+    fontFamily: FONTS.bodyBold,
+    color: "#fff",
+    fontSize: width * 0.042,
+  },
+
+  // Biometric feedback
+  biometricFeedback: {
+    alignItems: "center",
+    backgroundColor: WHEAT2,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "rgba(139,69,19,0.25)",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+    gap: 6,
+  },
+  biometricEmoji: {
+    fontSize: width * 0.1,
+  },
+  biometricStatusText: {
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: width * 0.04,
+    textAlign: "center",
+  },
+  biometricSubText: {
+    fontFamily: FONTS.body,
+    color: AMBER,
+    fontSize: width * 0.033,
+    textAlign: "center",
   },
 
   // Link para cambiar entre login/registro
@@ -999,5 +1208,31 @@ const s = StyleSheet.create({
     fontFamily: FONTS.bodyBold,
     color: GREEN,
     fontSize: width * 0.026,
+  },
+  addFriendBtn: {
+    backgroundColor: GOLD,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: "#C8950A",
+  },
+  addFriendBtnText: {
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: width * 0.028,
+  },
+
+  // Cerrar sesión
+  logoutBtn: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  logoutBtnText: {
+    fontFamily: FONTS.body,
+    color: RED,
+    fontSize: width * 0.033,
+    textDecorationLine: "underline",
   },
 });

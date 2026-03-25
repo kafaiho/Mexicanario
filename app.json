@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "Mexicanario",
+    "name": "Mexicanario - Modismos MX",
     "slug": "mexicanario",
-    "version": "1.2.8",
+    "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y cultura de México con niveles, retos PvP, colecciones regionales y mascotas. ¡El Wordle mexicano!",
+    "version": "1.4.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -12,7 +13,7 @@
       "checkAutomatically": "ON_LOAD"
     },
     "scheme": "mexicanario",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -39,7 +40,14 @@
         }
       ],
       "react-native-edge-to-edge",
-      "expo-router"
+      "expo-router",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Mexicanario usa Face ID para iniciar sesión rápidamente."
+        }
+      ],
+      "expo-secure-store"
     ],
     "ios": {
       "bundleIdentifier": "com.kafaiho.mexicanario",
@@ -52,8 +60,8 @@
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
-          "UIInterfaceOrientationPortrait",
-          "UIInterfaceOrientationPortraitUpsideDown"
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
         ],
         "NSUserTrackingUsageDescription": "Usamos datos anónimos para mostrarte anuncios relevantes y mejorar tu experiencia en Mexicanario.",
         "NSAppTransportSecurity": {
@@ -63,7 +71,7 @@
       }
     },
     "android": {
-      "versionCode": 17,
+      "versionCode": 22,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -72,7 +80,8 @@
       "package": "com.kafaiho.mexicanario",
       "permissions": [
         "com.google.android.gms.permission.AD_ID"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "androidNavigationBar": {
       "visible": "sticky-immersive"

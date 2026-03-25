@@ -1249,7 +1249,7 @@ export const seedLevels52to56 = mutation({
       { word: "La Santa Muerte", meaning: "Figura de devoción popular mexicana", example: "La Santa Muerte tiene altares en todo México", region: "CDMX" },
       { word: "Cristo Rey", meaning: "Celebración en el Cerro del Cubilete", example: "Miles peregrinan a Cristo Rey en Guanajuato", region: "Guanajuato" },
       { word: "San Miguel Arcangel", meaning: "Arcángel patrono de muchos pueblos", example: "San Miguel Arcángel es patrono de Michoacán", region: "Nacional" },
-      { word: "Nino Dios", meaning: "Figura del niño Jesús en los nacimientos", example: "El Niño Dios se viste el 24 de diciembre", region: "Nacional" },
+      { word: "Nino Dios", meaning: "Figura del Niño Dios en los nacimientos", example: "El Niño Dios se viste el 24 de diciembre", region: "Nacional" },
 
       // ── Nivel 54 – Héroes nacionales (Historia) ───────────────────────────
       { word: "Benito Juarez", meaning: "Presidente indígena y gran reformador", example: "Benito Juárez dijo 'El respeto al derecho ajeno'", region: "Oaxaca" },

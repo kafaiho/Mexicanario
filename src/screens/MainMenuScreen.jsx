@@ -22,6 +22,7 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import AdBanner from "../components/AdBanner";
 import DailyMissionsWidget from "../components/DailyMissionsWidget";
@@ -65,6 +66,7 @@ function getGroupEmoji(idx) { return GROUP_EMOJIS[idx % GROUP_EMOJIS.length]; }
 function getGroupName(idx, firstWord) { return firstWord || GROUP_NAMES[idx % GROUP_NAMES.length]; }
 
 export default function MainMenuScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [showWheel, setShowWheel] = useState(false);
   const [showShop, setShowShop] = useState(false);
   const [showAds, setShowAds] = useState(false);
@@ -187,12 +189,33 @@ export default function MainMenuScreen({ navigation }) {
     }
   }, [groups.length]);
 
+  // Auto-retry with exponential backoff when levelInfo fails to load
+  const retryCountRef = useRef(0);
+  const [retryLabel, setRetryLabel] = useState('');
   useEffect(() => {
-    let t;
-    if (userId && !levelInfo) t = setTimeout(() => setLoadingError(true), 8000);
-    else if (levelInfo) setLoadingError(false);
+    if (levelInfo) {
+      setLoadingError(false);
+      retryCountRef.current = 0;
+      return;
+    }
+    if (!userId) return;
+    // Show error after 8s, then auto-retry with backoff: 4s, 8s, 16s (max)
+    const t = setTimeout(() => {
+      setLoadingError(true);
+      const attempt = retryCountRef.current;
+      if (attempt < 4) {
+        const delay = Math.min(4000 * Math.pow(2, attempt), 16000);
+        retryCountRef.current = attempt + 1;
+        setRetryLabel(`Reintentando en ${delay / 1000}s...`);
+        const retryT = setTimeout(() => {
+          setLoadingError(false); // triggers re-render → Convex retries query
+          setRetryLabel('');
+        }, delay);
+        return () => clearTimeout(retryT);
+      }
+    }, 8000);
     return () => clearTimeout(t);
-  }, [userId, levelInfo]);
+  }, [userId, levelInfo, loadingError]);
 
   if (!levelInfo && userId) {
     return (
@@ -202,17 +225,14 @@ export default function MainMenuScreen({ navigation }) {
             <Text style={{ fontSize: 18, marginBottom: 15, color: "#333", fontWeight: "bold" }}>
               La carga está tardando mucho...
             </Text>
+            {retryLabel ? (
+              <Text style={{ fontSize: 14, color: "#888", marginBottom: 12 }}>{retryLabel}</Text>
+            ) : null}
             <TouchableOpacity
               style={{ backgroundColor: "#F59B40", paddingHorizontal: 30, paddingVertical: 10, borderRadius: 20, marginBottom: 12 }}
-              onPress={() => setLoadingError(false)}
+              onPress={() => { retryCountRef.current = 0; setLoadingError(false); }}
             >
               <Text style={{ color: "white", fontSize: 16, fontWeight: "bold" }}>Reintentar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ backgroundColor: "#cc0000", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 16 }}
-              onPress={logout}
-            >
-              <Text style={{ color: "white", fontSize: 13, fontWeight: "bold" }}>🔄 Resetear sesión</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -322,7 +342,7 @@ export default function MainMenuScreen({ navigation }) {
   const dotStartIdx = Math.max(0, Math.min(activeIndex - Math.floor(MAX_DOTS / 2), groups.length - dotCount));
 
   return (
-    <ImageBackground source={require("../../assets/images/bg.png")} style={styles.container} resizeMode="cover">
+    <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.container} resizeMode="cover">
       <TopBar />
 
       {/* Floating side icons */}
@@ -341,7 +361,7 @@ export default function MainMenuScreen({ navigation }) {
       <View style={styles.rightColumn}>
         <Reanimated.View style={wheelAnimStyle}>
           <TouchableOpacity style={styles.floatBadge} onPress={() => { tapMedium(); bounceTap(wheelScale); setShowWheel(true); }}>
-            <Image source={require("../../assets/images/wheelPage.png")} style={styles.floatIcon} resizeMode="contain" />
+            <Image source={require("../../assets/images/wheelPage.webp")} style={styles.floatIcon} resizeMode="contain" />
           </TouchableOpacity>
         </Reanimated.View>
         <Reanimated.View style={adsAnimStyle}>
@@ -395,6 +415,14 @@ export default function MainMenuScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <Text style={styles.ctaBtnText}>{`Nivel ${currentLevel}`}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.ctaBtn, { backgroundColor: "#1E1E2E", borderWidth: 1.5, borderColor: "#D2691E" }]}
+              onPress={() => { tapMedium(); navigation.navigate("PvP"); }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.ctaBtnText, { color: "#F8BE17" }]}>⚔️ Duelo PvP</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -467,7 +495,7 @@ export default function MainMenuScreen({ navigation }) {
       </Modal>
 
       {/* Banner AdMob */}
-      <AdBanner style={{ marginBottom: 4 }} />
+      <AdBanner style={{ marginBottom: Math.max(4, insets.bottom) }} />
 
       {/* Modals */}
       <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowShop(true); setShowAds(true); }} />

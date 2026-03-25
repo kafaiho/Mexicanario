@@ -87,14 +87,6 @@ const PROTECTORES = [
   },
 ];
 
-// Skins premium de mascota
-const SKINS_PREMIUM = [
-  { id: "skin_mariachi", qty: 1, label: "Traje de Mariachi", icon: "🎺", price: "1,500", currency: "coins" },
-  { id: "skin_charro", qty: 1, label: "Charro de Jalisco", icon: "🤠", price: "2,000", currency: "coins", badge: "POPULAR" },
-  { id: "skin_lucha", qty: 1, label: "Luchador Enmascarado", icon: "🤼", price: "2,500", currency: "coins" },
-  { id: "skin_catrina", qty: 1, label: "La Catrina", icon: "💀", price: "3,500", currency: "coins", badge: "EXCLUSIVO" },
-  { id: "skin_azteca", qty: 1, label: "Guerrero Azteca", icon: "🦅", price: "5,000", currency: "coins", badge: "MEJOR VALOR" },
-];
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -193,7 +185,7 @@ function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, o
 }
 
 // ─── 3-column item grid card ──────────────────────────────────────────────────
-function ItemCard({ item, onBuy }) {
+const ItemCard = React.memo(function ItemCard({ item, onBuy }) {
   return (
     <TouchableOpacity style={s.itemCard} onPress={() => onBuy(item)} activeOpacity={0.85}>
       {item.badge && (
@@ -221,9 +213,9 @@ function ItemCard({ item, onBuy }) {
       )}
     </TouchableOpacity>
   );
-}
+});
 
-function ItemRow({ items, onBuy }) {
+const ItemRow = React.memo(function ItemRow({ items, onBuy }) {
   return (
     <View style={s.itemRow}>
       {items.map((item) => (
@@ -231,7 +223,7 @@ function ItemRow({ items, onBuy }) {
       ))}
     </View>
   );
-}
+});
 
 // ─── Main ShopScreen ──────────────────────────────────────────────────────────
 export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false }) {
@@ -482,7 +474,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose} statusBarTranslucent>
       <ImageBackground
-        source={require("../../assets/images/bg.png")}
+        source={require("../../assets/images/bg.webp")}
         style={s.bg}
         resizeMode="cover"
       >
@@ -568,22 +560,6 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Skins Premium */}
-          <SectionBanner title="Skins Premium 🎭" />
-          <View style={s.skinsGrid}>
-            {SKINS_PREMIUM.map((skin) => (
-              <TouchableOpacity key={skin.id} style={s.skinCard} onPress={() => handleBuyItem(skin)} activeOpacity={0.82}>
-                {skin.badge && <View style={s.skinBadge}><Text style={s.skinBadgeText}>{skin.badge}</Text></View>}
-                <Text style={s.skinIcon}>{skin.icon}</Text>
-                <Text style={s.skinLabel}>{skin.label}</Text>
-                <View style={s.skinPriceRow}>
-                  <Text style={s.skinPrice}>🪙 {skin.price}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
 
           {/* Mexicanario Plus */}
           <SectionBanner title="Mexicanario Plus ⭐" />

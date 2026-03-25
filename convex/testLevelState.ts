@@ -1,9 +1,17 @@
 import { query } from "./_generated/server";
+import { v } from "convex/values";
 import { getOrderedLevels } from "./levelOrdering";
 
+const OWNER_IDS = new Set([
+    "k9761v6vrcwpafm745mhh5m95x8215dv",
+    "k97b1y69czyn1zsm4d2avzxzrx826k7a",
+]);
+
 export const testLevelState = query({
-    args: {},
-    handler: async (ctx) => {
+    args: { requesterId: v.string() },
+    handler: async (ctx, { requesterId }) => {
+        if (!OWNER_IDS.has(requesterId))
+            throw new Error("❌ Acceso denegado.");
         const user = await ctx.db.query("users").first();
         if (!user) return "No user found";
 

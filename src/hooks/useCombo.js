@@ -38,9 +38,9 @@ export function useCombo() {
     timerRef.current = setTimeout(() => setComboVisible(false), 700);
   }, [clearTimer]);
 
-  // Combo broken by wrong attempt → reset count and hide immediately
-  const resetCombo = useCallback(() => {
-    setComboCount(0);
+  // Combo broken by wrong attempt → reduce count (grace: pass target value, default 0)
+  const resetCombo = useCallback((target = 0) => {
+    setComboCount(target);
     setComboVisible(false);
     clearTimer();
   }, [clearTimer]);

@@ -423,6 +423,12 @@ export const recordLeagueCXP = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) return { cxpAwarded: 0 };
 
+    // ── Server-side validation ───────────────────────────────────────────
+    // attempts = number of wrong guesses (0 = perfect). Max reasonable ~10.
+    // comboCount = streak of consecutive correct answers. Max reasonable ~200.
+    const attempts = Math.max(0, Math.min(Math.round(args.attempts), 10));
+    const comboCount = Math.max(0, Math.min(Math.round(args.comboCount), 200));
+
     const weekId = getWeekId();
     const today = getTodayCST();
     const playStreak = (user as any).playStreak ?? 0;
@@ -435,14 +441,20 @@ export const recordLeagueCXP = mutation({
 
     if (!entry) return { cxpAwarded: 0, notJoined: true };
 
+    // ── Rate limiting: min 3s between completions ──────────────────────────
+    const now = Date.now();
+    if (entry.lastCompletionAt && now - entry.lastCompletionAt < 3000) {
+      return { cxpAwarded: 0, rateLimited: true };
+    }
+
     // Reset daily if new day
     const currentDayCXP = entry.todayDate === today ? entry.cxpToday : 0;
     const currentDayWords = entry.todayDate === today ? entry.wordsToday : 0;
 
-    // Calculate cXP
+    // Calculate cXP (uses sanitized values)
     const { cxpAwarded, breakdown } = calculateWordCXP(
-      args.attempts,
-      args.comboCount,
+      attempts,
+      comboCount,
       playStreak,
       currentDayCXP
     );
@@ -454,6 +466,7 @@ export const recordLeagueCXP = mutation({
       todayDate: today,
       wordsToday: currentDayWords + 1,
       wordsThisWeek: entry.wordsThisWeek + 1,
+      lastCompletionAt: now,
     });
 
     // Also update daily mini score if assigned
@@ -688,5 +701,117 @@ export const resetDailyMini = internalMutation({
 export const getDivisions = query({
   handler: async () => {
     return DIVISIONS;
+  },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ═══  SEASONAL RESET (TRIMESTRAL)  ═══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+
+const SEASON_REWARDS: Record<number, { coins: number; diamonds: number; badge?: string }> = {
+  1:  { coins: 50,   diamonds: 0 },
+  2:  { coins: 75,   diamonds: 0 },
+  3:  { coins: 125,  diamonds: 1 },
+  4:  { coins: 250,  diamonds: 3 },
+  5:  { coins: 400,  diamonds: 5,  badge: "season_silver" },
+  6:  { coins: 600,  diamonds: 8,  badge: "season_gold" },
+  7:  { coins: 800,  diamonds: 12, badge: "season_gold" },
+  8:  { coins: 1000, diamonds: 15, badge: "season_diamond" },
+  9:  { coins: 1500, diamonds: 20, badge: "season_diamond" },
+  10: { coins: 2000, diamonds: 30, badge: "season_champion" },
+};
+
+function getCurrentSeasonId(): string {
+  const cst = nowCST();
+  const quarter = Math.floor(cst.getMonth() / 3) + 1;
+  return `${cst.getFullYear()}-Q${quarter}`;
+}
+
+export const processSeasonEnd = internalMutation({
+  handler: async (ctx) => {
+    // Only run on quarter boundaries: Jan(0), Apr(3), Jul(6), Oct(9)
+    const cst = nowCST();
+    if (cst.getMonth() % 3 !== 0) return; // Not a quarter start month
+
+    const seasonId = getCurrentSeasonId();
+    const now = Date.now();
+
+    // Get all users with a league division
+    const users = await ctx.db.query("users").collect();
+
+    for (const user of users) {
+      const div = (user as any).leagueDivision ?? 0;
+      if (div === 0) continue;
+
+      const highestDiv = (user as any).leagueHighestDiv ?? div;
+
+      // Award season rewards based on highest division
+      const reward = SEASON_REWARDS[highestDiv] ?? SEASON_REWARDS[1];
+      if (reward) {
+        await ctx.db.patch(user._id, {
+          coins: user.coins + reward.coins,
+          diamonds: user.diamonds + reward.diamonds,
+        } as any);
+
+        // Award badge
+        if (reward.badge) {
+          const existing = await ctx.db
+            .query("leagueBadges")
+            .withIndex("by_user_badge", (q) =>
+              q.eq("userId", user._id).eq("badgeType", reward.badge!)
+            )
+            .first();
+          if (!existing) {
+            await ctx.db.insert("leagueBadges", {
+              userId: user._id,
+              badgeType: reward.badge,
+              earnedAt: now,
+              season: seasonId,
+            });
+          }
+        }
+      }
+
+      // Division reset: div 6-10 drop by 2, div 1-5 stay
+      let newDiv = div;
+      if (div >= 6) {
+        newDiv = Math.max(1, div - 2);
+      }
+
+      // Award "div_reached_N" badge for highest div
+      const divBadge = `div_reached_${highestDiv}`;
+      const existingDivBadge = await ctx.db
+        .query("leagueBadges")
+        .withIndex("by_user_badge", (q) =>
+          q.eq("userId", user._id).eq("badgeType", divBadge)
+        )
+        .first();
+      if (!existingDivBadge) {
+        await ctx.db.insert("leagueBadges", {
+          userId: user._id,
+          badgeType: divBadge,
+          earnedAt: now,
+          season: seasonId,
+        });
+      }
+
+      // Trophy expansion: div 7+ top-3 get trophy badge
+      // (Trophies from weekly processWeekEnd already handles Tonatiuh top-3)
+
+      await ctx.db.patch(user._id, {
+        leagueDivision: newDiv,
+      } as any);
+    }
+  },
+});
+
+// ── Get league badges for user ──────────────────────────────────────────────
+export const getUserBadges = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    return await ctx.db
+      .query("leagueBadges")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
   },
 });

@@ -2,13 +2,13 @@ import React from "react";
 import {
   Dimensions,
   ImageBackground,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AdBanner from "../components/AdBanner";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
@@ -16,11 +16,6 @@ import { tapMedium } from "../services/haptics";
 import { TABLET_MODE } from "../utils/tabletSetup";
 
 const { width, height } = Dimensions.get("window");
-
-// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
-const TOP_SAFE = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
-const TOP_BAR_H = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
-const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 32 : 14));
 
 // ── Palette (Mexicanómetro tokens) ──────────────────────────────────────────
 const BROWN = "#8B4513";
@@ -61,6 +56,12 @@ const games = [
 
 
 export default function JuegosScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  // TopBar uses its own topPad (~32px Android) regardless of insets, so we must clear it
+  const topBarPad = Math.max(20, height * 0.04);
+  const HEADER_TOP = Math.round(
+    Math.max(insets.top, topBarPad) + width * 0.075 + width * 0.025 + (TABLET_MODE ? 36 : 18)
+  );
   const { user } = useAuth();
 
   const handlePlayGame = (gameId) => {
@@ -79,14 +80,14 @@ export default function JuegosScreen({ navigation }) {
 
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.container}
       resizeMode="cover"
     >
       <TopBar navigation={navigation} />
 
       {/* ── Section title ── */}
-      <View style={styles.sectionHeader}>
+      <View style={[styles.sectionHeader, { marginTop: HEADER_TOP }]}>
         <Text style={styles.sectionTitle}>🎮 Juegos</Text>
         <Text style={styles.sectionSub}>¿Pa' qué juego eres bueno?</Text>
       </View>
@@ -149,7 +150,6 @@ const styles = StyleSheet.create({
 
   // ── Section header ──
   sectionHeader: {
-    marginTop: HEADER_TOP,
     marginHorizontal: width * 0.04,
     marginBottom: height * 0.015,
     backgroundColor: "#FFE4B5",

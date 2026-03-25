@@ -1,19 +1,23 @@
 import { mutation, query } from "./_generated/server";
 
-// ── Las 15 categorías canónicas ─────────────────────────────────────────────
+// ── Las 19 categorías canónicas ─────────────────────────────────────────────
 const CANONICAL = new Set([
   "Expresiones y Modismos",
   "Comida Mexicana",
   "Juegos y Niñez",
   "Bebidas",
+  "Vida Cotidiana",
   "Refranes y Dichos",
   "Animales de México",
+  "Remedios Caseros",
   "Flora Mexicana",
   "Tradiciones y Fiestas",
   "Música y Artistas",
   "Historia de México",
   "Albures y Picaresca",
+  "Artesanías de México",
   "Cultura Popular",
+  "Deportes Mexicanos",
   "Monumentos y Lugares",
   "Leyendas y Mitos",
   "Mundo Digital",

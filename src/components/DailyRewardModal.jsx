@@ -74,6 +74,14 @@ export function useDailyReward() {
       // Already claimed today
       if (lastDate === today) return;
 
+      // First-ever launch: don't show DailyReward — let onboarding run undisturbed.
+      // The reward will appear on day 2 when lastDate exists.
+      if (!lastDate) {
+        await AsyncStorage.setItem(STORAGE_KEY_DATE, today);
+        await AsyncStorage.setItem(STORAGE_KEY_DAY, "1");
+        return;
+      }
+
       let nextDay = 1;
       if (lastDate === yesterday) {
         // Consecutive day — advance

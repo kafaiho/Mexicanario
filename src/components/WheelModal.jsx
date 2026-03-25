@@ -232,7 +232,7 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
 
             <Animated.View style={[styles.wheelImageContainer, { transform: [{ rotate: spinInterpolated }] }]}>
               <Image
-                source={require('../../assets/images/wheel.png')}
+                source={require('../../assets/images/wheel.webp')}
                 style={styles.wheelImage}
                 resizeMode="contain"
               />

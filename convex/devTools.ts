@@ -1,12 +1,23 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+/** Solo el dueño de la app puede llamar estas funciones en producción */
+const OWNER_IDS = new Set([
+    "k9761v6vrcwpafm745mhh5m95x8215dv",
+    "k97b1y69czyn1zsm4d2avzxzrx826k7a",
+]);
+function requireOwner(userId: string) {
+    if (!OWNER_IDS.has(userId))
+        throw new Error("❌ Acceso denegado: solo el dueño puede usar esta función.");
+}
+
 /**
  * DEV ONLY — lista todos los usuarios (id, nombre, petType).
  */
 export const listUsers = query({
-    args: {},
-    handler: async (ctx) => {
+    args: { requesterId: v.string() },
+    handler: async (ctx, { requesterId }) => {
+        requireOwner(requesterId);
         const users = await ctx.db.query("users").collect();
         return users.map((u) => ({
             _id: u._id,
@@ -22,8 +33,9 @@ export const listUsers = query({
  * Run: npx convex run devTools:redistributeHistoriaToJerga
  */
 export const redistributeHistoriaToJerga = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { requesterId: v.string() },
+  handler: async (ctx, { requesterId }) => {
+    requireOwner(requesterId);
     const JERGA_SET = new Set([
       "chido","neta","órale","orale","güey","wey","güey / wey",
       "chamba","no manches","platicar","sale","lana","fresa","naco",
@@ -70,6 +82,7 @@ export const redistributeHistoriaToJerga = mutation({
 export const cleanupDuplicates = mutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         // 1. Delete all existing levels
         const levels = await ctx.db.query("levels").collect();
         await Promise.all(levels.map((l) => ctx.db.delete(l._id)));
@@ -100,6 +113,7 @@ export const cleanupDuplicates = mutation({
 export const giveDevCoins = mutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         try {
             const user = await ctx.db.get(args.userId as any);
             if (user) {
@@ -117,6 +131,7 @@ export const giveDevCoins = mutation({
 export const resetLevelDev = mutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         try {
             const user = await ctx.db.get(args.userId as any);
             if (user) {
@@ -133,8 +148,9 @@ export const resetLevelDev = mutation({
  * Run once after seeding: npx convex run devTools:patchWordCategories
  */
 export const patchWordCategories = mutation({
-    args: {},
-    handler: async (ctx) => {
+    args: { requesterId: v.string() },
+    handler: async (ctx, { requesterId }) => {
+        requireOwner(requesterId);
         // Map of lowercase word string → correct category
         const MAP: Record<string, string> = {
             // ── Levels 1-2 (Comida) ────────────────────────────────────────────
@@ -282,6 +298,7 @@ export const patchWordCategories = mutation({
 export const jumpToLevel = mutation({
     args: { userId: v.string(), targetLevel: v.number() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         try {
             const user = await ctx.db.get(args.userId as any);
             if (!user) return { success: false, error: "Usuario no encontrado" };
@@ -313,6 +330,7 @@ export const jumpToLevel = mutation({
 export const switchPetType = mutation({
     args: { userId: v.string(), petType: v.string() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         try {
             const user = await ctx.db.get(args.userId as any);
             if (!user) return { success: false, error: "Usuario no encontrado" };
@@ -327,6 +345,7 @@ export const switchPetType = mutation({
 export const resetTacos = mutation({
     args: { userId: v.string(), tacos: v.number() },
     handler: async (ctx, args) => {
+        requireOwner(args.userId);
         try {
             const user = await ctx.db.get(args.userId as any);
             if (!user) return { success: false, error: "Usuario no encontrado" };

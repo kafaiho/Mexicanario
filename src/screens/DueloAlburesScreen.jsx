@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Dimensions,
     ImageBackground,
@@ -9,8 +9,10 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
+import { playBGM, stopBGM } from "../utils/soundManager";
 
 const { width, height } = Dimensions.get("window");
 
@@ -43,6 +45,47 @@ const ALL_QUESTIONS = [
     { question: "¿Qué significa 'estar pedo'?", options: ["Oler mal", "Estar borracho", "Estar dormido", "Estar de mal humor"], answer: 1, explanation: "Estar pedo = estar ebrio. De uso muy extendido en el habla coloquial mexicana." },
     { question: "¿Qué quiere decir 'a huevo'?", options: ["Con mucha mayonesa", "Obligatorio o con fuerza", "De forma equivocada", "Con mucha hambre"], answer: 1, explanation: "A huevo = obligatoriamente, sin opciones, o para afirmar con énfasis total." },
     { question: "¿Qué significa 'traer la canica'?", options: ["Jugar canicas", "Estar loco o chiflado", "Traer algo redondo", "Estar en problemas"], answer: 1, explanation: "Traer la canica = estar loco o tener ideas alocadas. También 'se le fue la canica'." },
+    // ── Expansión: 40 preguntas adicionales ──────────────────────────────────
+    { question: "¿Qué significa 'hacerse pato'?", options: ["Nadar en un lago", "Hacerse el desentendido", "Caminar raro", "Tener hambre"], answer: 1, explanation: "Hacerse pato = fingir que no sabe o no entiende para evadir responsabilidad." },
+    { question: "¿Qué quiere decir 'dar el gatazo'?", options: ["Regalar un gato", "Aparentar más de lo que es", "Correr rápido", "Ser presumido"], answer: 1, explanation: "Dar el gatazo = lucir bien o aparentar más de lo que realmente es." },
+    { question: "Completa: 'El que nace pa' maceta...'", options: ["Del corredor no pasa", "Siempre florece", "Nunca se rompe", "Se queda en el patio"], answer: 0, explanation: "Refrán mexicano: 'El que nace pa' maceta, del corredor no pasa'." },
+    { question: "¿Qué significa 'echar la hueva'?", options: ["Cocinar huevos", "Flojear o no hacer nada", "Lanzar algo", "Estar dormido"], answer: 1, explanation: "Echar la hueva = estar de flojo, no hacer nada productivo." },
+    { question: "Si dicen 'ya chole', significa:", options: ["Ya comí", "Ya basta, ya estuvo", "Ya llegué", "Ya me voy"], answer: 1, explanation: "Ya chole = ya basta, ya estuvo bueno. Expresión de hartazgo." },
+    { question: "¿Qué significa 'dar atole con el dedo'?", options: ["Dar de comer", "Engañar o hacer tonto a alguien", "Compartir comida", "Ayudar a alguien"], answer: 1, explanation: "Dar atole con el dedo = engañar a alguien haciéndole creer algo que no es." },
+    { question: "¿Qué quiere decir 'no tener madre'?", options: ["Ser huérfano", "Ser descarado o no tener vergüenza", "Ser muy pobre", "No tener familia"], answer: 1, explanation: "No tener madre = ser muy atrevido, descarado. También se usa como halago: '¡Está de no mame(s)!'" },
+    { question: "¿Qué significa 'chingar'?", options: ["Cantar", "Molestar, fastidiar o estorbar", "Bailar", "Cocinar"], answer: 1, explanation: "Chingar es la palabra más versátil del español mexicano: molestar, romper, golpear, etc." },
+    { question: "¿Qué quiere decir 'andar de buitre'?", options: ["Volar alto", "Estar al acecho esperando algo", "Tener hambre", "Estar enfermo"], answer: 1, explanation: "Andar de buitre = rondar esperando aprovecharse de una situación o persona." },
+    { question: "¿Qué significa 'sacar el cobre'?", options: ["Encontrar monedas", "Revelar la verdadera naturaleza", "Ir a la mina", "Ganar dinero"], answer: 1, explanation: "Sacar el cobre = mostrar lo que realmente eres, generalmente algo negativo." },
+    { question: "Si dicen 'se le chispoteó', significa:", options: ["Se quemó", "Se le escapó algo sin querer", "Se enojó", "Se alegró"], answer: 1, explanation: "Se le chispoteó = dijo o hizo algo sin querer, un desliz involuntario." },
+    { question: "¿Qué significa 'ir de cacería'?", options: ["Ir al bosque", "Salir a buscar pareja", "Ir de compras", "Ir a trabajar"], answer: 1, explanation: "Ir de cacería = salir con la intención de ligar o conquistar a alguien." },
+    { question: "¿Qué quiere decir 'ponerse las pilas'?", options: ["Cargar el celular", "Ponerse activo y trabajar duro", "Comprar baterías", "Hacer ejercicio"], answer: 1, explanation: "Ponerse las pilas = activarse, poner atención y esfuerzo." },
+    { question: "¿Qué significa 'mamar gallo'?", options: ["Criar gallinas", "Perder el tiempo o burlarse", "Cantar fuerte", "Trabajar duro"], answer: 1, explanation: "Mamar gallo = perder el tiempo, burlarse o no tomarse algo en serio." },
+    { question: "Completa: 'Más vale pájaro en mano...'", options: ["Que ver un ave volar", "Que ciento volando", "Que dos en el nido", "Que ninguno en la jaula"], answer: 1, explanation: "Refrán clásico: más vale lo seguro que lo incierto." },
+    { question: "¿Qué significa 'tirar la onda'?", options: ["Lanzar una piedra al agua", "Coquetear o mostrar interés", "Hacer ondas de radio", "Surfear"], answer: 1, explanation: "Tirar la onda = coquetear, mostrar interés romántico de manera sutil." },
+    { question: "¿Qué quiere decir 'estar crudo'?", options: ["Estar sin cocinar", "Tener resaca o cruda", "Estar sin bañar", "Estar enojado"], answer: 1, explanation: "Estar crudo = tener resaca después de beber alcohol en exceso." },
+    { question: "¿Qué significa 'tener colmillo'?", options: ["Tener dientes grandes", "Ser experimentado y astuto", "Ser vampiro", "Comer mucho"], answer: 1, explanation: "Tener colmillo = tener experiencia y astucia, no ser fácil de engañar." },
+    { question: "¿Qué quiere decir 'hacerse de la vista gorda'?", options: ["Engordar los ojos", "Ignorar algo a propósito", "Ver mal", "Necesitar lentes"], answer: 1, explanation: "Hacerse de la vista gorda = fingir que no vio algo, ignorar a propósito." },
+    { question: "¿Qué significa 'dar el avión'?", options: ["Regalar un boleto", "Ignorar a alguien dándole por su lado", "Pilotar una nave", "Estar en las nubes"], answer: 1, explanation: "Dar el avión = hacerle creer a alguien que le prestas atención sin realmente hacerlo." },
+    { question: "¿Qué quiere decir 'tener mucha lana'?", options: ["Criar ovejas", "Tener mucho dinero", "Tener mucho pelo", "Tener calor"], answer: 1, explanation: "Tener lana = tener dinero. Lana es sinónimo coloquial de dinero en México." },
+    { question: "¿Qué significa 'echarle crema a los tacos'?", options: ["Cocinar bien", "Exagerar o presumir de más", "Ser buen cocinero", "Tener buen gusto"], answer: 1, explanation: "Echarle crema a sus tacos = exagerar los logros o cualidades propias." },
+    { question: "¿Qué quiere decir 'ser muy codo'?", options: ["Tener brazos fuertes", "Ser tacaño o avaro", "Ser fuerte", "Ser flexible"], answer: 1, explanation: "Ser codo = ser tacaño, no querer gastar dinero." },
+    { question: "¿Qué significa 'agarrar la onda'?", options: ["Surfear", "Entender la situación o el chiste", "Escuchar música", "Tomar el autobús"], answer: 1, explanation: "Agarrar la onda = entender, captar la idea o la situación." },
+    { question: "¿Qué quiere decir 'ir al cine a ver qué tranza'?", options: ["Ver películas", "Ir a ver qué pasa o qué hay", "Comprar palomitas", "Ir al teatro"], answer: 1, explanation: "Qué tranza = qué onda, qué pasa. Saludo informal o pregunta de situación." },
+    { question: "¿Qué significa 'echar un taco de ojo'?", options: ["Comer tacos con los ojos", "Mirar algo o alguien con gusto", "Llorar de hambre", "Parpadear rápido"], answer: 1, explanation: "Echar un taco de ojo = admirar visualmente algo o alguien atractivo." },
+    { question: "¿Qué quiere decir 'no manches'?", options: ["No ensucies", "Expresión de sorpresa o incredulidad", "No pintes", "No toques"], answer: 1, explanation: "No manches = exclamación de sorpresa. Versión suavizada de una expresión más fuerte." },
+    { question: "¿Qué significa 'chido'?", options: ["Frío", "Genial, cool, padre", "Raro", "Feo"], answer: 1, explanation: "Chido = algo bueno, genial, cool. De uso muy extendido entre jóvenes mexicanos." },
+    { question: "¿Qué quiere decir 'la neta'?", options: ["La meta", "La verdad", "La neta de pescar", "El destino"], answer: 1, explanation: "La neta = la verdad, lo auténtico. 'La neta del planeta' = la verdad absoluta." },
+    { question: "¿Qué significa 'echarse un coyotito'?", options: ["Adoptar un animal", "Tomar una siesta rápida", "Correr en el campo", "Aullar de noche"], answer: 1, explanation: "Echarse un coyotito = tomar una siesta breve, dormitar un rato." },
+    { question: "¿Qué quiere decir 'tener sangre de atole'?", options: ["Ser dulce", "Ser pasivo, no reaccionar ante nada", "Tener frío", "Estar enfermo"], answer: 1, explanation: "Tener sangre de atole = ser demasiado tranquilo, no alterarse por nada." },
+    { question: "¿Qué significa 'estar en la lona'?", options: ["Acampar", "Estar sin dinero o en mala situación", "Hacer ejercicio", "Dormir en el suelo"], answer: 1, explanation: "Estar en la lona = estar arruinado económicamente, sin recursos." },
+    { question: "¿Qué quiere decir 'salir con su domingo siete'?", options: ["Ir a misa", "Salir con algo inesperado, un embarazo", "Ganar la lotería", "Ir de compras"], answer: 1, explanation: "Salir con su domingo siete = resultar con un embarazo inesperado o una sorpresa desagradable." },
+    { question: "¿Qué significa 'caerle gordo a alguien'?", options: ["Engordar", "No caerle bien, resultarle molesto", "Caerse encima", "Ser pesado"], answer: 1, explanation: "Caerle gordo = no agradarle a alguien, resultar antipático." },
+    { question: "¿Qué quiere decir 'estar hasta las manitas'?", options: ["Tener las manos llenas", "Estar muy borracho", "Aplaudir mucho", "Estar cansado"], answer: 1, explanation: "Estar hasta las manitas = estar muy borracho, ebrio al extremo." },
+    { question: "¿Qué significa 'cantinflear'?", options: ["Cantar bonito", "Hablar mucho sin decir nada", "Actuar en películas", "Bailar chistoso"], answer: 1, explanation: "Cantinflear = hablar mucho sin decir nada concreto. Viene del comediante Cantinflas." },
+    { question: "¿Qué quiere decir 'no seas rajón'?", options: ["No cortes nada", "No te eches para atrás", "No seas violento", "No seas flojo"], answer: 1, explanation: "Rajón = quien se raja, se echa para atrás. 'No seas rajón' = cumple tu palabra." },
+    { question: "¿Qué significa 'vale madres'?", options: ["Es muy valioso", "No importa nada", "Es para madres", "Es caro"], answer: 1, explanation: "Vale madres = no importa, no tiene valor, da igual. Muy coloquial y directo." },
+    { question: "¿Qué quiere decir 'hacer de chivo los tamales'?", options: ["Cocinar mal", "Engañar a la pareja, ser infiel", "Criar animales", "Hacer comida"], answer: 1, explanation: "Hacer de chivo los tamales = ponerle los cuernos a alguien, ser infiel." },
+    { question: "¿Qué significa 'ya merito'?", options: ["Ya mero, casi", "Ya pasó", "Ya no importa", "Ya comí"], answer: 0, explanation: "Ya merito = ya casi, falta poquito. Expresión de cercanía temporal." },
 ];
 
 const QUESTIONS_PER_GAME = 5;
@@ -65,6 +108,10 @@ function scoreMsg(n, total) {
 }
 
 export default function DueloAlburesScreen({ navigation }) {
+    // BGM — minigame track
+    useEffect(() => { playBGM("minigame"); return () => { stopBGM(); playBGM("menu"); }; }, []);
+
+    const insets = useSafeAreaInsets();
     const { userId } = useAuth();
     const [questions, setQuestions] = useState(() => pickRandomQuestions());
     const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -104,12 +151,12 @@ export default function DueloAlburesScreen({ navigation }) {
     };
 
     return (
-        <ImageBackground source={require("../../assets/images/bg.png")} style={styles.root} resizeMode="cover">
+        <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.root} resizeMode="cover">
             <View style={styles.darkOverlay} />
 
             {/* ── Quiz en progreso ── */}
             {!showResult && (
-                <View style={styles.cardOverlay}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
                     <View style={styles.card}>
                         <View style={styles.questionHeader}>
                             <Text style={styles.questionProgress}>Pregunta {currentQuestion + 1} de {questions.length}</Text>
@@ -155,7 +202,7 @@ export default function DueloAlburesScreen({ navigation }) {
 
             {/* ── Resultado + leaderboard ── */}
             {showResult && (
-                <View style={styles.cardOverlay}>
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
                     <View style={styles.card}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingBottom: 8 }}>
                             <Text style={styles.cardBigEmoji}>💬</Text>

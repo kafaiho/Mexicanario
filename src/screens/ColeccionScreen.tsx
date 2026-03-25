@@ -4,16 +4,17 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  FlatList,
   Image,
   ImageBackground,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
@@ -31,25 +32,25 @@ const WHEAT = "#FFE4B5";
 // ── Imágenes AI por colección ─────────────────────────────────────────────────
 // Mapea tanto nombres canónicos como cortos para máxima compatibilidad
 const _IMG = {
-  expresiones:    require("../../assets/images/collections/expresiones.png"),
-  comida:         require("../../assets/images/collections/comida.png"),
-  juegos:         require("../../assets/images/collections/juegos.png"),
-  bebida:         require("../../assets/images/collections/bebida.png"),
-  refranes:       require("../../assets/images/collections/refranes.png"),
-  animales:       require("../../assets/images/collections/animales.png"),
-  plantas:        require("../../assets/images/collections/plantas.png"),
-  tradiciones:    require("../../assets/images/collections/tradiciones.png"),
-  musica:         require("../../assets/images/collections/musica.png"),
-  historia:       require("../../assets/images/collections/historia.png"),
-  picaresca:      require("../../assets/images/collections/picaresca.png"),
-  cultura:        require("../../assets/images/collections/cultura_popular.png"),
-  monumentos:     require("../../assets/images/collections/monumentos.png"),
-  leyendas:       require("../../assets/images/collections/leyendas.png"),
-  digital:        require("../../assets/images/collections/mundo_digital.png"),
-  vida:           require("../../assets/images/collections/vida_cotidiana.png"),
-  remedios:       require("../../assets/images/collections/remedios.png"),
-  artesanias:     require("../../assets/images/collections/artesanias.png"),
-  deportes:       require("../../assets/images/collections/deportes.png"),
+  expresiones:    require("../../assets/images/collections/expresiones.webp"),
+  comida:         require("../../assets/images/collections/comida.webp"),
+  juegos:         require("../../assets/images/collections/juegos.webp"),
+  bebida:         require("../../assets/images/collections/bebida.webp"),
+  refranes:       require("../../assets/images/collections/refranes.webp"),
+  animales:       require("../../assets/images/collections/animales.webp"),
+  plantas:        require("../../assets/images/collections/plantas.webp"),
+  tradiciones:    require("../../assets/images/collections/tradiciones.webp"),
+  musica:         require("../../assets/images/collections/musica.webp"),
+  historia:       require("../../assets/images/collections/historia.webp"),
+  picaresca:      require("../../assets/images/collections/picaresca.webp"),
+  cultura:        require("../../assets/images/collections/cultura_popular.webp"),
+  monumentos:     require("../../assets/images/collections/monumentos.webp"),
+  leyendas:       require("../../assets/images/collections/leyendas.webp"),
+  digital:        require("../../assets/images/collections/mundo_digital.webp"),
+  vida:           require("../../assets/images/collections/vida_cotidiana.webp"),
+  remedios:       require("../../assets/images/collections/remedios.webp"),
+  artesanias:     require("../../assets/images/collections/artesanias.webp"),
+  deportes:       require("../../assets/images/collections/deportes.webp"),
 };
 const CATEGORY_IMAGE_MAP: Record<string, any> = {
   // Nombres canónicos completos
@@ -94,11 +95,6 @@ const CATEGORY_IMAGE_MAP: Record<string, any> = {
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
-
-// Compute TopBar clearance (mirrors TopBar.jsx sizing formula)
-const TOP_SAFE = Platform.OS === "ios" ? Math.max(32, height * 0.058) : Math.max(20, height * 0.04);
-const TOP_BAR_H = TOP_SAFE + width * 0.025 + width * 0.075 + width * 0.025;
-const HEADER_TOP = Math.round(TOP_BAR_H + (TABLET_MODE ? 48 : 14));
 
 // Emoji referencial único por palabra mexicana
 const WORD_EMOJI_MAP: Record<string, string> = {
@@ -216,7 +212,7 @@ const WORD_EMOJI_MAP: Record<string, string> = {
   "pitaya": "🐉", "tejocote": "🍎", "chaya": "🥬",
   "peyote": "🌵", "árbol del tule": "🌳", "biznaga": "🌵",
   // ── TRADICIONES (nuevas) ──────────────────────────────────
-  "día de muertos": "💀", "posadas navideñas": "🌟", "guelaguetza": "💃",
+  "día de muertos": "💀", "posadas": "🌟", "guelaguetza": "💃",
   "quinceañera": "👗", "danza de los voladores": "🪂",
   "altar de muertos": "🕯️", "piñata de posada": "🪅",
   "rosca de reyes": "🍩", "cempasúchil": "🌼", "serenata": "🎶",
@@ -266,7 +262,51 @@ function getWordEmoji(word: string): string | null {
   return null;
 }
 
+// ── Memoized card to avoid re-render on every scroll ──────────────────────────
+const CollectionCard = React.memo(function CollectionCard({ category, index, onPress }: any) {
+  const totalWords = category.total ?? category.words?.length ?? 0;
+  const unlockedWords = category.completed ?? 0;
+  const pct = totalWords > 0 ? unlockedWords / totalWords : 0;
+  const img = CATEGORY_IMAGE_MAP[category.name] ?? null;
+  const isLocked = category.isUnlocked === false;
+
+  return (
+    <TouchableOpacity
+      key={index}
+      style={[styles.card, isLocked && styles.cardLocked]}
+      onPress={() => !isLocked && onPress(category)}
+      activeOpacity={isLocked ? 1 : 0.82}
+      disabled={isLocked}
+    >
+      <View style={[styles.iconSquare, isLocked && { borderColor: "rgba(139,69,19,0.15)" }]}>
+        {img ? (
+          <Image source={img} style={[styles.iconImage, isLocked && { opacity: 0.4 }]} resizeMode="cover" />
+        ) : (
+          <Text style={[styles.iconFallback, isLocked && { opacity: 0.4 }]}>{category.icon}</Text>
+        )}
+      </View>
+      <Text style={[styles.cardTitle, isLocked && { color: "#A0714F" }]} numberOfLines={2}>{category.name}</Text>
+      {isLocked ? (
+        <Text style={styles.lockText}>{"🔒 Nivel " + (category.unlockLevel ?? "?")}</Text>
+      ) : (
+        <>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(pct * 100)}%` as any }]} />
+          </View>
+          <Text style={styles.progressText}>{unlockedWords}/{totalWords}</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+});
+
 export default function ColeccionScreen() {
+  const insets = useSafeAreaInsets();
+  // TopBar uses its own topPad (~32px Android) regardless of insets, so we must clear it
+  const topBarPad = Math.max(20, height * 0.04);
+  const HEADER_TOP = Math.round(
+    Math.max(insets.top, topBarPad) + width * 0.075 + width * 0.025 + (TABLET_MODE ? 48 : 18)
+  );
   const { userId } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showLotteryModal, setShowLotteryModal] = useState(false);
@@ -296,22 +336,39 @@ export default function ColeccionScreen() {
     return !!lvl.isCompleted;
   };
 
-  // ── Palabras agrupadas alfabéticamente ────────────────────────────────────
-  const groupedWords = useMemo(() => {
+  // ── Datos aplanados para FlatList (header | row de hasta 3 cards) ─────────
+  const flatModalData = useMemo(() => {
     if (!selectedCategory) return [];
-    const sorted = [...(selectedCategory.words ?? selectedCategory.levels ?? [])].sort((a: any, b: any) =>
-      a.word.localeCompare(b.word, 'es', { sensitivity: 'base' })
-    );
-    const groups: Array<{ letter: string; words: any[] }> = [];
-    for (const lvl of sorted) {
-      const letter = lvl.word[0]?.toUpperCase() ?? '#';
-      if (groups.length === 0 || groups[groups.length - 1].letter !== letter) {
-        groups.push({ letter, words: [lvl] });
-      } else {
-        groups[groups.length - 1].words.push(lvl);
+    const words = [...(selectedCategory.words ?? selectedCategory.levels ?? [])]
+      .filter((w: any) => w?.word)
+      .sort((a: any, b: any) =>
+        (a.word ?? '').localeCompare(b.word ?? '', 'es', { sensitivity: 'base' })
+      );
+
+    const result: Array<{ type: 'header'; letter: string; id: string } | { type: 'row'; words: any[]; id: string }> = [];
+    let currentLetter = '';
+    let rowBuffer: any[] = [];
+
+    const flushRow = () => {
+      if (rowBuffer.length > 0) {
+        result.push({ type: 'row', words: [...rowBuffer], id: `row-${result.length}` });
+        rowBuffer = [];
       }
+    };
+
+    for (const lvl of words) {
+      const raw = lvl.word[0]?.toUpperCase() ?? '#';
+      const letter = raw === 'Ñ' ? 'Ñ' : raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (letter !== currentLetter) {
+        flushRow();
+        currentLetter = letter;
+        result.push({ type: 'header', letter, id: `hdr-${letter}` });
+      }
+      rowBuffer.push(lvl);
+      if (rowBuffer.length === 3) flushRow();
     }
-    return groups;
+    flushRow();
+    return result;
   }, [selectedCategory]);
 
   // ── Indicador de letra flotante mientras scrolleas ────────────────────────
@@ -360,7 +417,7 @@ export default function ColeccionScreen() {
 
   if (!collectionData || !user) {
     return (
-      <ImageBackground source={require("../../assets/images/bg.png")} style={[styles.container, { alignItems: "center", justifyContent: "center" }]} resizeMode="cover">
+      <ImageBackground source={require("../../assets/images/bg.webp")} style={[styles.container, { alignItems: "center", justifyContent: "center" }]} resizeMode="cover">
         {loadingError ? (
           <View style={{ alignItems: 'center', padding: 20, backgroundColor: WHEAT, borderRadius: 20, borderWidth: 2, borderColor: "rgba(139,69,19,0.35)" }}>
             <Text style={{ fontFamily: FONTS.bodyBold, fontSize: 17, marginBottom: 15, color: BROWN }}>
@@ -382,59 +439,17 @@ export default function ColeccionScreen() {
     );
   }
 
-  const CollectionCard = (category: any, index: number) => {
-    const totalWords = category.total ?? category.words?.length ?? 0;
-    const unlockedWords = category.completed ?? 0;
-    const pct = totalWords > 0 ? unlockedWords / totalWords : 0;
-    const img = CATEGORY_IMAGE_MAP[category.name] ?? null;
-    const isLocked = category.isUnlocked === false;
-
-    return (
-      <TouchableOpacity
-        key={index}
-        style={[styles.card, isLocked && styles.cardLocked]}
-        onPress={() => !isLocked && onCardPress(category)}
-        activeOpacity={isLocked ? 1 : 0.82}
-        disabled={isLocked}
-      >
-        {/* Icono cuadrado AI — estilo Mexicanómetro */}
-        <View style={[styles.iconSquare, isLocked && { borderColor: "rgba(139,69,19,0.15)" }]}>
-          {img ? (
-            <Image source={img} style={[styles.iconImage, isLocked && { opacity: 0.4 }]} resizeMode="cover" />
-          ) : (
-            <Text style={[styles.iconFallback, isLocked && { opacity: 0.4 }]}>{category.icon}</Text>
-          )}
-        </View>
-
-        {/* Nombre */}
-        <Text style={[styles.cardTitle, isLocked && { color: "#A0714F" }]} numberOfLines={2}>{category.name}</Text>
-
-        {isLocked ? (
-          /* Locked: show unlock level */
-          <Text style={styles.lockText}>{"🔒 Nivel " + (category.unlockLevel ?? "?")}</Text>
-        ) : (
-          /* Unlocked: progress bar */
-          <>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.round(pct * 100)}%` as any }]} />
-            </View>
-            <Text style={styles.progressText}>{unlockedWords}/{totalWords}</Text>
-          </>
-        )}
-      </TouchableOpacity>
-    );
-  };
 
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.container}
       resizeMode="cover"
     >
       <TopBar navigation={() => { }} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { marginTop: HEADER_TOP }]}>
         <Text style={styles.headerTitle}>Colección</Text>
       </View>
 
@@ -445,7 +460,9 @@ export default function ColeccionScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.gridContainer}>
-          {collectionData.map((category, index) => CollectionCard(category, index))}
+          {collectionData.map((category, index) => (
+            <CollectionCard key={category.name} category={category} index={index} onPress={onCardPress} />
+          ))}
         </View>
       </ScrollView>
 
@@ -471,26 +488,35 @@ export default function ColeccionScreen() {
                   </Animated.View>
                 ) : null}
 
-                <ScrollView
+                <FlatList
+                  data={flatModalData}
+                  keyExtractor={(item: any) => item.id}
+                  initialNumToRender={12}
+                  maxToRenderPerBatch={8}
+                  windowSize={5}
+                  removeClippedSubviews={true}
                   contentContainerStyle={{ paddingBottom: 10 }}
                   showsVerticalScrollIndicator={false}
                   onScroll={handleModalScroll}
                   scrollEventThrottle={16}
-                >
-                  {groupedWords.map(({ letter, words }) => (
-                    <View
-                      key={letter}
-                      onLayout={(e) => { letterYPositions.current[letter] = e.nativeEvent.layout.y; }}
-                    >
-                      {/* Header de letra */}
-                      <View style={styles.letterHeader}>
-                        <Text style={styles.letterHeaderText}>{letter}</Text>
-                        <View style={styles.letterHeaderLine} />
-                      </View>
-
-                      {/* Grid de palabras de esta letra */}
+                  renderItem={({ item }: any) => {
+                    if (item.type === 'header') {
+                      return (
+                        <View
+                          onLayout={(e) => { letterYPositions.current[item.letter] = e.nativeEvent.layout.y; }}
+                        >
+                          <View style={styles.letterHeader}>
+                            <Text style={styles.letterHeaderText}>{item.letter}</Text>
+                            <View style={styles.letterHeaderLine} />
+                          </View>
+                        </View>
+                      );
+                    }
+                    // Row of up to 3 word cards
+                    return (
                       <View style={styles.lotteryGrid}>
-                        {words.map((lvl) => {
+                        {item.words.map((lvl: any) => {
+                          if (!lvl?.word) return null;
                           const unlocked = isWordUnlocked(lvl);
                           let starsCount = 1;
                           if (lvl.word.length > 6) starsCount = 2;
@@ -502,7 +528,7 @@ export default function ColeccionScreen() {
                             return (
                               <View key={`${lvl.levelNumber}-${lvl.word}`} style={[styles.lotteryCard, styles.collectedCard]}>
                                 <View style={styles.starsContainer}>
-                                  {stars.map((_, i) => <Text key={i} style={styles.yellowStar}>★</Text>)}
+                                  {stars.map((_: any, i: number) => <Text key={i} style={styles.yellowStar}>★</Text>)}
                                 </View>
                                 <View style={[styles.collectedInner, { backgroundColor: bgColor }]}>
                                   <Text style={{ fontSize: width * 0.1 }}>
@@ -515,14 +541,13 @@ export default function ColeccionScreen() {
                               </View>
                             );
                           } else {
-                            // Muestra cuántas letras tiene la palabra como pista (tipo Wordle)
                             const dots = lvl.word.replace(/\s+/g, ' ').trim().split('').map(
-                              (c) => c === ' ' ? '  ' : '·'
+                              (c: string) => c === ' ' ? '  ' : '·'
                             ).join(' ');
                             return (
                               <View key={`${lvl.levelNumber}-${lvl.word}`} style={[styles.lotteryCard, styles.uncollectedCard]}>
                                 <View style={styles.starsContainer}>
-                                  {stars.map((_, i) => <Text key={i} style={styles.greyStar}>★</Text>)}
+                                  {stars.map((_: any, i: number) => <Text key={i} style={styles.greyStar}>★</Text>)}
                                 </View>
                                 <View style={styles.uncollectedInner}>
                                   <Text style={styles.lockIcon}>🔒</Text>
@@ -533,9 +558,9 @@ export default function ColeccionScreen() {
                           }
                         })}
                       </View>
-                    </View>
-                  ))}
-                </ScrollView>
+                    );
+                  }}
+                />
               </View>
             </View>
 
@@ -555,7 +580,6 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginTop: HEADER_TOP,
     marginBottom: height * 0.01,
     backgroundColor: WHEAT,
     marginHorizontal: width * 0.04,

@@ -11,10 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { notifyError, notifySuccess, tapLight } from "../services/haptics";
-import { playSound } from "../utils/soundManager";
+import { playBGM, playSound, stopBGM } from "../utils/soundManager";
 
 const { width, height } = Dimensions.get("window");
 
@@ -65,7 +66,11 @@ function scoreMsg(n) {
 }
 
 export default function CorreNahualScreen({ navigation }) {
+  // BGM — minigame track
+  useEffect(() => { playBGM("minigame"); return () => { stopBGM(); playBGM("menu"); }; }, []);
+
   const { userId } = useAuth();
+  const insets = useSafeAreaInsets();
   const [gameState,    setGameState]    = useState(S_MENU);
   const [displayScore, setDisplayScore] = useState(0);
   const [tab,          setTab]          = useState("daily");
@@ -86,7 +91,7 @@ export default function CorreNahualScreen({ navigation }) {
   const isPlayingRef   = useRef(false);
   const isJumpingRef   = useRef(false);
   const obsAnimRef     = useRef(null);
-  const collisionTimer = useRef(null);
+  const collisionRaf   = useRef(null);
 
   // ── Animated values ───────────────────────────────────────────────────────
   const charY      = useRef(new Animated.Value(0)).current;
@@ -146,7 +151,7 @@ export default function CorreNahualScreen({ navigation }) {
     isPlayingRef.current = false;
     obsAnimRef.current?.stop();
     charY.stopAnimation();
-    clearInterval(collisionTimer.current);
+    cancelAnimationFrame(collisionRaf.current);
     playSound("wrong");
     notifyError();
 
@@ -181,13 +186,13 @@ export default function CorreNahualScreen({ navigation }) {
     launchObstacle();
   }, []);
 
-  // ── Colisiones ────────────────────────────────────────────────────────────
+  // ── Colisiones (rAF synced con display refresh) ──────────────────────────
   useEffect(() => {
     if (gameState !== S_PLAYING) {
-      clearInterval(collisionTimer.current);
+      cancelAnimationFrame(collisionRaf.current);
       return;
     }
-    collisionTimer.current = setInterval(() => {
+    const checkCollision = () => {
       if (!isPlayingRef.current) return;
       const cy = charY._value;
       const ox = obsX._value;
@@ -200,22 +205,24 @@ export default function CorreNahualScreen({ navigation }) {
       const hitX = pRight > oLeft && pLeft < oRight;
       const hitY = cy > -(OBS_SIZE * 0.55);
 
-      if (hitX && hitY) triggerGameOver();
-    }, 16);
-    return () => clearInterval(collisionTimer.current);
+      if (hitX && hitY) { triggerGameOver(); return; }
+      collisionRaf.current = requestAnimationFrame(checkCollision);
+    };
+    collisionRaf.current = requestAnimationFrame(checkCollision);
+    return () => cancelAnimationFrame(collisionRaf.current);
   }, [gameState]);
 
   // Cleanup al desmontar
   useEffect(() => () => {
     isPlayingRef.current = false;
     obsAnimRef.current?.stop();
-    clearInterval(collisionTimer.current);
+    cancelAnimationFrame(collisionRaf.current);
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.root}
       resizeMode="cover"
     >
@@ -256,11 +263,11 @@ export default function CorreNahualScreen({ navigation }) {
       {/* HUD en juego */}
       {gameState === S_PLAYING && (
         <>
-          <Animated.View style={[styles.scorePill, { transform: [{ scale: scoreScale }] }]}>
+          <Animated.View style={[styles.scorePill, { top: insets.top + 12 }, { transform: [{ scale: scoreScale }] }]}>
             <Text style={styles.scorePillText}>🌮 {displayScore}</Text>
           </Animated.View>
           <TouchableOpacity
-            style={styles.exitBtn}
+            style={[styles.exitBtn, { top: insets.top + 12 }]}
             onPress={() => { isPlayingRef.current = false; obsAnimRef.current?.stop(); navigation.goBack(); }}
           >
             <Text style={styles.exitBtnText}>✕</Text>
@@ -273,7 +280,7 @@ export default function CorreNahualScreen({ navigation }) {
 
       {/* ── Tarjeta menú ──────────────────────────────────────────── */}
       {gameState === S_MENU && (
-        <View style={styles.cardOverlay}>
+        <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
           <View style={styles.card}>
             <Text style={styles.cardBigEmoji}>👹</Text>
             <Text style={styles.cardTitle}>¡Corre del Nahual!</Text>
@@ -310,7 +317,7 @@ export default function CorreNahualScreen({ navigation }) {
 
       {/* ── Game over con leaderboard ─────────────────────────────── */}
       {gameState === S_OVER && (
-        <View style={styles.cardOverlay}>
+        <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
           <View style={styles.card}>
             <ScrollView
               showsVerticalScrollIndicator={false}
@@ -430,7 +437,6 @@ const styles = StyleSheet.create({
   // HUD
   scorePill: {
     position: "absolute",
-    top: 54,
     left: 18,
     backgroundColor: WHEAT,
     borderRadius: 20,
@@ -442,7 +448,6 @@ const styles = StyleSheet.create({
   scorePillText: { color: BROWN, fontWeight: "900", fontSize: width * 0.048 },
   exitBtn: {
     position: "absolute",
-    top: 54,
     right: 18,
     backgroundColor: "rgba(192,57,43,0.9)",
     width: 36,

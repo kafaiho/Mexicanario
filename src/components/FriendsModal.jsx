@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
+import FriendCompareCard from "./FriendCompareCard";
+import ChallengesModal from "./ChallengesModal";
 import { FONTS } from "../theme/designTokens";
 
 const { width, height } = Dimensions.get("window");
@@ -27,7 +29,7 @@ const WHEAT2 = "#F5DEB3";
 const GREEN = "#27AE60";
 const RED = "#C0392B";
 
-export default function FriendsModal({ visible, onClose, onOpenProfile }) {
+export default function FriendsModal({ visible, onClose, onOpenProfile, navigation }) {
   const { userId, user } = useAuth();
   const [tab, setTab] = useState("list");  // "list" | "add" | "rank"
 
@@ -37,6 +39,16 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
 
   // Perfil Seleccionado
   const [selectedProfileId, setSelectedProfileId] = useState(null);
+
+  // Retos
+  const [showChallenges, setShowChallenges] = useState(false);
+  const [acceptingChallenge, setAcceptingChallenge] = useState(false);
+  const pendingChallenges = useQuery(
+    api.friends.getMyPendingChallenges,
+    userId ? { userId } : "skip"
+  );
+  const challengeCount = pendingChallenges?.length ?? 0;
+  const acceptChallengeMut = useMutation(api.friends.acceptChallenge);
 
   // Username setup (para usuarios de Google/Apple sin username)
   const [usernameInput, setUsernameInput] = useState("");
@@ -76,9 +88,18 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
     selectedProfileId ? { targetId: selectedProfileId } : "skip"
   );
 
+  // Solicitudes pendientes
+  const pendingRequests = useQuery(
+    api.friends.getPendingRequests,
+    userId ? { userId } : "skip"
+  );
+  const pendingCount = pendingRequests?.length ?? 0;
+
   // Mutations
   const addFriend = useMutation(api.friends.addFriend);
   const removeFriend = useMutation(api.friends.removeFriend);
+  const acceptRequest = useMutation(api.friends.acceptFriendRequest);
+  const declineRequest = useMutation(api.friends.declineFriendRequest);
   const setUsernameMutation = useMutation(api.friends.setUsername);
 
   // IDs de cuates actuales para comparar rápido
@@ -114,7 +135,12 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
   async function handleAdd(friendId) {
     setBusyId(String(friendId));
     try {
-      await addFriend({ userId, friendId });
+      const res = await addFriend({ userId, friendId });
+      if (res?.status === "auto_accepted" || res?.status === "accepted") {
+        Alert.alert("¡Órale!", "¡Ya son cuates! 🤝");
+      } else if (res?.status !== "already_friends") {
+        Alert.alert("Solicitud enviada", "Cuando la acepte, serán cuates. 🌮");
+      }
     } catch (e) {
       Alert.alert("¡Aguas!", e.message ?? "No se pudo agregar");
     } finally {
@@ -135,6 +161,38 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
             setBusyId(String(friendId));
             try {
               await removeFriend({ userId, friendId });
+            } catch { }
+            finally { setBusyId(null); }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleAccept(requesterId) {
+    setBusyId(String(requesterId));
+    try {
+      await acceptRequest({ userId, requesterId });
+    } catch (e) {
+      Alert.alert("¡Aguas!", e.message ?? "No se pudo aceptar");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDecline(requesterId, name) {
+    Alert.alert(
+      "Rechazar solicitud",
+      `¿Seguro que quieres rechazar a ${name}?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Rechazar",
+          style: "destructive",
+          onPress: async () => {
+            setBusyId(String(requesterId));
+            try {
+              await declineRequest({ userId, requesterId });
             } catch { }
             finally { setBusyId(null); }
           },
@@ -182,6 +240,18 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
           <View style={s.header}>
             <Text style={s.headerEmoji}>🤝</Text>
             <Text style={s.headerTitle}>Mis cuates</Text>
+            <TouchableOpacity
+              style={s.retosBtn}
+              onPress={() => setShowChallenges(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={s.retosBtnText}>⚔️ Retos</Text>
+              {challengeCount > 0 && (
+                <View style={s.retosBadge}>
+                  <Text style={s.retosBadgeText}>{challengeCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity style={s.closeBtn} onPress={handleClose}>
               <Text style={s.closeBtnText}>✕</Text>
             </TouchableOpacity>
@@ -258,6 +328,20 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
                       <Text style={s.miniBoxLabel}>Lotería</Text>
                     </View>
                   </View>
+
+                  {/* Comparación side-by-side */}
+                  {selectedProfileId !== userId && friendIds.has(selectedProfileId) && (
+                    <FriendCompareCard
+                      userId={userId}
+                      friendId={selectedProfileId}
+                      onChallenge={() => {
+                        onClose();
+                        if (navigation) {
+                          navigation.navigate("PvP", { friendInviteId: selectedProfileId });
+                        }
+                      }}
+                    />
+                  )}
 
                   {/* Acciones */}
                   {selectedProfileId !== userId && (
@@ -340,11 +424,26 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={[s.tabBtn, tab === "requests" && s.tabActive]}
+                  onPress={() => setTab("requests")}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={[s.tabText, tab === "requests" && s.tabTextActive]}>
+                      📩 Solicitudes
+                    </Text>
+                    {pendingCount > 0 && (
+                      <View style={s.pendingBadge}>
+                        <Text style={s.pendingBadgeText}>{pendingCount}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[s.tabBtn, tab === "rank" && s.tabActive]}
                   onPress={() => setTab("rank")}
                 >
                   <Text style={[s.tabText, tab === "rank" && s.tabTextActive]}>
-                    🏆 Ranking
+                    🏆
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -352,7 +451,7 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
                   onPress={() => setTab("add")}
                 >
                   <Text style={[s.tabText, tab === "add" && s.tabTextActive]}>
-                    ➕ Agregar
+                    ➕
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -401,6 +500,62 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
                       </TouchableOpacity>
                     </View>
                   ))}
+                </ScrollView>
+              )}
+
+              {/* ── Tab: solicitudes pendientes ── */}
+              {tab === "requests" && (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                  {pendingRequests === undefined && (
+                    <ActivityIndicator color={AMBER} style={{ marginTop: 24 }} />
+                  )}
+                  {pendingCount === 0 && pendingRequests !== undefined && (
+                    <View style={s.emptyWrap}>
+                      <Text style={s.emptyEmoji}>📭</Text>
+                      <Text style={s.emptyTitle}>Sin solicitudes</Text>
+                      <Text style={s.emptyHint}>
+                        Cuando alguien te agregue como cuate, aparecerá aquí.
+                      </Text>
+                    </View>
+                  )}
+                  {pendingRequests?.map((req) => {
+                    const loading = busyId === String(req.requesterId);
+                    return (
+                      <View key={String(req.requesterId)} style={s.friendRow}>
+                        <View style={s.avatar}>
+                          <Text style={s.avatarText}>{avatarOf(req.avatar)}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{ flex: 1 }}
+                          onPress={() => setSelectedProfileId(String(req.requesterId))}
+                        >
+                          {req.username && (
+                            <Text style={s.username}>@{req.username}</Text>
+                          )}
+                          <Text style={s.name}>{req.name}</Text>
+                        </TouchableOpacity>
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          <TouchableOpacity
+                            style={s.acceptBtn}
+                            onPress={() => handleAccept(req.requesterId)}
+                            disabled={loading}
+                          >
+                            {loading
+                              ? <ActivityIndicator color={BROWN} size="small" />
+                              : <Text style={s.acceptBtnText}>✓</Text>
+                            }
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={s.declineBtn}
+                            onPress={() => handleDecline(req.requesterId, req.name)}
+                            disabled={loading}
+                          >
+                            <Text style={s.declineBtnText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </ScrollView>
               )}
 
@@ -519,6 +674,48 @@ export default function FriendsModal({ visible, onClose, onOpenProfile }) {
           )}
         </View>
       </View>
+
+      <ChallengesModal
+        visible={showChallenges}
+        onClose={() => setShowChallenges(false)}
+        onPlayChallenge={async (challenge) => {
+          if (acceptingChallenge) return;
+          setShowChallenges(false);
+          Alert.alert(
+            "Reto de " + challenge.challengerName,
+            `Adivina la palabra "${challenge.word}" para ganar ${challenge.betCoins * 2} monedas.\n\nNecesitas ${challenge.betCoins} monedas para aceptar.`,
+            [
+              { text: "Después", style: "cancel" },
+              { text: "¡Vamos!", onPress: async () => {
+                try {
+                  setAcceptingChallenge(true);
+                  const result = await acceptChallengeMut({
+                    challengeId: challenge.challengeId,
+                    userId,
+                  });
+                  if (result.expired) {
+                    Alert.alert("Reto expirado", "Este reto ya expiró. Las monedas fueron devueltas.");
+                    return;
+                  }
+                  // Close modals and navigate to challenge gameplay
+                  onClose();
+                  if (navigation) {
+                    navigation.navigate("Gameplay", {
+                      challengeMode: true,
+                      challengeId: challenge.challengeId,
+                      challengeWord: result.wordData,
+                    });
+                  }
+                } catch (e) {
+                  Alert.alert("Error", e?.message ?? "No se pudo aceptar el reto.");
+                } finally {
+                  setAcceptingChallenge(false);
+                }
+              }},
+            ]
+          );
+        }}
+      />
     </Modal>
   );
 }
@@ -559,6 +756,34 @@ const s = StyleSheet.create({
     fontFamily: FONTS.display,
     fontSize: width * 0.052,
     color: BROWN,
+  },
+  retosBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(210,105,30,0.12)",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  retosBtnText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: width * 0.028,
+    color: AMBER,
+  },
+  retosBadge: {
+    backgroundColor: RED,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  retosBadgeText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: 10,
+    color: "#FFF",
   },
   closeBtn: {
     width: 32,
@@ -689,6 +914,43 @@ const s = StyleSheet.create({
     borderColor: GREEN + "55",
   },
   alreadyText: { fontFamily: FONTS.bodyBold, color: GREEN, fontSize: width * 0.026 },
+
+  // Solicitudes
+  pendingBadge: {
+    backgroundColor: RED,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  pendingBadgeText: {
+    color: "#fff",
+    fontFamily: FONTS.bodyBold,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  acceptBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: GREEN,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  acceptBtnText: { color: "#fff", fontWeight: "900", fontSize: 16 },
+  declineBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: RED + "22",
+    borderWidth: 1,
+    borderColor: RED + "55",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  declineBtnText: { color: RED, fontWeight: "900", fontSize: 14 },
 
   // Ranking rows
   rankRow: {

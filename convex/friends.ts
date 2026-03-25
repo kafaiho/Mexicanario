@@ -291,37 +291,219 @@ export const searchUsers = query({
   },
 });
 
-// ── Agregar cuate ─────────────────────────────────────────────────────────────
+// ── Agregar cuate (bidireccional) ──────────────────────────────────────────────
+// Si el otro ya te envió solicitud → auto-acepta ambas direcciones.
+// Si no → crea solicitud pendiente.
 export const addFriend = mutation({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
-    if (userId === friendId) throw new ConvexError("No puedes agregarte a ti mismo 😅");
+    if (userId === friendId) throw new ConvexError("No puedes agregarte a ti mismo");
 
-    // Verificar que no exista ya
-    const exists = await ctx.db
+    // Verificar que no exista ya (A→B)
+    const existingAB = await ctx.db
       .query("friendships")
       .withIndex("by_user_friend", (q) =>
         q.eq("userId", userId).eq("friendId", friendId)
       )
       .first();
-    if (exists) return { success: true }; // ya estaba
 
-    await ctx.db.insert("friendships", { userId, friendId, createdAt: Date.now() });
+    if (existingAB) {
+      // Already friends or pending — if pending, keep as-is
+      if (!existingAB.status || existingAB.status === "accepted") {
+        return { success: true, status: "already_friends" };
+      }
+      // If declined, allow re-request
+      if (existingAB.status === "declined") {
+        await ctx.db.patch(existingAB._id, { status: "pending", createdAt: Date.now() });
+        return { success: true, status: "re_requested" };
+      }
+      return { success: true, status: "pending" };
+    }
+
+    // Check if the other person already sent us a request (B→A)
+    const existingBA = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", friendId).eq("friendId", userId)
+      )
+      .first();
+
+    const now = Date.now();
+
+    if (existingBA && existingBA.status === "pending") {
+      // Auto-accept: B already wants to be friends with A
+      await ctx.db.patch(existingBA._id, { status: "accepted" });
+      // Create reverse direction (A→B accepted)
+      await ctx.db.insert("friendships", {
+        userId,
+        friendId,
+        status: "accepted",
+        createdAt: now,
+      });
+      return { success: true, status: "auto_accepted" };
+    }
+
+    if (existingBA && (!existingBA.status || existingBA.status === "accepted")) {
+      // They already have us as friend — just create reverse
+      await ctx.db.insert("friendships", {
+        userId,
+        friendId,
+        status: "accepted",
+        createdAt: now,
+      });
+      return { success: true, status: "accepted" };
+    }
+
+    // No existing relationship → create pending request
+    await ctx.db.insert("friendships", {
+      userId,
+      friendId,
+      status: "pending",
+      createdAt: now,
+    });
+
+    // Notificar al destinatario: "alguien quiere ser tu cuate"
+    const sender = await ctx.db.get(userId);
+    await ctx.db.insert("friendNotifications", {
+      userId: friendId,  // quien recibe la notificación
+      type: "request",
+      fromUserId: userId,
+      fromUsername: sender?.username ?? undefined,
+      fromName: sender?.name ?? "Alguien",
+      read: false,
+      createdAt: now,
+    });
+
+    return { success: true, status: "pending" };
+  },
+});
+
+// ── Aceptar solicitud de cuate ──────────────────────────────────────────────
+export const acceptFriendRequest = mutation({
+  args: { userId: v.id("users"), requesterId: v.id("users") },
+  handler: async (ctx, { userId, requesterId }) => {
+    // Find the pending request (requester→userId)
+    const request = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", requesterId).eq("friendId", userId)
+      )
+      .first();
+
+    if (!request || request.status !== "pending") {
+      throw new ConvexError("No hay solicitud pendiente de este cuate.");
+    }
+
+    const now = Date.now();
+
+    // Accept the request
+    await ctx.db.patch(request._id, { status: "accepted" });
+
+    // Create reverse direction (userId→requesterId)
+    const reverseExists = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", userId).eq("friendId", requesterId)
+      )
+      .first();
+
+    if (!reverseExists) {
+      await ctx.db.insert("friendships", {
+        userId,
+        friendId: requesterId,
+        status: "accepted",
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch(reverseExists._id, { status: "accepted" });
+    }
+
+    // Notificar al que envió la solicitud: "te aceptaron"
+    const accepter = await ctx.db.get(userId);
+    await ctx.db.insert("friendNotifications", {
+      userId: requesterId,  // quien recibe la notificación
+      type: "accepted",
+      fromUserId: userId,
+      fromUsername: accepter?.username ?? undefined,
+      fromName: accepter?.name ?? "Alguien",
+      read: false,
+      createdAt: now,
+    });
+
     return { success: true };
   },
 });
 
-// ── Quitar cuate ──────────────────────────────────────────────────────────────
+// ── Rechazar solicitud de cuate ─────────────────────────────────────────────
+export const declineFriendRequest = mutation({
+  args: { userId: v.id("users"), requesterId: v.id("users") },
+  handler: async (ctx, { userId, requesterId }) => {
+    const request = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", requesterId).eq("friendId", userId)
+      )
+      .first();
+
+    if (!request || request.status !== "pending") {
+      throw new ConvexError("No hay solicitud pendiente de este cuate.");
+    }
+
+    await ctx.db.patch(request._id, { status: "declined" });
+    return { success: true };
+  },
+});
+
+// ── Solicitudes pendientes (entrantes) ──────────────────────────────────────
+export const getPendingRequests = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const pending = await ctx.db
+      .query("friendships")
+      .withIndex("by_friend_status", (q) =>
+        q.eq("friendId", userId).eq("status", "pending")
+      )
+      .collect();
+
+    const result = await Promise.all(
+      pending.map(async (f) => {
+        const u = await ctx.db.get(f.userId);
+        if (!u) return null;
+        return {
+          requesterId: f.userId,
+          username: u.username ?? null,
+          name: u.name,
+          avatar: u.avatar,
+          sentAt: f.createdAt,
+        };
+      })
+    );
+    return result.filter(Boolean);
+  },
+});
+
+// ── Quitar cuate (borra ambas direcciones) ──────────────────────────────────
 export const removeFriend = mutation({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
-    const rec = await ctx.db
+    // Delete A→B
+    const recAB = await ctx.db
       .query("friendships")
       .withIndex("by_user_friend", (q) =>
         q.eq("userId", userId).eq("friendId", friendId)
       )
       .first();
-    if (rec) await ctx.db.delete(rec._id);
+    if (recAB) await ctx.db.delete(recAB._id);
+
+    // Delete B→A
+    const recBA = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", friendId).eq("friendId", userId)
+      )
+      .first();
+    if (recBA) await ctx.db.delete(recBA._id);
+
     return { success: true };
   },
 });
@@ -360,7 +542,7 @@ export const getUserProfile = query({
   },
 });
 
-// ── Obtener mis cuates (con info de usuario) ──────────────────────────────────
+// ── Obtener mis cuates (solo aceptados) ──────────────────────────────────────
 export const getMyFriends = query({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
@@ -370,8 +552,13 @@ export const getMyFriends = query({
       .order("desc")
       .collect();
 
+    // Filter: accepted or null (legacy — pre-bidirectional records)
+    const accepted = friendships.filter(
+      (f) => !f.status || f.status === "accepted"
+    );
+
     const result = await Promise.all(
-      friendships.map(async (f) => {
+      accepted.map(async (f) => {
         const u = await ctx.db.get(f.friendId);
         if (!u) return null;
         return {
@@ -388,20 +575,69 @@ export const getMyFriends = query({
 });
 
 // ── Leaderboard de cuates (para tab Comparar) ────────────────────────────────
+// Soporta vista "alltime" (tacos) y "weekly" (XP semanal).
 export const getFriendsLeaderboard = query({
-  args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  args: {
+    userId: v.id("users"),
+    period: v.optional(v.string()),  // "alltime" | "weekly" — default "alltime"
+  },
+  handler: async (ctx, { userId, period }) => {
+    const mode = period ?? "alltime";
+
     const friendships = await ctx.db
       .query("friendships")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    // Include self
-    const selfUser = await ctx.db.get(userId);
-    const friendIds = friendships.map((f) => f.friendId);
+    // Only accepted/legacy friends
+    const accepted = friendships.filter(
+      (f) => !f.status || f.status === "accepted"
+    );
+    const friendIds = accepted.map((f) => f.friendId);
+    const allIds = [...friendIds, userId];
 
+    if (mode === "weekly") {
+      // Get current week ID
+      const now = new Date();
+      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+      const cst = new Date(utc + (-6 * 60 * 60 * 1000));
+      const jan4 = new Date(cst.getFullYear(), 0, 4);
+      const dayOfYear = Math.floor((cst.getTime() - jan4.getTime()) / 86400000) + 4;
+      const weekNum = Math.ceil(dayOfYear / 7);
+      const weekId = `${cst.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+
+      // Batch fetch weekly scores + user data
+      const entries = await Promise.all(
+        allIds.map(async (id) => {
+          const score = await ctx.db
+            .query("weeklyFriendScores")
+            .withIndex("by_user_week", (q) => q.eq("userId", id).eq("weekId", weekId))
+            .first();
+          const u = await ctx.db.get(id);
+          if (!u) return null;
+          return {
+            userId: u._id as string,
+            username: u.username ?? null,
+            name: u.name ?? null,
+            avatar: u.avatar ?? null,
+            xpThisWeek: score?.xpThisWeek ?? 0,
+            wordsThisWeek: score?.wordsThisWeek ?? 0,
+            bestComboThisWeek: score?.bestComboThisWeek ?? 0,
+            tacos: u.tacos ?? 0,
+            eloRating: u.eloRating ?? null,
+            isSelf: u._id === userId,
+          };
+        })
+      );
+
+      return entries
+        .filter(Boolean)
+        .sort((a: any, b: any) => b.xpThisWeek - a.xpThisWeek);
+    }
+
+    // All-time mode (by tacos)
     const users = await Promise.all(
-      [...friendIds, userId].map((id) => ctx.db.get(id))
+      allIds.map((id) => ctx.db.get(id))
     );
 
     return users
@@ -413,13 +649,17 @@ export const getFriendsLeaderboard = query({
         avatar: u!.avatar ?? null,
         tacos: u!.tacos ?? 0,
         coins: u!.coins ?? 0,
+        xpThisWeek: 0,
+        wordsThisWeek: 0,
+        bestComboThisWeek: 0,
+        eloRating: u!.eloRating ?? null,
         isSelf: u!._id === userId,
       }))
       .sort((a, b) => b.tacos - a.tacos);
   },
 });
 
-// ── Comprobar si ya es cuate ──────────────────────────────────────────────────
+// ── Comprobar si ya es cuate (bidireccional) ─────────────────────────────────
 export const isFriend = query({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
@@ -429,7 +669,51 @@ export const isFriend = query({
         q.eq("userId", userId).eq("friendId", friendId)
       )
       .first();
-    return !!rec;
+    if (rec && (!rec.status || rec.status === "accepted")) return true;
+    // Check reverse
+    const rev = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", friendId).eq("friendId", userId)
+      )
+      .first();
+    return !!(rev && (!rev.status || rev.status === "accepted"));
+  },
+});
+
+// ── Migración: hacer bidireccionales las amistades legacy ───────────────────
+// Ejecutar una vez desde el Convex dashboard.
+export const migrateFriendshipsBidirectional = internalMutation({
+  handler: async (ctx) => {
+    const all = await ctx.db.query("friendships").collect();
+    let migrated = 0;
+
+    for (const f of all) {
+      // Mark legacy records as accepted if no status
+      if (!f.status) {
+        await ctx.db.patch(f._id, { status: "accepted" });
+      }
+
+      // Create reverse direction if missing
+      const reverse = await ctx.db
+        .query("friendships")
+        .withIndex("by_user_friend", (q) =>
+          q.eq("userId", f.friendId).eq("friendId", f.userId)
+        )
+        .first();
+
+      if (!reverse) {
+        await ctx.db.insert("friendships", {
+          userId: f.friendId,
+          friendId: f.userId,
+          status: "accepted",
+          createdAt: f.createdAt,
+        });
+        migrated++;
+      }
+    }
+
+    return { total: all.length, migratedNewRecords: migrated };
   },
 });
 
@@ -588,5 +872,367 @@ export const resetPassword = mutation({
     }
 
     return { success: true };
+  },
+});
+
+// ── Notificaciones de cuates ────────────────────────────────────────────────
+
+export const getUnreadFriendNotifications = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    return await ctx.db
+      .query("friendNotifications")
+      .withIndex("by_user_unread", (q) =>
+        q.eq("userId", userId).eq("read", false)
+      )
+      .order("desc")
+      .take(20);
+  },
+});
+
+export const markFriendNotificationsRead = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const unread = await ctx.db
+      .query("friendNotifications")
+      .withIndex("by_user_unread", (q) =>
+        q.eq("userId", userId).eq("read", false)
+      )
+      .collect();
+    for (const n of unread) {
+      await ctx.db.patch(n._id, { read: true });
+    }
+    return { marked: unread.length };
+  },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ═══  RETOS ENTRE CUATES  ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+
+const CHALLENGE_BET = 50;         // coins cada jugador apuesta
+const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+// ── Crear reto ─────────────────────────────────────────────────────────────
+export const createChallenge = mutation({
+  args: {
+    challengerId: v.id("users"),
+    challengedId: v.id("users"),
+    challengerAttempts: v.number(),
+    challengerTimeMs: v.number(),
+  },
+  handler: async (ctx, { challengerId, challengedId, challengerAttempts, challengerTimeMs }) => {
+    const now = Date.now();
+
+    // Verify friendship
+    const friendship = await ctx.db
+      .query("friendships")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", challengerId).eq("friendId", challengedId)
+      )
+      .first();
+    if (!friendship || (friendship.status !== "accepted" && friendship.status !== null)) {
+      throw new ConvexError("Solo puedes retar a tus cuates.");
+    }
+
+    // Check challenger has enough coins
+    const challenger = await ctx.db.get(challengerId);
+    if (!challenger || (challenger.coins ?? 0) < CHALLENGE_BET) {
+      throw new ConvexError(`Necesitas al menos ${CHALLENGE_BET} monedas para retar.`);
+    }
+
+    // Pick a random word from completed levels (so both players have seen it)
+    const totalWords = await ctx.db.query("words").collect();
+    if (totalWords.length === 0) throw new ConvexError("No hay palabras disponibles.");
+    const randomIdx = Math.floor(Math.random() * totalWords.length);
+    const word = totalWords[randomIdx];
+
+    // Deduct bet from challenger
+    await ctx.db.patch(challengerId, { coins: (challenger.coins ?? 0) - CHALLENGE_BET });
+
+    const challengeId = await ctx.db.insert("friendChallenges", {
+      challengerId,
+      challengedId,
+      wordId: word._id,
+      status: "pending",
+      challengerAttempts,
+      challengerTimeMs,
+      rewardCoins: CHALLENGE_BET,
+      createdAt: now,
+      expiresAt: now + CHALLENGE_TTL_MS,
+    });
+
+    // Notify challenged user
+    await ctx.db.insert("friendNotifications", {
+      userId: challengedId,
+      type: "challenge",
+      fromUserId: challengerId,
+      fromUsername: challenger.username ?? undefined,
+      fromName: challenger.name ?? "Alguien",
+      read: false,
+      createdAt: now,
+    });
+
+    return { challengeId, wordId: word._id, word: word.word };
+  },
+});
+
+// ── Aceptar reto (paso separado: deducir coins + cambiar status → active) ──
+export const acceptChallenge = mutation({
+  args: {
+    challengeId: v.id("friendChallenges"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, { challengeId, userId }) => {
+    const challenge = await ctx.db.get(challengeId);
+    if (!challenge) throw new ConvexError("Reto no encontrado.");
+    if (challenge.status !== "pending") throw new ConvexError("Este reto ya no está pendiente.");
+    if (challenge.challengedId !== userId) throw new ConvexError("Este reto no es para ti.");
+
+    if (Date.now() > challenge.expiresAt) {
+      // Expired — refund challenger
+      await ctx.db.patch(challengeId, { status: "expired" });
+      const challenger = await ctx.db.get(challenge.challengerId);
+      if (challenger) {
+        await ctx.db.patch(challenge.challengerId, {
+          coins: (challenger.coins ?? 0) + CHALLENGE_BET,
+        });
+      }
+      return { expired: true };
+    }
+
+    // Check challenged user has enough coins
+    const challenged = await ctx.db.get(userId);
+    if (!challenged || (challenged.coins ?? 0) < CHALLENGE_BET) {
+      throw new ConvexError(`Necesitas al menos ${CHALLENGE_BET} monedas para aceptar el reto.`);
+    }
+
+    // Deduct bet from challenged
+    await ctx.db.patch(userId, { coins: (challenged.coins ?? 0) - CHALLENGE_BET });
+
+    // Change status to active
+    await ctx.db.patch(challengeId, { status: "active" });
+
+    // Return word data for gameplay
+    const word = await ctx.db.get(challenge.wordId);
+    return {
+      expired: false,
+      challengeId: challenge._id,
+      wordData: {
+        word: word?.word ?? "???",
+        meaning: word?.meaning ?? "",
+        example: word?.example ?? "",
+        region: word?.region ?? "",
+      },
+      betCoins: CHALLENGE_BET,
+      challengerName: (await ctx.db.get(challenge.challengerId))?.name ?? "Cuate",
+    };
+  },
+});
+
+// ── Responder a un reto (enviar resultado después de jugar) ────────────────
+export const respondToChallenge = mutation({
+  args: {
+    challengeId: v.id("friendChallenges"),
+    userId: v.id("users"),
+    attempts: v.number(),
+    timeMs: v.number(),
+  },
+  handler: async (ctx, { challengeId, userId, attempts, timeMs }) => {
+    const challenge = await ctx.db.get(challengeId);
+    if (!challenge) throw new ConvexError("Reto no encontrado.");
+    if (challenge.status !== "active") throw new ConvexError("Este reto no está activo. Acepta primero.");
+    if (challenge.challengedId !== userId) throw new ConvexError("Este reto no es para ti.");
+
+    // Anti-cheat: validate timeMs and attempts
+    if (timeMs < 1000) throw new ConvexError("Tiempo de resolución inválido.");
+    if (attempts > 10 || attempts < 1) throw new ConvexError("Intentos inválidos.");
+
+    // Determine winner: fewer attempts wins; tiebreak: faster time
+    const cAttempts = challenge.challengerAttempts ?? 999;
+    const cTimeMs = challenge.challengerTimeMs ?? 999999;
+
+    let winnerId: any;
+    if (attempts < cAttempts) {
+      winnerId = userId;
+    } else if (attempts > cAttempts) {
+      winnerId = challenge.challengerId;
+    } else {
+      // Same attempts → faster time wins
+      winnerId = timeMs < cTimeMs ? userId : challenge.challengerId;
+    }
+
+    // Award winner 2x bet
+    const winner = await ctx.db.get(winnerId as any);
+    if (winner) {
+      await ctx.db.patch(winnerId as any, {
+        coins: ((winner as any).coins ?? 0) + CHALLENGE_BET * 2,
+      });
+    }
+
+    await ctx.db.patch(challengeId, {
+      status: "completed",
+      challengedAttempts: attempts,
+      challengedTimeMs: timeMs,
+      winnerId,
+    });
+
+    // Notify challenger about result
+    const challengedUser = await ctx.db.get(userId);
+    await ctx.db.insert("friendNotifications", {
+      userId: challenge.challengerId,
+      type: "challenge_result",
+      fromUserId: userId,
+      fromUsername: challengedUser?.username ?? undefined,
+      fromName: challengedUser?.name ?? "Alguien",
+      read: false,
+      createdAt: Date.now(),
+    });
+
+    return {
+      winnerId,
+      isWinner: winnerId === userId,
+      reward: CHALLENGE_BET * 2,
+      challengerAttempts: cAttempts,
+      challengerTimeMs: cTimeMs,
+      challengedAttempts: attempts,
+      challengedTimeMs: timeMs,
+    };
+  },
+});
+
+// ── Mis retos pendientes (que me retaron) ──────────────────────────────────
+export const getMyPendingChallenges = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const now = Date.now();
+    const pending = await ctx.db
+      .query("friendChallenges")
+      .withIndex("by_challenged_status", (q) =>
+        q.eq("challengedId", userId).eq("status", "pending")
+      )
+      .collect();
+
+    const result = await Promise.all(
+      pending.map(async (c) => {
+        if (now > c.expiresAt) return null; // skip expired
+        const challenger = await ctx.db.get(c.challengerId);
+        const word = await ctx.db.get(c.wordId);
+        return {
+          challengeId: c._id,
+          challengerName: challenger?.username ?? challenger?.name ?? "Cuate",
+          challengerAvatar: challenger?.avatar ?? "🌮",
+          word: word?.word ?? "???",
+          wordMeaning: word?.meaning ?? "",
+          betCoins: c.rewardCoins,
+          expiresAt: c.expiresAt,
+          createdAt: c.createdAt,
+        };
+      })
+    );
+    return result.filter(Boolean);
+  },
+});
+
+// ── Historial de retos ─────────────────────────────────────────────────────
+export const getChallengeHistory = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    // Challenges I created
+    const sent = await ctx.db
+      .query("friendChallenges")
+      .withIndex("by_challenger", (q) => q.eq("challengerId", userId))
+      .order("desc")
+      .take(20);
+
+    // Challenges sent to me
+    const received = await ctx.db
+      .query("friendChallenges")
+      .withIndex("by_challenged_status", (q) => q.eq("challengedId", userId))
+      .order("desc")
+      .take(20);
+
+    const allChallenges = [...sent, ...received]
+      .filter((c) => c.status === "completed" || c.status === "expired")
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 20);
+
+    const result = await Promise.all(
+      allChallenges.map(async (c) => {
+        const opponent = c.challengerId === userId
+          ? await ctx.db.get(c.challengedId)
+          : await ctx.db.get(c.challengerId);
+        const word = await ctx.db.get(c.wordId);
+        return {
+          challengeId: c._id,
+          opponentName: opponent?.username ?? opponent?.name ?? "Cuate",
+          opponentAvatar: opponent?.avatar ?? "🌮",
+          word: word?.word ?? "???",
+          status: c.status,
+          iWon: c.winnerId === userId,
+          wasTie: false,
+          betCoins: c.rewardCoins,
+          createdAt: c.createdAt,
+          iWasChallenger: c.challengerId === userId,
+        };
+      })
+    );
+    return result;
+  },
+});
+
+// ── Expirar retos viejos (cron diario) ────────────────────────────────────
+export const expireOldChallenges = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    // Get all pending challenges
+    const pending = await ctx.db
+      .query("friendChallenges")
+      .filter((q) => q.eq(q.field("status"), "pending"))
+      .collect();
+
+    let expired = 0;
+    for (const c of pending) {
+      if (now > c.expiresAt) {
+        await ctx.db.patch(c._id, { status: "expired" });
+        // Refund challenger
+        const challenger = await ctx.db.get(c.challengerId);
+        if (challenger) {
+          await ctx.db.patch(c.challengerId, {
+            coins: (challenger.coins ?? 0) + CHALLENGE_BET,
+          });
+        }
+        expired++;
+      }
+    }
+
+    // Also expire "active" challenges that are >48h old (safety net)
+    const active = await ctx.db
+      .query("friendChallenges")
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .collect();
+
+    for (const c of active) {
+      if (now > c.expiresAt + CHALLENGE_TTL_MS) {
+        await ctx.db.patch(c._id, { status: "expired" });
+        // Refund both players
+        const challenger = await ctx.db.get(c.challengerId);
+        if (challenger) {
+          await ctx.db.patch(c.challengerId, {
+            coins: (challenger.coins ?? 0) + CHALLENGE_BET,
+          });
+        }
+        const challenged = await ctx.db.get(c.challengedId);
+        if (challenged) {
+          await ctx.db.patch(c.challengedId, {
+            coins: (challenged.coins ?? 0) + CHALLENGE_BET,
+          });
+        }
+        expired++;
+      }
+    }
+
+    return { expired };
   },
 });

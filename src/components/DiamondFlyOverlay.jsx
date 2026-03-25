@@ -127,7 +127,7 @@ function ImpactParticles({ x, y }) {
 }
 
 // ── Main overlay
-export default function DiamondFlyOverlay({ diamonds, particles, onDiamondArrived }) {
+function DiamondFlyOverlay({ diamonds, particles, onDiamondArrived }) {
     return (
         <View style={styles.overlay} pointerEvents="none">
             {diamonds.map((diamond, idx) => (
@@ -147,3 +147,5 @@ const styles = StyleSheet.create({
         elevation: 9999,
     },
 });
+
+export default React.memo(DiamondFlyOverlay);

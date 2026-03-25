@@ -5,11 +5,13 @@
  *   1. app_name en strings.xml → "Mexicanario"
  *   2. Elimina permisos peligrosos/innecesarios del AndroidManifest
  *   3. allowBackup → false
+ *   3b. windowSoftInputMode → adjustNothing (gameplay no se resize con teclado)
  *   4. ProGuard habilitado en release builds
  *   5. shrinkResources habilitado en release builds
+ *   6. Fullscreen immersive mode in MainActivity.kt
  */
 
-const { withAndroidManifest, withStringsXml, withAppBuildGradle } = require('@expo/config-plugins');
+const { withAndroidManifest, withStringsXml, withAppBuildGradle, withMainActivity } = require('@expo/config-plugins');
 
 // ─────────────────────────────────────────────
 // 1. Fix: app_name correcto en strings.xml
@@ -53,6 +55,16 @@ const withSecureAndroidManifest = (config) =>
       manifest.application[0].$['android:allowBackup'] = 'false';
     }
 
+    // windowSoftInputMode → adjustNothing (evita resize del layout durante gameplay)
+    const activities = manifest.application?.[0]?.activity;
+    if (activities) {
+      for (const activity of activities) {
+        if (activity.$?.['android:name'] === '.MainActivity') {
+          activity.$['android:windowSoftInputMode'] = 'adjustNothing';
+        }
+      }
+    }
+
     return mod;
   });
 
@@ -80,12 +92,87 @@ const withProductionBuildOptimizations = (config) =>
   });
 
 // ─────────────────────────────────────────────
+// 6. Fix: Immersive mode in MainActivity.kt
+// ─────────────────────────────────────────────
+const IMMERSIVE_METHOD = `
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+      super.onWindowFocusChanged(hasFocus)
+      if (hasFocus) {
+          enterImmersiveMode()
+      }
+  }
+
+  private fun enterImmersiveMode() {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          window.insetsController?.let { controller ->
+              controller.hide(
+                  android.view.WindowInsets.Type.statusBars() or
+                  android.view.WindowInsets.Type.navigationBars()
+              )
+              controller.systemBarsBehavior =
+                  android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+          }
+          window.attributes.layoutInDisplayCutoutMode =
+              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+      } else {
+          @Suppress("DEPRECATION")
+          window.decorView.systemUiVisibility = (
+              View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+              or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+              or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+              or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+              or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+              or View.SYSTEM_UI_FLAG_FULLSCREEN
+          )
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+              window.attributes.layoutInDisplayCutoutMode =
+                  WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+          }
+      }
+  }`;
+
+const withImmersiveMode = (config) =>
+  withMainActivity(config, (mod) => {
+    let contents = mod.modResults.contents;
+
+    // Idempotency check
+    if (contents.includes('enterImmersiveMode')) {
+      return mod;
+    }
+
+    // Add imports (after existing android.os.Bundle import)
+    if (!contents.includes('import android.view.View')) {
+      contents = contents.replace(
+        'import android.os.Bundle',
+        `import android.os.Bundle\nimport android.view.View\nimport android.view.WindowManager`
+      );
+    }
+
+    // Add enterImmersiveMode() call in onCreate
+    contents = contents.replace(
+      'super.onCreate(null)',
+      'super.onCreate(null)\n    enterImmersiveMode()'
+    );
+
+    // Add onWindowFocusChanged + enterImmersiveMode before closing brace of class
+    const lastBrace = contents.lastIndexOf('}');
+    contents =
+      contents.slice(0, lastBrace) +
+      IMMERSIVE_METHOD +
+      '\n}\n';
+
+    mod.modResults.contents = contents;
+    return mod;
+  });
+
+// ─────────────────────────────────────────────
 // Plugin principal — combina todos los fixes
 // ─────────────────────────────────────────────
 const withAndroidProductionFixes = (config) => {
   config = withCorrectAppName(config);
   config = withSecureAndroidManifest(config);
   config = withProductionBuildOptimizations(config);
+  config = withImmersiveMode(config);
   return config;
 };
 

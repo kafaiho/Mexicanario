@@ -222,7 +222,7 @@ export default function LoteriaExpress({ visible, onClose }) {
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent>
       <ImageBackground
-        source={require("../../../assets/images/bg.png")}
+        source={require("../../../assets/images/bg.webp")}
         style={styles.root}
         resizeMode="cover"
       >

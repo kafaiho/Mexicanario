@@ -11,7 +11,7 @@ export const createAnonymousUser = mutation({
       coins: 100, // Starting coins
       diamonds: 0,
       country: "Venezuela",
-      avatar: "default",
+      avatar: "🌮",
       currentLevel: 1, // Start at level 1
       createdAt: Date.now(),
     });

@@ -108,7 +108,28 @@ export function getOrderedLevels(
     ? shuffleSeeded(hardLevels, seed)
     : hardLevels.sort((a, b) => a.levelNumber - b.levelNumber);
 
-  const result = [...starterLevels, ...shuffledHard, ...overflowEasy];
+  // Gradual difficulty transition: interleave overflow-easy words into the first
+  // TRANSITION_LENGTH hard levels so difficulty ramps smoothly instead of a cliff.
+  const TRANSITION_LENGTH = 50;
+  const transitionEasy = overflowEasy.slice(0, Math.min(overflowEasy.length, Math.floor(TRANSITION_LENGTH / 2)));
+  const remainingEasy  = overflowEasy.slice(transitionEasy.length);
+
+  // Build transition zone: alternate 2 hard → 1 easy
+  const transitionHard = shuffledHard.slice(0, TRANSITION_LENGTH);
+  const afterTransitionHard = shuffledHard.slice(TRANSITION_LENGTH);
+  const transitionZone: LevelDoc[] = [];
+  let ei = 0;
+  for (let hi = 0; hi < transitionHard.length; hi++) {
+    transitionZone.push(transitionHard[hi]);
+    // Insert an easy word every 2 hard words
+    if ((hi + 1) % 2 === 0 && ei < transitionEasy.length) {
+      transitionZone.push(transitionEasy[ei++]);
+    }
+  }
+  // Append any unused transition-easy words
+  while (ei < transitionEasy.length) transitionZone.push(transitionEasy[ei++]);
+
+  const result = [...starterLevels, ...transitionZone, ...afterTransitionHard, ...remainingEasy];
 
   // Pin specific words to fixed positions (sorted by target position to avoid offsets)
   const pins = Object.entries(PINNED_POSITIONS).sort((a, b) => a[1] - b[1]);

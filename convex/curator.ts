@@ -17,7 +17,7 @@
  *
  * Setup:
  *   En Convex Dashboard > Settings > Environment Variables:
- *   GEMINI_API_KEY = (Set your API key here)
+ *   GEMINI_API_KEY = AIzaSyBs79QYjY-1bjXf0PA0HvycnFV1oDMNa0o
  */
 
 import { v } from "convex/values";

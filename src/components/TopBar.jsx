@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Image,
   Platform,
@@ -17,9 +19,9 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import Calificar from "./Calificar";
-import DisconnectModal from "./DisconnectModal";
 import PrivacyModal from "./PrivacyModal";
 import SettingsModal from "./SettingsModal";
 import SupportModal from "./SupportModal";
@@ -120,7 +122,7 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
     },
   }));
   const [showSettings, setShowSettings] = useState(false);
-  const [showDisconnect, setShowDisconnect] = useState(false);
+
   const [showInvitar, setShowInvitar] = useState(false);
   const [showApoyar, setShowApoyar] = useState(false);
   const [showCalificar, setShowCalificar] = useState(false);
@@ -137,7 +139,64 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
   const [showCuates,        setShowCuates]        = useState(false);
   const [showProfileScreen, setShowProfileScreen] = useState(false);
 
-  const { user } = useAuth();
+  const { user, userId } = useAuth();
+
+  // Solicitudes de amistad pendientes → badge en botón de cuates
+  const isLinked = !!(user?.email || user?.googleId || user?.appleId);
+  const pendingRequests = useQuery(
+    api.friends.getPendingRequests,
+    isLinked && userId ? { userId } : "skip"
+  );
+  const pendingCount = pendingRequests?.length ?? 0;
+
+  // Retos pendientes de cuates → badge extra
+  const pendingChallenges = useQuery(
+    api.friends.getMyPendingChallenges,
+    isLinked && userId ? { userId } : "skip"
+  );
+  const challengeCount = pendingChallenges?.length ?? 0;
+  const totalBadge = pendingCount + challengeCount;
+
+  // Notificaciones de cuates no leídas (aceptaciones, nuevas solicitudes)
+  const unreadNotifs = useQuery(
+    api.friends.getUnreadFriendNotifications,
+    isLinked && userId ? { userId } : "skip"
+  );
+  const markRead = useMutation(api.friends.markFriendNotificationsRead);
+  const shownNotifsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!unreadNotifs || unreadNotifs.length === 0 || !userId) return;
+    // Only show alerts for notifications we haven't shown yet in this session
+    const newNotifs = unreadNotifs.filter((n) => !shownNotifsRef.current.has(n._id));
+    if (newNotifs.length === 0) return;
+
+    newNotifs.forEach((n) => shownNotifsRef.current.add(n._id));
+
+    // Build a summary message
+    const accepted = newNotifs.filter((n) => n.type === "accepted");
+    const requests = newNotifs.filter((n) => n.type === "request");
+
+    if (accepted.length > 0) {
+      const names = accepted.map((n) => n.fromUsername ? `@${n.fromUsername}` : n.fromName).join(", ");
+      Alert.alert("¡Ya son cuates! 🤝", `${names} aceptó tu solicitud de amistad.`);
+    }
+    if (requests.length > 0) {
+      const names = requests.map((n) => n.fromUsername ? `@${n.fromUsername}` : n.fromName).join(", ");
+      Alert.alert(
+        "Nueva solicitud 📩",
+        `${names} quiere ser tu cuate.`,
+        [
+          { text: "Ver después", style: "cancel" },
+          { text: "Ver solicitudes", onPress: () => setShowFriends(true) },
+        ]
+      );
+    }
+
+    // Mark all as read
+    markRead({ userId }).catch(() => {});
+  }, [unreadNotifs]);
+
   const devEnabled = useDevMode((s) => s.enabled);
   const devToggle  = useDevMode((s) => s.toggle);
   const [devToast, setDevToast] = useState(null);
@@ -246,12 +305,16 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
               onPress={() => {
                 tapMedium();
                 animateCuates();
-                const linked = user?.email || user?.googleId || user?.appleId;
-                if (linked) setShowFriends(true);
+                if (isLinked) setShowFriends(true);
                 else setShowCuates(true);
               }}
             >
               <Ionicons name="people" size={18} color="#C47A3A" />
+              {totalBadge > 0 && (
+                <View style={[styles.cuatesBadge, challengeCount > 0 && { backgroundColor: "#E74C3C" }]}>
+                  <Text style={styles.cuatesBadgeText}>{totalBadge > 9 ? "9+" : totalBadge}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </Reanimated.View>
 
@@ -295,7 +358,7 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
       <SettingsModal
         visible={showSettings}
         onClose={() => setShowSettings(false)}
-        onDisconnect={() => { setShowSettings(false); setShowDisconnect(true); }}
+
         onInvitar={() => { setShowSettings(false); setShowInvitar(true); }}
         onPolíticadePrivacidad={() => { setShowSettings(false); setShowPolíticadePrivacidad(true); }}
         onTerminosdeservio={() => { setShowSettings(false); setShowTerminosdeservio(true); }}
@@ -305,7 +368,6 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
         onPerfill={() => { setShowSettings(false); setShowPerfil(true); }}
         onApoyar={() => { setShowSettings(false); setShowApoyar(true); }}
       />
-      <DisconnectModal visible={showDisconnect} onClose={() => setShowDisconnect(false)} />
       <Perfil visible={showPerfil} onClose={() => setShowPerfil(false)} />
       <Apoyar visible={showApoyar} onClose={() => setShowApoyar(false)} />
       <Invitar visible={showInvitar} onClose={() => setShowInvitar(false)} />
@@ -317,7 +379,7 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
       <Mexicanometro visible={showMexicanario} onClose={() => setShowMexicanario(false)} />
       {showShop && (() => { const ShopScreen = getShopScreen(); return <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />; })()}
       <StreakModal visible={showStreak} onClose={() => setShowStreak(false)} />
-      <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} onOpenProfile={() => { setShowFriends(false); setShowProfileScreen(true); }} />
+      <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} onOpenProfile={() => { setShowFriends(false); setShowProfileScreen(true); }} navigation={navigation} />
       <CuatesModal  visible={showCuates}  onClose={() => setShowCuates(false)} onOpenProfile={() => { setShowCuates(false); setShowProfileScreen(true); }} />
       {showProfileScreen && (() => { const PS = getProfileScreen(); return <PS visible={showProfileScreen} onClose={() => setShowProfileScreen(false)} />; })()}
 
@@ -368,6 +430,26 @@ const styles = StyleSheet.create({
   circleBtnDev: {
     backgroundColor: "#E67E22",
     borderColor: "#c0651a",
+  },
+  cuatesBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#C0392B",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: "#E6CCB2",
+  },
+  cuatesBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    lineHeight: 13,
   },
   devBadge: {
     position: "absolute",

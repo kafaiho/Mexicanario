@@ -12,8 +12,11 @@ import {
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { useScreenDims } from '../hooks/useScreenDims';
+import { TABLET_MODE } from '../utils/tabletSetup';
 
-const { width, height } = Dimensions.get('window');
+// Patched width for element sizing (fonts, padding)
+const { width } = Dimensions.get('window');
 
 // ─── 13 Milestones: 12 zonas del mapa + logro final ─────────────────────────
 const MILESTONE_TEMPLATES = [
@@ -57,6 +60,18 @@ export default function Mexicanometro({ visible, onClose }) {
   const { user } = useAuth();
   const totalLevels = useQuery(api.levels.getLevelCount) ?? 0;
 
+  // Real screen dimensions — updates on rotation
+  const screen = useScreenDims();
+  const isLandscape = TABLET_MODE && screen.width > screen.height;
+
+  // Modal sizing adapts to orientation
+  const modalW = TABLET_MODE
+    ? (isLandscape ? Math.min(screen.width * 0.85, 900) : Math.min(screen.width * 0.75, 540))
+    : width * 0.88;
+  const modalMaxH = TABLET_MODE
+    ? (isLandscape ? screen.height * 0.90 : screen.height * 0.82)
+    : screen.height * 0.85;
+
   // Clamp completed to totalLevels
   const completed = Math.max(0, Math.min((user?.currentLevel ?? 1) - 1, totalLevels));
   const pctDone = totalLevels > 0 ? completed / totalLevels : 0;
@@ -92,7 +107,6 @@ export default function Mexicanometro({ visible, onClose }) {
     }
     const nxtIdx = Math.min(curIdx + 1, milestones.length - 1);
 
-    // Map to reversed row indices
     const revCur = milestones.length - 1 - curIdx;
     const revNxt = milestones.length - 1 - nxtIdx;
 
@@ -116,10 +130,51 @@ export default function Mexicanometro({ visible, onClose }) {
     Animated.timing(fillAnim, { toValue: barFillH, duration: 800, useNativeDriver: false }).start();
   }, [visible, ready, barFillH]);
 
+  // ── Milestone list renderer (shared between layouts) ──
+  const renderMilestoneList = () => (
+    <View
+      style={s.milestoneList}
+      onLayout={(e) => setListH(e.nativeEvent.layout.height)}
+    >
+      <View style={s.barTrack} pointerEvents="none">
+        <Animated.View style={[s.barFill, { height: fillAnim }]} />
+      </View>
+      {indicatorY != null && (
+        <View style={[s.indicator, { top: indicatorY - IND_R }]}>
+          <View style={s.indCircle}>
+            <Text style={s.indText}>{completed}</Text>
+          </View>
+          <View style={s.indArrow} />
+        </View>
+      )}
+      {reversed.map((m, idx) => {
+        const unlocked = completed >= m.level;
+        const isCurrent = m === current;
+        return (
+          <View key={String(m.pct)} style={s.row} onLayout={(e) => onRowLayout(idx, e)}>
+            <Text style={[s.lvlNum, unlocked && s.lvlNumOn]}>{m.level}</Text>
+            <View style={[s.dot, unlocked && s.dotOn, isCurrent && s.dotCur]} />
+            <View style={[s.card, unlocked && s.cardOn, isCurrent && s.cardCur]}>
+              <Text style={s.cardEmoji}>{unlocked ? m.emoji : '🔒'}</Text>
+              <View style={s.cardBody}>
+                <Text style={[s.cardTitle, !unlocked && s.cardTitleOff, isCurrent && s.cardTitleCur]}>
+                  {m.title}
+                </Text>
+                <Text style={[s.cardDesc, !unlocked && s.cardDescOff]}>
+                  {unlocked ? m.desc : `Nivel ${m.level}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
-        <View style={s.modal}>
+        <View style={[s.modal, { width: modalW, maxHeight: modalMaxH, ...(isLandscape && { height: modalMaxH }) }]}>
           {/* Header */}
           <View style={s.header}>
             <Text style={s.title}>Mexicanómetro 🌮</Text>
@@ -128,81 +183,79 @@ export default function Mexicanometro({ visible, onClose }) {
             </TouchableOpacity>
           </View>
 
-          {/* Current rank banner */}
-          <View style={s.rankBanner}>
-            <Text style={s.rankEmoji}>{current.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rankTitle}>{current.title}</Text>
-              <Text style={s.rankDesc}>{current.desc}</Text>
+          {isLandscape ? (
+            // ── Landscape tablet: side-by-side ──
+            <View style={s.landscapeBody}>
+              {/* Left panel: rank + progress */}
+              <ScrollView
+                style={s.landscapeLeft}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 12 }}
+              >
+                <View style={s.rankBanner}>
+                  <Text style={s.rankEmoji}>{current.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.rankTitle}>{current.title}</Text>
+                    <Text style={s.rankDesc}>{current.desc}</Text>
+                  </View>
+                </View>
+
+                <View style={s.progressInfo}>
+                  <Text style={s.tacoCount}>Nivel {completed} / {totalLevels}</Text>
+                  <Text style={s.pctText}>{Math.round(pctDone * 100)}%</Text>
+                </View>
+
+                <View style={s.globalBar}>
+                  <View style={[s.globalFill, { width: `${Math.min(pctDone * 100, 100)}%` }]} />
+                </View>
+
+                {nextM && (
+                  <Text style={s.nextInfo}>
+                    Faltan {nextM.level - completed} palabras para «{nextM.title}» {nextM.emoji}
+                  </Text>
+                )}
+              </ScrollView>
+
+              {/* Right panel: milestone list */}
+              <ScrollView
+                style={s.landscapeRight}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={s.scroll}
+              >
+                {renderMilestoneList()}
+              </ScrollView>
             </View>
-          </View>
-
-          {/* Progress summary */}
-          <View style={s.progressInfo}>
-            <Text style={s.tacoCount}>Nivel {completed} / {totalLevels}</Text>
-            <Text style={s.pctText}>{Math.round(pctDone * 100)}%</Text>
-          </View>
-
-          {/* Horizontal progress bar */}
-          <View style={s.globalBar}>
-            <View style={[s.globalFill, { width: `${Math.min(pctDone * 100, 100)}%` }]} />
-          </View>
-
-          {nextM && (
-            <Text style={s.nextInfo}>
-              Faltan {nextM.level - completed} palabras para «{nextM.title}» {nextM.emoji}
-            </Text>
-          )}
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-            <View
-              style={s.milestoneList}
-              onLayout={(e) => setListH(e.nativeEvent.layout.height)}
-            >
-              {/* Vertical bar track */}
-              <View style={s.barTrack} pointerEvents="none">
-                <Animated.View style={[s.barFill, { height: fillAnim }]} />
+          ) : (
+            // ── Portrait / phone: stacked layout ──
+            <>
+              <View style={s.rankBanner}>
+                <Text style={s.rankEmoji}>{current.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rankTitle}>{current.title}</Text>
+                  <Text style={s.rankDesc}>{current.desc}</Text>
+                </View>
               </View>
 
-              {/* Indicator bubble */}
-              {indicatorY != null && (
-                <View style={[s.indicator, { top: indicatorY - IND_R }]}>
-                  <View style={s.indCircle}>
-                    <Text style={s.indText}>{completed}</Text>
-                  </View>
-                  <View style={s.indArrow} />
-                </View>
+              <View style={s.progressInfo}>
+                <Text style={s.tacoCount}>Nivel {completed} / {totalLevels}</Text>
+                <Text style={s.pctText}>{Math.round(pctDone * 100)}%</Text>
+              </View>
+
+              <View style={s.globalBar}>
+                <View style={[s.globalFill, { width: `${Math.min(pctDone * 100, 100)}%` }]} />
+              </View>
+
+              {nextM && (
+                <Text style={s.nextInfo}>
+                  Faltan {nextM.level - completed} palabras para «{nextM.title}» {nextM.emoji}
+                </Text>
               )}
 
-              {reversed.map((m, idx) => {
-                const unlocked = completed >= m.level;
-                const isCurrent = m === current;
-                return (
-                  <View
-                    key={String(m.pct)}
-                    style={s.row}
-                    onLayout={(e) => onRowLayout(idx, e)}
-                  >
-                    <Text style={[s.lvlNum, unlocked && s.lvlNumOn]}>
-                      {m.level}
-                    </Text>
-                    <View style={[s.dot, unlocked && s.dotOn, isCurrent && s.dotCur]} />
-                    <View style={[s.card, unlocked && s.cardOn, isCurrent && s.cardCur]}>
-                      <Text style={s.cardEmoji}>{unlocked ? m.emoji : '🔒'}</Text>
-                      <View style={s.cardBody}>
-                        <Text style={[s.cardTitle, !unlocked && s.cardTitleOff, isCurrent && s.cardTitleCur]}>
-                          {m.title}
-                        </Text>
-                        <Text style={[s.cardDesc, !unlocked && s.cardDescOff]}>
-                          {unlocked ? m.desc : `Nivel ${m.level}`}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+                {renderMilestoneList()}
+              </ScrollView>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -224,60 +277,72 @@ const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
   modal: {
     backgroundColor: '#FFE4B5',
-    borderRadius: width * 0.05,
-    width: width * 0.88,
-    maxHeight: height * 0.85,
-    paddingBottom: height * 0.015,
+    borderRadius: 22,
+    paddingBottom: 12,
     overflow: 'hidden',
-    borderWidth: width * 0.008,
+    borderWidth: 3,
     borderColor: BROWN,
   },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: width * 0.05, paddingTop: height * 0.02, paddingBottom: height * 0.012,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 10,
     borderBottomWidth: 2, borderBottomColor: '#D2691E44',
   },
   title: { color: BROWN, fontWeight: 'bold', fontSize: width * 0.05 },
   closeBtn: {
-    width: width * 0.082, height: width * 0.082, borderRadius: width * 0.041,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: ORANGE, justifyContent: 'center', alignItems: 'center',
   },
-  closeBtnText: { color: '#fff', fontSize: width * 0.055, fontWeight: 'bold', lineHeight: width * 0.065 },
+  closeBtnText: { color: '#fff', fontSize: 24, fontWeight: 'bold', lineHeight: 28 },
 
   rankBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: width * 0.03,
-    backgroundColor: '#F5DEB3', marginHorizontal: width * 0.04, marginTop: height * 0.012,
-    borderRadius: width * 0.04, padding: width * 0.03, borderWidth: 2, borderColor: AMBER,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#F5DEB3', marginHorizontal: 16, marginTop: 10,
+    borderRadius: 16, padding: 12, borderWidth: 2, borderColor: AMBER,
   },
-  rankEmoji: { fontSize: width * 0.085 },
+  rankEmoji: { fontSize: TABLET_MODE ? 36 : width * 0.085 },
   rankTitle: { color: BROWN, fontWeight: 'bold', fontSize: width * 0.04 },
   rankDesc:  { color: '#7A4020', fontSize: width * 0.03, marginTop: 2 },
 
   progressInfo: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: width * 0.05, paddingTop: height * 0.012, paddingBottom: height * 0.005,
+    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4,
   },
   tacoCount: { color: BROWN, fontWeight: 'bold', fontSize: width * 0.04 },
   pctText:   { color: AMBER, fontWeight: 'bold', fontSize: width * 0.04 },
 
   globalBar: {
-    height: height * 0.011, backgroundColor: '#DEB887', borderRadius: 6,
-    marginHorizontal: width * 0.05, marginBottom: height * 0.005, overflow: 'hidden',
+    height: 9, backgroundColor: '#DEB887', borderRadius: 6,
+    marginHorizontal: 20, marginBottom: 4, overflow: 'hidden',
   },
   globalFill: { height: '100%', backgroundColor: GOLD, borderRadius: 6 },
 
   nextInfo: {
     color: '#9A6030', fontSize: width * 0.028, textAlign: 'center',
-    paddingHorizontal: width * 0.06, paddingBottom: height * 0.008,
+    paddingHorizontal: 24, paddingBottom: 6,
   },
 
-  scroll: { paddingHorizontal: width * 0.035, paddingBottom: height * 0.01 },
+  // ── Landscape tablet layout ──
+  landscapeBody: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  landscapeLeft: {
+    width: '38%',
+    borderRightWidth: 1.5,
+    borderRightColor: '#D2691E33',
+  },
+  landscapeRight: {
+    flex: 1,
+  },
+
+  scroll: { paddingHorizontal: 14, paddingBottom: 8 },
   milestoneList: { position: 'relative' },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: width * 0.01,
-    marginBottom: height * 0.011,
+    marginBottom: 8,
   },
 
   // Vertical bar
@@ -324,13 +389,13 @@ const s = StyleSheet.create({
   // Card
   card: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: width * 0.02,
-    backgroundColor: '#E8D5B8', borderRadius: width * 0.03,
-    padding: width * 0.02, minHeight: height * 0.055,
+    backgroundColor: '#E8D5B8', borderRadius: 14,
+    padding: 10, minHeight: 44,
     borderWidth: 1.5, borderColor: '#C4A882',
   },
   cardOn:  { backgroundColor: '#F5DEB3', borderColor: '#D2A679' },
   cardCur: { backgroundColor: '#FFF3D6', borderColor: GOLD, borderWidth: 2 },
-  cardEmoji: { fontSize: width * 0.06 },
+  cardEmoji: { fontSize: TABLET_MODE ? 24 : width * 0.06 },
   cardBody:  { flex: 1 },
   cardTitle:    { color: BROWN, fontWeight: 'bold', fontSize: width * 0.033 },
   cardTitleCur: { color: ORANGE },

@@ -1,5 +1,5 @@
 import React from "react";
-import { Dimensions, StyleSheet, Text, View } from "react-native";
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { FONTS } from "../theme/designTokens";
 
 const { width, height } = Dimensions.get("window");
@@ -16,7 +16,7 @@ const ZONE_ACCENT = {
   demotion:  "#C0392B",
 };
 
-export default function LeaguePlayerRow({ player }) {
+export default function LeaguePlayerRow({ player, onPress }) {
   const { rank, zone, name, avatar, cxpTotal, isCurrentUser, isActive } = player;
 
   const accentColor = isCurrentUser ? GOLD : (ZONE_ACCENT[zone] ?? ZONE_ACCENT.safe);
@@ -25,8 +25,11 @@ export default function LeaguePlayerRow({ player }) {
     ? "rgba(210,105,30,0.18)"   // subtle amber-brown, text stays readable
     : "#FFE4B5";
 
+  const Wrapper = onPress && !isCurrentUser ? TouchableOpacity : View;
+  const wrapperProps = onPress && !isCurrentUser ? { onPress, activeOpacity: 0.7 } : {};
+
   return (
-    <View style={[styles.row, { backgroundColor: rowBg, borderLeftColor: accentColor }]}>
+    <Wrapper {...wrapperProps} style={[styles.row, { backgroundColor: rowBg, borderLeftColor: accentColor }]}>
 
       {/* Rank */}
       <View style={styles.rankCol}>
@@ -73,7 +76,7 @@ export default function LeaguePlayerRow({ player }) {
         <Text style={styles.scoreLabel}>cXP</Text>
       </View>
 
-    </View>
+    </Wrapper>
   );
 }
 

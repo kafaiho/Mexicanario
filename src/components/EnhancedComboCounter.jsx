@@ -43,7 +43,7 @@ const PARTICLE_COLORS = ["#FF6B35", "#FF4500", "#FFD700", "#FF8C00", "#FF0000", 
  *   4. Glow ring pulse — only for combo x6+
  *   5. Screen flash + fire particles — unchanged from original
  */
-export default function EnhancedComboCounter({ comboCount, visible }) {
+function EnhancedComboCounter({ comboCount, visible }) {
   // Existing animated values
   const scaleAnim   = useRef(new Animated.Value(0.2)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -365,3 +365,5 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
+
+export default React.memo(EnhancedComboCounter);

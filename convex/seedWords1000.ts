@@ -73,7 +73,7 @@ export const NEW_WORDS = [
 
   // ── Tradiciones ──
   { word: "Día de Muertos", meaning: "Celebración para honrar a los difuntos", example: "El Día de Muertos llenó el panteón de flores", region: "Nacional", category: "Tradiciones y Fiestas" },
-  { word: "Posadas navideñas", meaning: "Nueve noches de celebración antes de Navidad", example: "En la posada rompimos la piñata con los niños", region: "Nacional", category: "Tradiciones y Fiestas" },
+  { word: "Posadas", meaning: "Nueve noches de celebración antes de Navidad", example: "En la posada rompimos la piñata con los niños", region: "Nacional", category: "Tradiciones y Fiestas" },
   { word: "Guelaguetza", meaning: "Festival de danzas indígenas de Oaxaca", example: "La Guelaguetza reúne comunidades de Oaxaca cada julio", region: "Oaxaca", category: "Tradiciones y Fiestas" },
   { word: "Quinceañera", meaning: "Celebración de los quince años de una joven", example: "La quinceañera bailó el vals con su chambelán", region: "Todo México", category: "Tradiciones y Fiestas" },
   { word: "Danza de los Voladores", meaning: "Rito totонaco de fertilidad", example: "Los Voladores de Papantla giran en el aire", region: "Veracruz", category: "Tradiciones y Fiestas" },
@@ -297,7 +297,7 @@ export const NEW_WORDS = [
   { word: "Día de Reyes", meaning: "Celebración del 6 de enero con regalos", example: "Los niños recibieron sus regalos el Día de Reyes", region: "Nacional", category: "Tradiciones y Fiestas" },
   { word: "Peregrinación guadalupana", meaning: "Marcha de fieles al Tepeyac el 12 de diciembre", example: "Las peregrinaciones llegan al Tepeyac desde muy lejos", region: "Nacional", category: "Tradiciones y Fiestas" },
   { word: "Compadrazgo", meaning: "Relación ritual entre padrinos y padres", example: "El compadrazgo une a las familias de por vida", region: "Todo México", category: "Tradiciones y Fiestas" },
-  { word: "Velorio mexicano", meaning: "Vigilia nocturna para el difunto", example: "El velorio duró toda la noche con tamales y café", region: "Nacional", category: "Tradiciones y Fiestas" },
+  { word: "Velorio", meaning: "Reunión para despedir al difunto con rezos, tamales y café", example: "El velorio duró toda la noche con tamales y café", region: "Nacional", category: "Tradiciones y Fiestas" },
   { word: "Carnaval de Veracruz", meaning: "Carnaval costero con comparsas y música", example: "El Carnaval de Veracruz es el más grande del país", region: "Veracruz", category: "Tradiciones y Fiestas" },
 
   // ── Modismos ──
@@ -446,7 +446,7 @@ export const NEW_WORDS = [
 
   // ── Modismos ──
   { word: "Carnal", meaning: "Hermano o amigo muy cercano", example: "Ese es mi carnal de toda la vida", region: "Todo México", category: "Expresiones y Modismos" },
-  { word: "Mano", meaning: "Forma corta de hermano, para un amigo", example: "Órale mano, ¿qué pasó?", region: "Todo México", category: "Expresiones y Modismos" },
+  { word: "Chale", meaning: "Expresión de decepción, queja o rechazo ante algo malo", example: "Chale, se canceló el partido justo cuando iba a empezar", region: "Todo México", category: "Expresiones y Modismos" },
   { word: "Qué oso", meaning: "Situación muy vergonzosa", example: "Qué oso me hice cuando me caí en la escalera", region: "Juvenil", category: "Expresiones y Modismos" },
   { word: "Cotorreo", meaning: "Plática divertida entre amigos", example: "El cotorreo con los cuates duró horas", region: "Juvenil", category: "Expresiones y Modismos" },
   { word: "Hacerse el occiso", meaning: "Fingir que no se sabe de algo", example: "No te hagas el occiso, sé que fuiste tú", region: "Todo México", category: "Expresiones y Modismos" },
@@ -661,7 +661,7 @@ export const NEW_WORDS = [
   // ── BLOQUE 10 ──
   // ── Comida ──
   { word: "Enchiladas potosinas", meaning: "Tortilla rellena de queso y chile ancho frita", example: "Las enchiladas potosinas son el orgullo de San Luis Potosí", region: "San Luis Potosí", category: "Comida Mexicana" },
-  { word: "Mole verde", meaning: "Salsa espesa de chile y hierbas frescas", example: "El mole verde con pollo es el plato favorito de mi mamá", region: "Centro", category: "Comida Mexicana" },
+  { word: "Mole", meaning: "Salsa espesa de chile y hierbas frescas", example: "El mole verde con pollo es el plato favorito de mi mamá", region: "Centro", category: "Comida Mexicana" },
   { word: "Entomatada", meaning: "Tortilla bañada en salsa de tomate", example: "Desayuné entomatadas con crema y queso fresco", region: "Todo México", category: "Comida Mexicana" },
   { word: "Enmolada", meaning: "Tortilla enrollada cubierta de mole", example: "Las enmoladas de mole negro son un clásico oaxaqueño", region: "Oaxaca", category: "Comida Mexicana" },
   { word: "Picada veracruzana", meaning: "Tortilla gruesa con salsa y queso", example: "En el mercado de Veracruz las picadas son el desayuno clásico", region: "Veracruz", category: "Comida Mexicana" },
@@ -850,7 +850,6 @@ export const NEW_WORDS = [
   { word: "Ceviche de camarón", meaning: "Mariscos crudos marinados en jugo de limón", example: "El ceviche de camarón en Ensenada es fresco y abundante", region: "Baja California", category: "Comida Mexicana" },
   { word: "Tamales de rajas", meaning: "Tamales con chile poblano y queso", example: "Los tamales de rajas son el antojo perfecto en fría mañana", region: "Todo México", category: "Comida Mexicana" },
   // ── Juegos ──
-  { word: "Lotería mexicana", meaning: "Juego de cartas ilustradas con figuras icónicas", example: "Jugamos lotería mexicana toda la noche con frijoles de fichas", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Rayuela", meaning: "Juego de saltar cuadros dibujados en el piso", example: "La rayuela requiere equilibrio y puntería para saltar bien", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Matatena", meaning: "Juego de habilidad con piedras o bolitas", example: "Las niñas jugaban matatena en el patio de la escuela", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Encantados", meaning: "Juego donde quien queda congelado al ser tocado", example: "Jugamos encantados hasta que ya no podíamos correr más", region: "Todo México", category: "Juegos y Niñez" },
@@ -955,7 +954,7 @@ export const NEW_WORDS = [
   { word: "Acahual", meaning: "Girasol silvestre que coloniza terrenos abandonados", example: "El acahual cubre los campos abandonados con sus flores amarillas", region: "Sur", category: "Flora Mexicana" },
   // ── Tradiciones ──
   { word: "Día de la Santa Cruz", meaning: "Celebración del 3 de mayo de albañiles y mineros", example: "El Día de la Santa Cruz los albañiles adornan la obra con una cruz", region: "Todo México", category: "Tradiciones y Fiestas" },
-  { word: "Tamalada navideña", meaning: "Reunión familiar para preparar tamales en diciembre", example: "La tamalada navideña es el evento más esperado del año en mi familia", region: "Todo México", category: "Tradiciones y Fiestas" },
+  { word: "Tamalada", meaning: "Reunión familiar para preparar tamales entre todos", example: "La tamalada es el evento más esperado del año en mi familia", region: "Todo México", category: "Tradiciones y Fiestas" },
   { word: "Fiesta patronal", meaning: "Celebración anual en honor al santo del pueblo", example: "En la fiesta patronal hubo cohetes, danzantes y mole para todos", region: "Todo México", category: "Tradiciones y Fiestas" },
   { word: "Limpia con huevo", meaning: "Ritual de curandera para quitar el mal de ojo", example: "La curandera le hizo una limpia con huevo y oró por él", region: "Todo México", category: "Tradiciones y Fiestas" },
   { word: "Paseo del Ángelus", meaning: "Procesión vespertina en pueblos con toque de campanas", example: "El Paseo del Ángelus reunía a toda la comunidad al atardecer", region: "Centro", category: "Tradiciones y Fiestas" },
@@ -975,9 +974,9 @@ export const NEW_WORDS = [
   { word: "Chileatole", meaning: "Atole espeso con chile y elote", example: "El chileatole verde de Guerrero es un caldo reconfortante", region: "Guerrero", category: "Comida Mexicana" },
   // ── Juegos ──
   { word: "Quemados", meaning: "Juego donde se lanza una pelota a eliminar contrincantes", example: "En quemados el que agarre la pelota salva a su equipo", region: "Todo México", category: "Juegos y Niñez" },
-  { word: "Policías y ladrones", meaning: "Juego de persecución con dos equipos", example: "Jugamos policías y ladrones en toda la cuadra", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Basta", meaning: "Juego de papel donde hay que llenar categorías con una letra antes de gritar basta", example: "En basta siempre me atoraba en la categoría de animales con X", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Estatuas de marfil", meaning: "Juego donde hay que quedarse inmóvil al detenerse la música", example: "Estatuas de marfil era el juego favorito en las piñatas", region: "Todo México", category: "Juegos y Niñez" },
-  { word: "Roña", meaning: "Juego de persecución donde el tocado queda contaminado", example: "La roña es la versión más pegajosa del juego de la traes", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Resorte", meaning: "Juego de saltar un elástico sostenido entre las piernas de dos personas", example: "En el recreo las niñas jugaban resorte y cada vez lo subían más alto", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Siete pecados", meaning: "Juego de preguntas con penitencias divertidas", example: "En siete pecados nadie quería que le saliera beso en la frente", region: "Todo México", category: "Juegos y Niñez" },
   // ── Música ──
   { word: "Música de viento oaxaqueña", meaning: "Agrupación de metales y percusión de tradición zapoteca", example: "La música de viento oaxaqueña acompaña todas las fiestas del pueblo", region: "Oaxaca", category: "Música y Artistas" },
@@ -1040,7 +1039,7 @@ export const NEW_WORDS = [
   { word: "Teléfono descompuesto", meaning: "Juego de susurrar mensajes en cadena", example: "En teléfono descompuesto el mensaje llegó completamente cambiado", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Memorama", meaning: "Juego de memoria con pares de cartas boca abajo", example: "El memorama de animales mexicanos lo gané tres veces seguidas", region: "Todo México", category: "Juegos y Niñez" },
   { word: "El gato", meaning: "Juego de tres en raya en papel", example: "Jugamos el gato en la servilleta mientras esperábamos la comida", region: "Todo México", category: "Juegos y Niñez" },
-  { word: "La roña de agua", meaning: "Versión acuática del juego de la traes en albercas", example: "La roña de agua en la alberca fue la diversión de todo el verano", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Cebollitas", meaning: "Juego donde los niños se agarran de la cintura y uno jala para separarlos", example: "Jugamos cebollitas y nadie podía soltar al de adelante", region: "Todo México", category: "Juegos y Niñez" },
   // ── Música ──
   { word: "Tecno cumbia mexicana", meaning: "Fusión electrónica de cumbia con sintetizadores", example: "La tecno cumbia mexicana inundó los bailes de los noventa", region: "Todo México", category: "Música y Artistas" },
   { word: "Requinto jarocho", meaning: "Guitarra pequeña de cuatro cuerdas del son veracruzano", example: "El requinto jarocho improvisa la melodía en el fandango", region: "Veracruz", category: "Música y Artistas" },
@@ -1099,7 +1098,7 @@ export const NEW_WORDS = [
   { word: "Caballito", meaning: "Juego de equilibrio y fuerza sobre los hombros del padre", example: "Mi papá me cargaba de caballito y yo me sentía el rey del mundo", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Saltar la cuerda", meaning: "Juego de saltar sobre una cuerda girada por dos personas", example: "Las niñas saltaban la cuerda cantando rimas en el recreo", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Mata gente", meaning: "Juego brusco de escondite con golpe al descubierto", example: "En mata gente si te agarraban te dolía el brazo un rato", region: "Todo México", category: "Juegos y Niñez" },
-  { word: "Pulpo", meaning: "Juego de cartas donde se busca hacer series de cuatro", example: "El pulpo es el juego de cartas más buscado en las fiestas", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Burro castigado", meaning: "Juego de cartas donde se juntan cuatro iguales y el último pierde", example: "En la posada jugamos burro castigado y al perdedor le pintaron la cara", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Mímica", meaning: "Juego de mesa donde hay que adivinar palabras actuando sin hablar", example: "En mímica me tocó actuar un elefante y nadie lo adivinó", region: "Todo México", category: "Juegos y Niñez" },
   // ── Música ──
   { word: "Ranchera norteña", meaning: "Estilo de canción ranchera con acordeón del norte", example: "La ranchera norteña habla de amor, traición y tequila", region: "Norte", category: "Música y Artistas" },
@@ -1121,7 +1120,7 @@ export const NEW_WORDS = [
   { word: "Decena Trágica", meaning: "Golpe de Estado de 1913 que derrocó y asesinó a Madero", example: "La Decena Trágica fue diez días de combate en las calles de la CDMX", region: "CDMX", category: "Historia de México" },
   // ── Artistas ──
   { word: "Lila Downs", meaning: "Cantante oaxaqueña que fusiona géneros y lenguas indígenas", example: "Lila Downs canta en mixe, náhuatl, español e inglés con igual pasión", region: "Oaxaca", category: "Música y Artistas" },
-  { word: "Eugenia León", meaning: "Cantante intérprete de música popular y clásica mexicana", example: "Eugenia León es la voz más completa de la canción mexicana", region: "CDMX", category: "Música y Artistas" },
+  { word: "Alejandro Fernández", meaning: "El Potrillo, hijo de Vicente y estrella de la ranchera moderna", example: "Alejandro Fernández cantó Me dediqué a perderte en el Auditorio Nacional", region: "Jalisco", category: "Música y Artistas" },
   { word: "Chavela Vargas", meaning: "Cantante costarricense adoptada por México", example: "Chavela Vargas cantó rancheras como nadie, con voz de tierra y fuego", region: "CDMX", category: "Música y Artistas" },
   { word: "Astrid Hadad", meaning: "Cantante y performera conocida como la Monstrua", example: "Astrid Hadad mezcla cabaret, crítica política y música con ingenio", region: "CDMX", category: "Música y Artistas" },
   { word: "Ofelia Medina", meaning: "Actriz comprometida con causas sociales y ambientales", example: "Ofelia Medina interpretó a Frida Kahlo antes que nadie en teatro", region: "CDMX", category: "Música y Artistas" },
@@ -1220,7 +1219,7 @@ export const NEW_WORDS = [
   { word: "Tostadas de ceviche", meaning: "Tortilla crujiente con ceviche fresco encima", example: "Las tostadas de ceviche de camarón son el antojo de playa", region: "Sinaloa", category: "Comida Mexicana" },
   { word: "Papas con chile", meaning: "Papas fritas con chamoy, limón y chile en polvo", example: "Las papas con chile del puesto de la esquina son adictivas", region: "Todo México", category: "Comida Mexicana" },
   // ── Juegos ──
-  { word: "Metras", meaning: "Canicas de barro cocido más pequeñas y baratas", example: "Las metras de barro eran las que perdía en cada recreo", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Bebeleche", meaning: "Juego de saltar en cuadros numerados dibujados con gis", example: "Jugamos bebeleche en la banqueta después de la escuela", region: "Norte de México", category: "Juegos y Niñez" },
   { word: "La víbora de la mar", meaning: "Juego infantil donde dos forman un arco y atrapan niños", example: "Jugamos a la víbora de la mar en el jardín de niños", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Bingo popular", meaning: "Juego de números cantados en cartones de cinco por cinco", example: "En el bingo popular del club social gané una licuadora", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Juego de manos", meaning: "Secuencias rítmicas de palmadas entre dos personas", example: "Mi prima y yo teníamos un juego de manos muy difícil", region: "Todo México", category: "Juegos y Niñez" },
@@ -1283,7 +1282,7 @@ export const NEW_WORDS = [
   { word: "Chongos zamoranos", meaning: "Postre de leche cuajada con canela y piloncillo", example: "Los chongos zamoranos son el postre más delicado de Michoacán", region: "Michoacán", category: "Comida Mexicana" },
   // ── Juegos ──
   { word: "Juego de las sillas", meaning: "Competencia musical donde sobra una silla cada ronda", example: "En el juego de las sillas me quedé sin silla a la primera", region: "Todo México", category: "Juegos y Niñez" },
-  { word: "La traes", meaning: "Juego de persecución donde quien toca pasa la maldición", example: "El recreo completo lo pasamos jugando la traes en el patio", region: "Todo México", category: "Juegos y Niñez" },
+  { word: "Gallinita ciega", meaning: "Juego donde uno con los ojos vendados intenta atrapar a los demás", example: "En la piñata jugamos gallinita ciega y me tropecé con la mesa", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Escondidillas", meaning: "Versión simplificada del escondite para niños pequeños", example: "Las escondidillas eran el juego favorito de los más chiquitos", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Dados", meaning: "Juego de azar con cubos numerados del uno al seis", example: "Jugamos dados toda la tarde y nadie sacó el doble seis", region: "Todo México", category: "Juegos y Niñez" },
   { word: "Competencia de trompos", meaning: "Torneo donde se mide quién hace girar el trompo más tiempo", example: "Gané la competencia de trompos en la kermés del barrio", region: "Todo México", category: "Juegos y Niñez" },

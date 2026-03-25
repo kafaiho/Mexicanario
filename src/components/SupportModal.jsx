@@ -5,7 +5,7 @@ export default function SupportModal({ visible, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade">
       <ImageBackground
-        source={{ uri: '/assets/images/bg.png' }}
+        source={{ uri: '/assets/images/bg.webp' }}
         style={styles.overlay}
         resizeMode="cover"
       >

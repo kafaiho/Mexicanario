@@ -61,6 +61,9 @@ export default function VictoryModal({
   coins = 0,
   isLastLevel,
   flyOverlay = null,
+  onChallengeFriend = null,
+  isChallengeMode = false,
+  challengeResult = null,
 }) {
   const confettiAnims = useMemo(
     () =>
@@ -213,6 +216,38 @@ export default function VictoryModal({
             </View>
           ) : null}
 
+          {/* Challenge result */}
+          {isChallengeMode && challengeResult && (
+            <View style={s.challengeResultCard}>
+              <Text style={s.challengeResultTitle}>
+                {challengeResult.isWinner ? "🏆 ¡Ganaste el reto!" : "😢 Perdiste el reto"}
+              </Text>
+              <View style={s.challengeStatsRow}>
+                <View style={s.challengeStatCol}>
+                  <Text style={s.challengeStatLabel}>Tú</Text>
+                  <Text style={s.challengeStatVal}>{challengeResult.challengedAttempts} intentos</Text>
+                </View>
+                <Text style={s.challengeVs}>VS</Text>
+                <View style={s.challengeStatCol}>
+                  <Text style={s.challengeStatLabel}>Rival</Text>
+                  <Text style={s.challengeStatVal}>{challengeResult.challengerAttempts} intentos</Text>
+                </View>
+              </View>
+              <Text style={[s.challengeReward, { color: challengeResult.isWinner ? "#6BCB77" : "#FF6B6B" }]}>
+                {challengeResult.isWinner ? `+${challengeResult.reward}` : `-50`} monedas
+              </Text>
+            </View>
+          )}
+
+          {/* Endgame celebration */}
+          {isLastLevel && !isMapReview && !isChallengeMode && (
+            <View style={s.endgameBanner}>
+              <Text style={s.endgameEmoji}>🏆🇲🇽🏆</Text>
+              <Text style={s.endgameTitle}>¡Completaste el Mexicanario!</Text>
+              <Text style={s.endgameSubtitle}>Dominaste todas las palabras. Eres un verdadero conocedor de México.</Text>
+            </View>
+          )}
+
           {/* Progress ring */}
           <View style={s.ringWrap}>
             <View style={s.ringOuter}>
@@ -278,6 +313,11 @@ export default function VictoryModal({
             <TouchableOpacity style={s.circleBtn} onPress={onHome}>
               <Text style={s.circleBtnIcon}>🏠</Text>
             </TouchableOpacity>
+            {!isChallengeMode && onChallengeFriend && (
+              <TouchableOpacity style={s.circleBtn} onPress={onChallengeFriend}>
+                <Text style={s.circleBtnIcon}>⚔️</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={s.circleBtn} onPress={onShare}>
               <Text style={s.circleBtnIcon}>📤</Text>
             </TouchableOpacity>
@@ -290,6 +330,20 @@ export default function VictoryModal({
 }
 
 const s = StyleSheet.create({
+  endgameBanner: {
+    backgroundColor: "rgba(248,190,23,0.15)",
+    borderWidth: 1.5,
+    borderColor: "#F8BE17",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "center",
+    width: "100%",
+  },
+  endgameEmoji: { fontSize: 28, marginBottom: 4 },
+  endgameTitle: { fontSize: 18, fontWeight: "bold", color: "#F8BE17", textAlign: "center", marginBottom: 4 },
+  endgameSubtitle: { fontSize: 13, color: "#FFE4B5", textAlign: "center", lineHeight: 18 },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(26,10,0,0.92)",
@@ -375,6 +429,24 @@ const s = StyleSheet.create({
   regionRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   regionDot: { fontSize: 12 },
   regionLabel: { color: "rgba(255,228,181,0.7)", fontSize: 12 },
+
+  // Challenge result
+  challengeResultCard: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 16,
+    padding: 14,
+    width: "100%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  challengeResultTitle: { color: "#FFE4B5", fontWeight: "900", fontSize: 16, marginBottom: 8 },
+  challengeStatsRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  challengeStatCol: { alignItems: "center" },
+  challengeStatLabel: { color: "rgba(255,228,181,0.6)", fontSize: 11, fontWeight: "600" },
+  challengeStatVal: { color: "#FFE4B5", fontSize: 14, fontWeight: "700", marginTop: 2 },
+  challengeVs: { color: "#FF6B35", fontWeight: "900", fontSize: 16 },
+  challengeReward: { fontWeight: "900", fontSize: 15, marginTop: 8 },
 
   // Progress ring
   ringWrap: { alignItems: "center", gap: 6 },

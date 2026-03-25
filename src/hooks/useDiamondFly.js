@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const diamondCountForReward = (diamonds) => {
     if (diamonds <= 3) return 3;
@@ -13,6 +13,12 @@ export default function useDiamondFly() {
 
     // Track how many diamonds from a "batch" have arrived, keyed by batchId
     const batchRef = useRef({});
+    const particleTimersRef = useRef(new Set());
+
+    // Cleanup particle timers on unmount
+    useEffect(() => {
+        return () => { particleTimersRef.current.forEach(clearTimeout); };
+    }, []);
 
     const triggerDiamondFly = useCallback(({ fromX, fromY, toX, toY, diamonds, onAllArrived }) => {
         const diamondCount = diamondCountForReward(diamonds);
@@ -43,9 +49,11 @@ export default function useDiamondFly() {
         // Particle burst at impact point
         const pId = `p_d_${Date.now()}_${Math.random()}`;
         setDiamondParticles((prev) => [...prev, { id: pId, x, y }]);
-        setTimeout(() => {
+        const tid = setTimeout(() => {
+            particleTimersRef.current.delete(tid);
             setDiamondParticles((prev) => prev.filter((p) => p.id !== pId));
         }, 500);
+        particleTimersRef.current.add(tid);
 
         // Batch tracking
         const batch = batchRef.current[batchId];

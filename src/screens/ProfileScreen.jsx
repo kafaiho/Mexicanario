@@ -20,6 +20,7 @@ import ProfileModal from "../components/ProfileModal";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
 import { getZone, getZoneProgress, getNextZone } from "../config/mexicoZones";
+import EloBadge from "../components/EloBadge";
 
 const { width, height } = Dimensions.get("window");
 
@@ -30,32 +31,8 @@ const GOLD  = "#F8BE17";
 const WHEAT = "#FFE4B5";
 const DARK  = "#3B1A00";
 
-// ─── Sistema de rangos XP ─────────────────────────────────────────────────────
-const XP_RANKS = [
-  { min: 0,     max: 499,      title: "Aprendiz",        emoji: "🌱", color: "#7CB87A" },
-  { min: 500,   max: 1499,     title: "Conocedor",       emoji: "📚", color: "#4A90D9" },
-  { min: 1500,  max: 2999,     title: "Experto",         emoji: "⭐", color: GOLD       },
-  { min: 3000,  max: 5999,     title: "Maestro MX",      emoji: "🏆", color: AMBER      },
-  { min: 6000,  max: 11999,    title: "Sabio Mexicano",  emoji: "🦅", color: "#C0392B"  },
-  { min: 12000, max: Infinity, title: "Leyenda Mexicana", emoji: "👑", color: "#8B008B"  },
-];
-
-function getRank(xp = 0) {
-  return XP_RANKS.find((r) => xp >= r.min && xp <= r.max) ?? XP_RANKS[0];
-}
-
-function getXpProgress(xp = 0) {
-  const rank = getRank(xp);
-  if (rank.max === Infinity) return 1;
-  const range = rank.max - rank.min + 1;
-  const within = xp - rank.min;
-  return Math.min(within / range, 1);
-}
-
-function getNextRankTitle(xp = 0) {
-  const idx = XP_RANKS.findIndex((r) => xp >= r.min && xp <= r.max);
-  return XP_RANKS[idx + 1]?.title ?? null;
-}
+// ─── Sistema de rangos XP (20 tiers) ──────────────────────────────────────────
+import { XP_RANKS, getRank, getXpProgress, getNextRankTitle, getXpToNextRank } from "../config/xpRanks";
 
 // ─── Tarjeta de estadistica ───────────────────────────────────────────────────
 function StatCard({ emoji, value, label }) {
@@ -328,6 +305,20 @@ export default function ProfileScreen({ visible, onClose }) {
                 </Text>
               </View>
             </View>
+
+            {/* ── F2. PvP ELO Badge ── */}
+            {(userData?.pvpWins ?? 0) + (userData?.pvpLosses ?? 0) > 0 && (
+              <View style={styles.leagueRow}>
+                <View style={styles.leagueInfo}>
+                  <Text style={[styles.leagueName, { marginBottom: 6 }]}>Duelo PvP</Text>
+                  <EloBadge elo={userData?.eloRating ?? 1000} size="md" />
+                  <Text style={styles.leagueSub}>
+                    {userData?.pvpWins ?? 0}V - {userData?.pvpLosses ?? 0}D - {userData?.pvpDraws ?? 0}E
+                    {(userData?.pvpBestStreak ?? 0) > 0 ? `  ·  Mejor racha: ${userData.pvpBestStreak}` : ""}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* ── G. Action Buttons ── */}
             <View style={styles.actionsGrid}>

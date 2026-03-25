@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Modal,
   ScrollView,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../context/AuthContext";
 import { presentCustomerCenter } from "../services/RevenueCatService";
 import { setMusicEnabled, setSoundEnabled } from "../utils/soundManager";
 import AccountDeletionModal from "./AccountDeletionModal";
@@ -63,7 +65,6 @@ function MenuItem({ icon, label, onPress }) {
 export default function SettingsModal({
   visible,
   onClose,
-  onDisconnect,
   onTerminosdeservio,
   onApoyar,
   onCalificar,
@@ -74,10 +75,37 @@ export default function SettingsModal({
   onAvatar,
   onInvitar,
 }) {
+  const { logout, user } = useAuth();
   const [musicOn, setMusicOn] = useState(true);
   const [soundFx, setSoundFx] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Cerrar sesión",
+      "¿Seguro que quieres salir de tu cuenta? Se creará una nueva sesión.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoggingOut(true);
+              await logout();
+              onClose();
+            } catch (e) {
+              Alert.alert("Error", "No se pudo cerrar sesión. Intenta de nuevo.");
+            } finally {
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Load persisted preferences when modal opens
   useEffect(() => {
@@ -142,7 +170,6 @@ export default function SettingsModal({
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           >
-            <MenuItem icon="log-out-outline" label="Desconectar" onPress={onDisconnect} />
             <MenuItem icon="star-outline" label="Mexicanario Plus ⭐" onPress={presentCustomerCenter} />
             <MenuItem icon="person-outline" label="Perfil" onPress={onPerfill} />
             <MenuItem icon="people-outline" label="Invitar" onPress={onInvitar} />
@@ -151,7 +178,21 @@ export default function SettingsModal({
             <MenuItem icon="document-text-outline" label="Términos de Servicio" onPress={onTerminosdeservio} />
             <MenuItem icon="shield-outline" label="Política de Privacidad" onPress={onPrivacy} />
             <MenuItem icon="mail-outline" label="Contactar" onPress={onSupport} />
-            <MenuItem icon="trash-outline" label="Eliminar Cuenta" onPress={() => setShowDeleteModal(true)} />
+
+            {/* ── Zona peligrosa ── */}
+            <View style={styles.dangerDivider} />
+
+            {user?.email && (
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={loggingOut} activeOpacity={0.75}>
+                <Ionicons name="log-out-outline" size={20} color="#C0392B" />
+                <Text style={styles.logoutLabel}>{loggingOut ? "Saliendo..." : "Cerrar sesión"}</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.deleteBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.75}>
+              <Ionicons name="trash-outline" size={20} color="#999" />
+              <Text style={styles.deleteLabel}>Eliminar Cuenta</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {/* ── Footer dismiss ── */}
@@ -271,6 +312,45 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: C.itemText,
+  },
+
+  // ── Danger zone ──
+  dangerDivider: {
+    height: 1,
+    backgroundColor: "rgba(192,57,43,0.15)",
+    marginVertical: 6,
+    marginHorizontal: 4,
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(192,57,43,0.08)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(192,57,43,0.18)",
+  },
+  logoutLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#C0392B",
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    gap: 12,
+  },
+  deleteLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#999",
   },
 
   // ── Footer ──

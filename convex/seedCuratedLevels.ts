@@ -25,7 +25,7 @@ const CURATED_WORDS = [
     { word: "Carnal", meaning: "Hermano o amigo muy cercano", example: "Ese wey es mi carnal de toda la vida", region: "CdMx y Centro", category: "Expresiones y Modismos" },
 
     // ── Nivel 3 – El Sabor Básicos (Comida muy común) ──────────────────────────
-    { word: "Salsa", meaning: "Aderezo picante para acompañar", example: "Le puse salsa verde a mis tacos", region: "Nacional", category: "Comida Mexicana" },
+    { word: "Chamoy", meaning: "Salsa agridulce de ciruela con chile y limón", example: "Le puse chamoy a la fruta y quedó buenísima", region: "Nacional", category: "Comida Mexicana" },
     { word: "Aguacate", meaning: "Fruto verde, base del guacamole", example: "Ese taco lleva mucho aguacate", region: "Nacional", category: "Comida Mexicana" },
     { word: "Tamal", meaning: "Masa de maíz rellena envuelta en hoja", example: "Desayuné un tamal con atole", region: "Nacional", category: "Comida Mexicana" },
 

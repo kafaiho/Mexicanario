@@ -23,7 +23,8 @@ export default function MexicanarioModal({ visible, onClose }) {
 
   // Group by first letter
   const grouped = sorted.reduce((groups, word) => {
-    const letter = word.word.charAt(0).toUpperCase();
+    const raw = word.word.charAt(0).toUpperCase();
+    const letter = (raw === 'Ñ') ? 'Ñ' : raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!groups[letter]) groups[letter] = [];
     groups[letter].push(word);
     return groups;
@@ -33,7 +34,7 @@ export default function MexicanarioModal({ visible, onClose }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <ImageBackground source={require('../../assets/images/bg.png')} style={styles.overlay} resizeMode="cover">
+      <ImageBackground source={require('../../assets/images/bg.webp')} style={styles.overlay} resizeMode="cover">
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.title}>Mexicanario</Text>

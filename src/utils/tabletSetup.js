@@ -25,16 +25,21 @@ export const REAL_WIDTH   = realScreen.width;
 export const REAL_HEIGHT  = realScreen.height;
 
 if (TABLET_MODE) {
-  const ratio   = MAX_EFFECTIVE_WIDTH / realScreen.width;
-  const patched = {
-    ...realScreen,
-    width:  MAX_EFFECTIVE_WIDTH,
-    height: Math.round(realScreen.height * ratio),
-  };
-
   const originalGet = Dimensions.get.bind(Dimensions);
   Dimensions.get = (dim) => {
-    if (dim === "window") return patched;
+    if (dim === "window") {
+      // Recompute from current screen dims on every call — rotation-safe.
+      const current = originalGet("screen");
+      // Always scale relative to the shorter (portrait-width) dimension
+      // so patched height stays reasonable even in landscape.
+      const shorter = Math.min(current.width, current.height);
+      const ratio = MAX_EFFECTIVE_WIDTH / shorter;
+      return {
+        ...current,
+        width:  MAX_EFFECTIVE_WIDTH,
+        height: Math.round(current.height * ratio),
+      };
+    }
     return originalGet(dim); // 'screen' devuelve dimensiones reales
   };
 }

@@ -162,7 +162,7 @@ const cards = [
 
   // ── TRADICIONES (9) — fiestas y costumbres mexicanas ─────────────────────
   { category: "Tradiciones", element: "Día de Muertos" },
-  { category: "Tradiciones", element: "Posadas navideñas" },
+  { category: "Tradiciones", element: "Posadas" },
   { category: "Tradiciones", element: "Piñata" },
   { category: "Tradiciones", element: "Guelaguetza" },
   { category: "Tradiciones", element: "Lucha Libre" },

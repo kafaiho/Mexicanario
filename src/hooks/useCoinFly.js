@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const coinCountForReward = (coins) => {
   if (coins <= 75)  return 5;
@@ -13,6 +13,12 @@ export default function useCoinFly() {
 
   // Track how many coins from a "batch" have arrived, keyed by batchId
   const batchRef = useRef({});
+  const particleTimersRef = useRef(new Set());
+
+  // Cleanup particle timers on unmount
+  useEffect(() => {
+    return () => { particleTimersRef.current.forEach(clearTimeout); };
+  }, []);
 
   const triggerCoinFly = useCallback(({ fromX, fromY, toX, toY, coins, onAllArrived }) => {
     const coinCount = coinCountForReward(coins);
@@ -27,25 +33,50 @@ export default function useCoinFly() {
       fromY,
       toX,
       toY,
-      delay: i * 130,
+      delay: i * 55,
       cpY: Math.min(fromY, toY) - 130 - Math.random() * 50,
       cpX: (fromX + toX) / 2 + (Math.random() - 0.5) * 70,
-      duration: 400 + Math.random() * 100,
+      duration: 320 + Math.random() * 80,
     }));
 
     setFlyCoins((prev) => [...prev, ...newCoins]);
   }, []);
 
-  const onCoinArrived = useCallback((id, batchId, x, y) => {
-    // Remove coin
-    setFlyCoins((prev) => prev.filter((c) => c.id !== id));
+  // Accumulate arrivals and flush in a single setState per frame
+  const pendingRemovals = useRef([]);
+  const pendingParticles = useRef([]);
+  const flushScheduled = useRef(false);
 
-    // Particle burst at impact point
-    const pId = `p_${Date.now()}_${Math.random()}`;
-    setParticles((prev) => [...prev, { id: pId, x, y }]);
-    setTimeout(() => {
-      setParticles((prev) => prev.filter((p) => p.id !== pId));
-    }, 500);
+  const flushArrivals = useCallback(() => {
+    flushScheduled.current = false;
+    if (pendingRemovals.current.length > 0) {
+      const ids = new Set(pendingRemovals.current);
+      pendingRemovals.current = [];
+      setFlyCoins((prev) => prev.filter((c) => !ids.has(c.id)));
+    }
+    if (pendingParticles.current.length > 0) {
+      const newP = [...pendingParticles.current];
+      pendingParticles.current = [];
+      setParticles((prev) => [...prev, ...newP]);
+      const tid = setTimeout(() => {
+        particleTimersRef.current.delete(tid);
+        const pIds = new Set(newP.map((p) => p.id));
+        setParticles((prev) => prev.filter((p) => !pIds.has(p.id)));
+      }, 400);
+      particleTimersRef.current.add(tid);
+    }
+  }, []);
+
+  const onCoinArrived = useCallback((id, batchId, x, y) => {
+    // Queue removal + particle instead of immediate setState
+    pendingRemovals.current.push(id);
+    pendingParticles.current.push({ id: `p_${id}`, x, y });
+
+    // Schedule a single flush per frame
+    if (!flushScheduled.current) {
+      flushScheduled.current = true;
+      requestAnimationFrame(flushArrivals);
+    }
 
     // Batch tracking
     const batch = batchRef.current[batchId];
@@ -56,7 +87,7 @@ export default function useCoinFly() {
         delete batchRef.current[batchId];
       }
     }
-  }, []);
+  }, [flushArrivals]);
 
   return { flyCoins, particles, triggerCoinFly, onCoinArrived };
 }

@@ -5,24 +5,72 @@ import { getOrderedLevels, completedWordIds } from "./levelOrdering";
 // ─── 19 colecciones canónicas ─────────────────────────────────────────────────
 
 // Mapa de nombres viejos (DB) → canónicos
+// Cubre TODOS los nombres históricos que pueden existir en producción
 const CANONICAL: Record<string, string> = {
-  "Modismos":    "Expresiones y Modismos",
-  "Expresiones": "Expresiones y Modismos",
-  "Comida":      "Comida Mexicana",
-  "Juegos":      "Juegos y Niñez",
-  "Bebida":      "Bebidas",
-  "Animales":    "Animales de México",
-  "Plantas":     "Flora Mexicana",
-  "Música":      "Música y Artistas",
-  "Artistas":    "Música y Artistas",
-  "Monumentos":  "Monumentos y Lugares",
-  "Historia":    "Historia de México",
-  "Albures":     "Albures y Picaresca",
-  "Leyendas":    "Leyendas y Mitos",
-  "Digital":     "Mundo Digital",
-  "Refranes":    "Refranes y Dichos",
+  // Expresiones y Modismos (absorbe 7 nombres viejos)
+  "Modismos":          "Expresiones y Modismos",
+  "Expresiones":       "Expresiones y Modismos",
+  "Jerga":             "Expresiones y Modismos",
+  "Slang":             "Expresiones y Modismos",
+  "Popular":           "Expresiones y Modismos",
+  "Tipos Sociales":    "Expresiones y Modismos",
+  "Verbos del Barrio": "Expresiones y Modismos",
+
+  // Comida Mexicana
+  "Comida":       "Comida Mexicana",
+  "Gastronomia":  "Comida Mexicana",
+
+  // Bebidas
+  "Bebida": "Bebidas",
+
+  // Juegos y Niñez
+  "Juegos": "Juegos y Niñez",
+
+  // Animales de México
+  "Animales": "Animales de México",
+
+  // Flora Mexicana
+  "Plantas": "Flora Mexicana",
+  "Flora":   "Flora Mexicana",
+
+  // Música y Artistas (absorbe 4)
+  "Música":           "Música y Artistas",
+  "Musica":           "Música y Artistas",
+  "Artistas":         "Música y Artistas",
+  "Músicos":          "Música y Artistas",
+  "Corridos Tumbados":"Música y Artistas",
+
+  // Tradiciones y Fiestas
   "Tradiciones": "Tradiciones y Fiestas",
-  "Jerga":       "Expresiones y Modismos",
+
+  // Refranes y Dichos
+  "Refranes": "Refranes y Dichos",
+
+  // Historia de México
+  "Historia":       "Historia de México",
+  "Civilizaciones": "Historia de México",
+
+  // Albures y Picaresca
+  "Albures":   "Albures y Picaresca",
+  "Picaresca": "Albures y Picaresca",
+
+  // Cultura Popular
+  "Telenovelas":                "Cultura Popular",
+  "Cultura Popular y Deportes": "Cultura Popular",
+  "Futbolistas":                "Cultura Popular",
+
+  // Monumentos y Lugares
+  "Monumentos":    "Monumentos y Lugares",
+  "Regionalismos": "Monumentos y Lugares",
+
+  // Leyendas y Mitos
+  "Leyendas": "Leyendas y Mitos",
+
+  // Mundo Digital (absorbe 4)
+  "Digital":        "Mundo Digital",
+  "Streamers":      "Mundo Digital",
+  "Jerga Digital":  "Mundo Digital",
+  "Cultura Digital":"Mundo Digital",
 };
 
 /** Normaliza nombre de categoría (viejo o nuevo) → canónico */

@@ -9,8 +9,8 @@ import {
 
 // ── REEMPLAZA con tu Unit ID de Interstitial de AdMob ────────────────────────
 // TODO: Replace with real Ad Unit IDs from AdMob console
-const ANDROID_INTERSTITIAL_ID = "ca-app-pub-4368195883573068/XXXXXXXXXX";
-const IOS_INTERSTITIAL_ID     = "ca-app-pub-4368195883573068/XXXXXXXXXX";
+const ANDROID_INTERSTITIAL_ID = "ca-app-pub-4368195883573068/1298537394";
+const IOS_INTERSTITIAL_ID     = "ca-app-pub-4368195883573068/9640061848";
 
 const isProdIdReady = (id) => !id.includes("XXXXXXXXXX");
 
@@ -33,6 +33,7 @@ export function useInterstitialAd() {
   const [ready, setReady] = useState(false);
   const adRef      = useRef(null);
   const cleanupRef = useRef(null);
+  const retryTimerRef = useRef(null);
 
   const loadAd = () => {
     cleanupRef.current?.();
@@ -50,12 +51,12 @@ export function useInterstitialAd() {
     });
 
     const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
-      setTimeout(loadAd, 500);
+      retryTimerRef.current = setTimeout(loadAd, 500);
     });
 
     const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
       setReady(false);
-      setTimeout(loadAd, 5000);
+      retryTimerRef.current = setTimeout(loadAd, 5000);
     });
 
     cleanupRef.current = () => {
@@ -69,7 +70,10 @@ export function useInterstitialAd() {
 
   useEffect(() => {
     loadAd();
-    return () => cleanupRef.current?.();
+    return () => {
+      cleanupRef.current?.();
+      clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
   /**

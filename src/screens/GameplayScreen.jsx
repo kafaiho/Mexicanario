@@ -37,7 +37,10 @@ import DraggablePet from "../components/PetCompanion/DraggablePet";
 import StageCropped from "../components/PetCompanion/StageCropped";
 import SupportModal from "../components/SupportModal";
 import TermsModal from "../components/TermsModal";
+import RankUpOverlay from "../components/RankUpOverlay";
+import FriendToast from "../components/FriendToast";
 import TopBar from "../components/TopBar";
+import { getRank, getRankIndex, didRankUp } from "../config/xpRanks";
 import VictoryModal from "../components/VictoryModal";
 import VictoryShareCard from "../components/VictoryShareCard";
 import WheelModal from "../components/WheelModal";
@@ -55,27 +58,21 @@ import { hasPermission, requestPermission, rescheduleAfterPlay } from "../servic
 import usePetStore from "../store/usePetStore";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
 import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
+import { useKeyboardLayout } from "../hooks/useKeyboardLayout";
 import { compareWordsFlexibly, normalizeWordForDisplay } from "../utils/textUtils";
 import ShopScreen from "./ShopScreen";
 
 
 const { width, height } = Dimensions.get("window");
-// Real screen center (unpatched) — used for coin fly origin on tablet
-const COIN_CENTER_X = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
-const COIN_CENTER_Y = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
-// On tablet use a fixed value — the patched height in landscape (~384px) would give
-// only 142px via the formula, which is far too small for 3 keyboard rows.
-const KEYBOARD_HEIGHT = TABLET_MODE ? 420 : Math.min(264, height * 0.39);
 
-// Keyboard key sizes — responsive to screen width on both phone and tablet.
-// Tablet container: left:16+right:16+paddingH:14×2 = REAL_WIDTH-60 usable.
-// Phone container: full-width + paddingH:14×2 = width-28 usable.
-// Row 1&2: 10 keys × (key_w + 2×margin) = usable  →  key_w = (usable - 10×2×margin) / 10
-// Row 3: 7 reg + 2 special + 9×2×margin = usable  →  special_w solved
-const _KB_MARGIN = TABLET_MODE ? 3 : 2;
-const _KB_USABLE = TABLET_MODE ? (REAL_WIDTH - 60) : (width - 28);
-const TABLET_KEY_W = Math.floor((_KB_USABLE - 10 * _KB_MARGIN * 2) / 10);
-const TABLET_SPECIAL_W = Math.floor((_KB_USABLE - 7 * TABLET_KEY_W - 9 * _KB_MARGIN * 2) / 2);
+// Static keyboard sizing for StyleSheet — matches useKeyboardLayout output
+const _STATIC_KB_HEIGHT = TABLET_MODE ? 420 : Math.min(264, height * 0.39);
+const _STATIC_KB_MARGIN = TABLET_MODE ? 3 : 2;
+const _STATIC_KB_USABLE = TABLET_MODE
+  ? (Math.min(Dimensions.get('screen').width, Dimensions.get('screen').height) - 60)
+  : (width - 28);
+const _STATIC_KB_KEY_W = Math.floor((_STATIC_KB_USABLE - 10 * _STATIC_KB_MARGIN * 2) / 10);
+const _STATIC_KB_SPECIAL_W = Math.floor((_STATIC_KB_USABLE - 7 * _STATIC_KB_KEY_W - 9 * _STATIC_KB_MARGIN * 2) / 2);
 
 // On tablet, tiles are bigger so they fill more of the larger screen
 const TILE_SCALE = TABLET_MODE ? 1.4 : 1;
@@ -365,71 +362,49 @@ class PetErrorBoundary extends React.Component {
 }
 
 export default function GameplayScreen({ navigation, route }) {
-  // UI state
-  const [showDictionary, setShowDictionary] = useState(false);
-  const [showMexicanario, setShowMexicanario] = useState(false);
-  const [showWheel, setShowWheel] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
-  const [showSupport, setShowSupport] = useState(false);
-  const [showAdRemoval, setShowAdRemoval] = useState(false);
-  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
-  const [showRegisterLure, setShowRegisterLure] = useState(false);
-  const [showCuatesReg, setShowCuatesReg] = useState(false);
-  const promptedLevelsRef = useRef(new Set());
-  const [showCoinsModal, setShowCoinsModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // which power-up was attempted when coins ran out
-  const [showShop, setShowShop] = useState(false);
-  const [showExitPrompt, setShowExitPrompt] = useState(false);
+  // ── Mounted guard — prevents setState in async callbacks after unmount ──
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
-  // Android Back Button Handler
+  // ── Dynamic keyboard layout ──
+  const kb = useKeyboardLayout();
+  const coinCenterX = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
+  const coinCenterY = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
+
+  // UI state — consolidated modal state (only one modal open at a time, prevents re-render cascade)
+  const [openModal, setOpenModal] = useState(null);
+  const showDictionary    = openModal === 'dictionary';
+  const showMexicanario   = openModal === 'mexicanario';
+  const showWheel         = openModal === 'wheel';
+  const showTerms         = openModal === 'terms';
+  const showSupport       = openModal === 'support';
+  const showAdRemoval     = openModal === 'adRemoval';
+  const showAuthPrompt    = openModal === 'authPrompt';
+  const showRegisterLure  = openModal === 'registerLure';
+  const showCuatesReg     = openModal === 'cuatesReg';
+  const showCoinsModal    = openModal === 'coinsModal';
+  const showShop          = openModal === 'shop';
+  const showExitPrompt    = openModal === 'exitPrompt';
+  const promptedLevelsRef = useRef(new Set());
+  const [pendingAction, setPendingAction] = useState(null); // which power-up was attempted when coins ran out
+
+  // Android Back Button Handler — uses refs to avoid re-subscribing on every state change
+  const backHandlerStateRef = useRef({ isCorrect: false, showLevelUp: false, openModal: null, showDevModal: false });
+  useEffect(() => {
+    backHandlerStateRef.current = { isCorrect, showLevelUp, openModal, showDevModal };
+  });
   useEffect(() => {
     const backAction = () => {
-      // Don't show exit prompt if they already won/lost or are viewing another modal
-      if (
-        isCorrect ||
-        showLevelUp ||
-        showDictionary ||
-        showMexicanario ||
-        showWheel ||
-        showTerms ||
-        showSupport ||
-        showAdRemoval ||
-        showAuthPrompt ||
-        showRegisterLure ||
-        showCuatesReg ||
-        showCoinsModal ||
-        showShop ||
-        showDevModal
-      ) {
+      const s = backHandlerStateRef.current;
+      if (s.isCorrect || s.showLevelUp || s.openModal || s.showDevModal) {
         return false; // let default behavior happen (e.g., close modal)
       }
-
-      setShowExitPrompt(true);
-      return true; // prevent default (exit app/go back)
+      setOpenModal('exitPrompt');
+      return true;
     };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction
-    );
-
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, [
-    isCorrect,
-    showLevelUp,
-    showDictionary,
-    showMexicanario,
-    showWheel,
-    showTerms,
-    showSupport,
-    showAdRemoval,
-    showAuthPrompt,
-    showRegisterLure,
-    showCuatesReg,
-    showCoinsModal,
-    showShop,
-    showDevModal,
-  ]);
+  }, []);
 
   // Refs para coin fly
   const topBarRef = useRef(null);
@@ -478,27 +453,32 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Onboarding — shown only on first launch
   const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("gameplay");
-  const ONBOARDING_STEPS = [
+  const ONBOARDING_STEPS = useMemo(() => [
     {
-      // Step 0 — apunta al teclado; se auto-avanza al primer keypress
       text: "¡Toca las letras del teclado para adivinar la palabra mexicana! 🎹",
-      bubbleStyle: { bottom: KEYBOARD_HEIGHT + 30, left: 20, right: 20 },
-      handStyle: { bottom: KEYBOARD_HEIGHT + 10, left: width / 2 - 24 },
+      bubbleStyle: { bottom: kb.kbHeight + 30, left: 20, right: 20 },
+      handStyle: { bottom: kb.kbHeight + 10, left: width / 2 - 24 },
       handEmoji: "👇",
       handBounceDir: "down",
     },
     {
-      // Step 1 — apunta al tile grid; se auto-avanza al confirmar la palabra
       text: "¡Así se llena la cuadrícula! Cuando completes la palabra presiona ✓ para confirmar 🏆",
       bubbleStyle: { top: height * 0.22, left: 20, right: 20 },
       handStyle: { top: height * 0.5, left: width / 2 - 24 },
       handEmoji: "👆",
       handBounceDir: "up",
     },
-  ];
+  ], [kb.kbHeight, width, height]);
 
   // Proactive rewarded ad offer (shown on 3rd wrong attempt)
   const [showRewardedOffer, setShowRewardedOffer] = useState(false);
+  // Rank-up overlay state
+  const [showRankUp, setShowRankUp] = useState(false);
+  const [rankUpOld, setRankUpOld] = useState(null);
+  const [rankUpNew, setRankUpNew] = useState(null);
+  // Motivational friend toast
+  const [friendToastMsg, setFriendToastMsg] = useState(null);
+  const [showFriendToast, setShowFriendToast] = useState(false);
 
   // Combo & streak state (game logic + UI visibility decoupled)
   const { comboCount, maxCombo, comboVisible, incrementCombo, resetCombo, dismissCombo } = useCombo();
@@ -523,16 +503,26 @@ export default function GameplayScreen({ navigation, route }) {
   // Victory snapshot — frozen copy of current-level data shown in the modal
   // (needed because completeLevelMutation increments the level immediately,
   //  causing levelInfo to update reactively before the modal closes)
-  const [victoryWord, setVictoryWord] = useState("");
-  const [victoryExample, setVictoryExample] = useState("");
-  const [victoryRegion, setVictoryRegion] = useState("");
-  const [victoryLevel, setVictoryLevel] = useState(1);
+  const [victorySnap, setVictorySnap] = useState({ word: "", example: "", region: "", level: 1 });
+  const victoryWord = victorySnap.word;
+  const victoryExample = victorySnap.example;
+  const victoryRegion = victorySnap.region;
+  const victoryLevel = victorySnap.level;
 
   // Review mode — failed word scheduled for re-review
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [reviewWordId, setReviewWordId] = useState(null);
   const hasRecordedFailRef = useRef(false);   // prevent duplicate recordFail calls per word
   const mascotaCheerDateRef = useRef(null);    // date string of last cheer bubble (daily limit)
+
+  // Challenge mode — playing a friend challenge word
+  const challengeModeParam = route?.params?.challengeMode ?? false;
+  const challengeIdParam = route?.params?.challengeId ?? null;
+  const challengeWordParam = route?.params?.challengeWord ?? null;
+  const [isChallengeMode, setIsChallengeMode] = useState(!!challengeModeParam);
+  const [challengeStartTime, setChallengeStartTime] = useState(null);
+  const [challengeResult, setChallengeResult] = useState(null);
+  const respondToChallengeMut = useMutation(api.friends.respondToChallenge);
 
   // Map repaso mode — replaying a completed level from the map (no progress change)
   const reviewLevelParam = route?.params?.reviewLevel ?? null;
@@ -570,6 +560,7 @@ export default function GameplayScreen({ navigation, route }) {
   const usePowerupMutation = useMutation(api.shop.usePowerup);
   const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
   const recordDailyPlay = useMutation(api.streaks.recordDailyPlay);
+  const recordBestCombo = useMutation(api.streaks.recordBestCombo);
   const recordLeagueCXP = useMutation(api.league.recordLeagueCXP);
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
   const powerupInventory = shopState?.powerups ?? {};
@@ -581,6 +572,12 @@ export default function GameplayScreen({ navigation, route }) {
   useEffect(() => { reviewWordRef.current = reviewWord ?? null; }, [reviewWord]);
   const recordFailMutation = useMutation(api.failedWords.recordFail);
   const resolveWordMutation = useMutation(api.failedWords.resolveWord);
+
+  // Friends weekly leaderboard (for motivational toast)
+  const friendsWeekly = useQuery(
+    api.friends.getFriendsLeaderboard,
+    userId ? { userId, period: "weekly" } : "skip"
+  );
 
   // Streak query — drives mascot tier visuals
   const streakStatus = useQuery(api.streaks.getStreakStatus, userId ? { userId } : "skip");
@@ -650,6 +647,16 @@ export default function GameplayScreen({ navigation, route }) {
     });
   }, []);
 
+  // Cleanup all timers on unmount — prevents setState on unmounted component
+  useEffect(() => {
+    return () => {
+      clearTimeout(mascotaTimer.current);
+      clearTimeout(wrongClearTimerRef.current);
+      clearTimeout(deleteHoldTimerRef.current);
+      clearInterval(deleteRepeatRef.current);
+    };
+  }, []);
+
   // Cambiar BGM a gameplay al entrar, volver a menu al salir
   useEffect(() => {
     playBGM("gameplay");
@@ -679,8 +686,8 @@ export default function GameplayScreen({ navigation, route }) {
     if (!hasCoins && !hasDiamonds) return;
     const timer = setTimeout(async () => {
       // Medir fuente: el pill de recompensa dentro del modal
-      let srcX = COIN_CENTER_X;
-      let srcY = COIN_CENTER_Y * 1.36;
+      let srcX = coinCenterX;
+      let srcY = coinCenterY * 1.36;
       if (victoryRewardRef.current) {
         await new Promise((res) => {
           let done = false;
@@ -764,13 +771,14 @@ export default function GameplayScreen({ navigation, route }) {
   // ─── AsyncStorage persistence ─────────────────────────────────────────────
   const SAVE_KEY = (levelNum) => `@mexicanario_save_level_${levelNum}`;
 
-  const saveProgress = useCallback(async (levelNum, guessArr, fixed, synonym, boxIdx) => {
+  const saveProgress = useCallback(async (levelNum, guessArr, fixed, synonym, boxIdx, revealed) => {
     try {
       await AsyncStorage.setItem(SAVE_KEY(levelNum), JSON.stringify({
         guess: guessArr,
         fixedLetters: fixed,
         showSynonym: synonym,
         selectedBoxIndex: boxIdx,
+        revealedKeys: revealed ? [...revealed] : null,
       }));
     } catch (_) { }
   }, []);
@@ -779,12 +787,12 @@ export default function GameplayScreen({ navigation, route }) {
     try { await AsyncStorage.removeItem(SAVE_KEY(levelNum)); } catch (_) { }
   }, []);
 
-  // Save whenever guess changes (debounced via useEffect)
+  // Save whenever guess or revealedKeys changes
   useEffect(() => {
     if (mexicanWord && !isCorrect && levelInfo?.level) {
-      saveProgress(levelInfo.level, guess, fixedLetters, showSynonym, selectedBoxIndex);
+      saveProgress(levelInfo.level, guess, fixedLetters, showSynonym, selectedBoxIndex, revealedKeys);
     }
-  }, [guess]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [guess, revealedKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -814,6 +822,7 @@ export default function GameplayScreen({ navigation, route }) {
     usedPowerupRef.current = false;
     lastInputTimeRef.current = Date.now();
     setShowRewardedOffer(false);
+    setOpenModal(null);
   };
 
   const initGame = async () => {
@@ -835,6 +844,24 @@ export default function GameplayScreen({ navigation, route }) {
         setGuess(initial);
         const firstNonSpace = initial.findIndex((ch) => ch !== " ");
         setSelectedBoxIndex(firstNonSpace >= 0 ? firstNonSpace : 0);
+        setIsLoading(false);
+        return;
+      }
+
+      // ── Challenge mode: play a specific word from a friend challenge ──
+      if (isChallengeMode && challengeWordParam) {
+        const wordUp = normalizeWordForDisplay(challengeWordParam.word);
+        setMexicanWord(wordUp);
+        setOriginalWord(challengeWordParam.word.toUpperCase());
+        setRegularWord(challengeWordParam.meaning?.toUpperCase() || "");
+        setWordMeaning(challengeWordParam.meaning || "");
+        setWordExample(challengeWordParam.example || "");
+        setWordRegion(challengeWordParam.region || "");
+        const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
+        setGuess(initial);
+        const firstNonSpace = initial.findIndex((ch) => ch !== " ");
+        setSelectedBoxIndex(firstNonSpace >= 0 ? firstNonSpace : 0);
+        setChallengeStartTime(Date.now());
         setIsLoading(false);
         return;
       }
@@ -899,6 +926,11 @@ export default function GameplayScreen({ navigation, route }) {
                   setFixedLetters(saved.fixedLetters || []);
                   setShowSynonym(saved.showSynonym || false);
                   setSelectedBoxIndex(saved.selectedBoxIndex ?? 0);
+                  // Restore keyboard reveal if user paid for it
+                  if (Array.isArray(saved.revealedKeys)) {
+                    setRevealedKeys(new Set(saved.revealedKeys));
+                    usedPowerupRef.current = true;
+                  }
                   restored = true;
                 }
               }
@@ -916,7 +948,7 @@ export default function GameplayScreen({ navigation, route }) {
           Alert.alert("Error", "Hubo un problema cargando la palabra. Intenta de nuevo.");
         }
         if (levelInfo.isDefaultLevel) {
-          setShowAuthPrompt(true);
+          setOpenModal('authPrompt');
         }
       }
     } catch (error) {
@@ -948,7 +980,7 @@ export default function GameplayScreen({ navigation, route }) {
     if (REGISTER_PROMPT_LEVELS.includes(lvl) && !promptedLevelsRef.current.has(lvl)) {
       promptedLevelsRef.current.add(lvl);
       // pequeño delay para que el jugador vea la pantalla antes del aviso
-      setTimeout(() => setShowRegisterLure(true), 800);
+      setTimeout(() => setOpenModal('registerLure'), 800);
     }
   }, [levelInfo?.level]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1031,14 +1063,44 @@ export default function GameplayScreen({ navigation, route }) {
           playSound("correct");
           notifySuccess();
           triggerMascota("celebrating", "¡Repasado!");
-          const snapWord = originalWord || mexicanWord;
-          const snapExample = wordExample;
-          const snapRegion = wordRegion;
-          const snapLevel = reviewLevelParam || 1;
-          setVictoryWord(snapWord);
-          setVictoryExample(snapExample);
-          setVictoryRegion(snapRegion);
-          setVictoryLevel(snapLevel);
+          setVictorySnap({
+            word: originalWord || mexicanWord,
+            example: wordExample,
+            region: wordRegion,
+            level: reviewLevelParam || 1,
+          });
+          setLevelUpReward({ coins: 0, diamonds: 0 });
+          setTimeout(() => {
+            setShowLevelUp(true);
+            playSound("celebration");
+          }, 500);
+          return;
+        }
+
+        // ── Challenge mode: submit result, no level advance ──
+        if (isChallengeMode && challengeIdParam) {
+          playSound("correct");
+          celebrate();
+          notifySuccess();
+          triggerMascota("celebrating", "¡Reto completado!");
+          const elapsedMs = Date.now() - (challengeStartTime || Date.now());
+          try {
+            const result = await respondToChallengeMut({
+              challengeId: challengeIdParam,
+              userId,
+              attempts: attempts + 1, // attempts is 0-based errors, send total
+              timeMs: elapsedMs,
+            });
+            setChallengeResult(result);
+          } catch (e) {
+            console.warn("Challenge respond error:", e);
+          }
+          setVictorySnap({
+            word: originalWord || mexicanWord,
+            example: wordExample,
+            region: wordRegion,
+            level: levelInfo?.level || 1,
+          });
           setLevelUpReward({ coins: 0, diamonds: 0 });
           setTimeout(() => {
             setShowLevelUp(true);
@@ -1071,8 +1133,8 @@ export default function GameplayScreen({ navigation, route }) {
           }
           bondAcierto(); // +15 vínculo por acierto
         } else {
-          // Had wrong attempts — break combo
-          newCombo = 0;
+          // Had wrong attempts — combo grace: lose 1 instead of full reset
+          newCombo = Math.max(0, comboCount - 1);
           if (comboCount > 0) {
             playSound("combo_break");
             notifyWarning();
@@ -1080,7 +1142,7 @@ export default function GameplayScreen({ navigation, route }) {
             playSound("correct");
             notifySuccess();
           }
-          resetCombo(); // resets comboCount to 0 and hides banner
+          resetCombo(newCombo); // reduce combo by 1 (grace system)
           const today = new Date().toISOString().slice(0, 10);
           const cheerBubble = mascotaCheerDateRef.current !== today
             ? (mascotaCheerDateRef.current = today,
@@ -1094,7 +1156,7 @@ export default function GameplayScreen({ navigation, route }) {
         // Clear saved progress for this level — it's done!
         if (levelInfo?.level) clearProgress(levelInfo.level);
         if (!userId) {
-          setShowAuthPrompt(true);
+          setOpenModal('authPrompt');
           return;
         }
         // Snapshot current-level data NOW before mutation overwrites Convex reactive values
@@ -1118,10 +1180,7 @@ export default function GameplayScreen({ navigation, route }) {
         // instead of 5 immediate + 1 delayed. Keeps JS thread free for animations.
         const victoryDelay = attempts === 0 ? 1350 : 500;
         setTimeout(() => {
-          setVictoryWord(snapWord);
-          setVictoryExample(snapExample);
-          setVictoryRegion(snapRegion);
-          setVictoryLevel(snapLevel);
+          setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel });
           setLevelUpReward(displayReward);
           setShowLevelUp(true);
           playSound("celebration");
@@ -1142,24 +1201,59 @@ export default function GameplayScreen({ navigation, route }) {
                 updateUserCurrency({ userId, coins: totalCoins, diamonds: displayReward.diamonds }).catch(() => { });
               }
               gainPetXp({ userId }).catch(() => { });
-              // XP cultural: base + bonos por combo, racha y sesión
+              // XP cultural: base + bonos por combo, racha, sesión y velocidad
               const isPerfectLevel = !isMapReview && attempts === 0 && !usedPowerupRef.current;
               let xpAmount = 10; // base
               if (isPerfectLevel) xpAmount += 15; // perfecto
               if (newCombo >= 3) xpAmount += Math.min(newCombo * 2, 20); // combo: +6 a +20
-              const streak = userData?.playStreak ?? 0;
+              const streak = user?.playStreak ?? 0;
               if (streak >= 3) xpAmount += Math.min(streak, 10); // racha: +3 a +10
               if (completedLevelsRef.current >= 10) xpAmount += 5; // sesión larga: +5
               if (completedLevelsRef.current >= 20) xpAmount += 5; // sesión muy larga: +10 total
-              addXp({ userId, amount: xpAmount }).catch(() => { });
+              // Speed bonus
+              const timeSeconds = (Date.now() - wordStartTime) / 1000;
+              if (timeSeconds <= 10) xpAmount += 5;
+              else if (timeSeconds <= 20) xpAmount += 3;
+              else if (timeSeconds <= 30) xpAmount += 1;
+              // Track old XP for rank-up detection
+              const currentXp = user?.xp ?? 0;
+              addXp({ userId, amount: xpAmount })
+                .then((result) => {
+                  if (!mountedRef.current) return;
+                  if (result && didRankUp(result.oldXp, result.newXp)) {
+                    setRankUpOld(getRank(result.oldXp));
+                    setRankUpNew(getRank(result.newXp));
+                    // Delay to let victory modal show first
+                    setTimeout(() => { if (mountedRef.current) setShowRankUp(true); }, 2500);
+                  }
+                  // Motivational friend toast (~20% chance)
+                  if (Math.random() < 0.2 && friendsWeekly?.length > 1) {
+                    const me = friendsWeekly.find((e) => e.isSelf);
+                    const ahead = friendsWeekly.filter(
+                      (e) => !e.isSelf && e.xpThisWeek > (me?.xpThisWeek ?? 0)
+                    );
+                    if (ahead.length > 0) {
+                      const rival = ahead[ahead.length - 1]; // closest rival
+                      const diff = rival.xpThisWeek - (me?.xpThisWeek ?? 0);
+                      const name = rival.username ? `@${rival.username}` : rival.name;
+                      setFriendToastMsg(
+                        `${name} tiene ${rival.xpThisWeek} XP esta semana. Tú llevas ${me?.xpThisWeek ?? 0}. ¡Faltan ${diff}!`
+                      );
+                      setTimeout(() => { if (mountedRef.current) setShowFriendToast(true); }, 2000);
+                    }
+                  }
+                })
+                .catch(() => { });
               recordLeagueCXP({ userId, attempts, comboCount: newCombo }).catch(() => { });
+              if (newCombo > 0) recordBestCombo({ userId, sessionMaxCombo: newCombo }).catch(() => { });
               recordDailyPlay({ userId })
                 .then(async (streakResult) => {
+                  if (!mountedRef.current) return;
                   if (!streakResult.alreadyRecorded && streakResult.isNewStreak) {
                     setIsFirstWordToday(true);
                     setStreakCount(streakResult.streak);
                     setBoostActive(true);
-                    setTimeout(() => setBoostActive(false), 1500);
+                    setTimeout(() => { if (mountedRef.current) setBoostActive(false); }, 1500);
                     playSound("streak");
                   }
                   // Request notification permission at streak >= 3 (high-momentum moment)
@@ -1231,10 +1325,21 @@ export default function GameplayScreen({ navigation, route }) {
   };
 
   const onKeyPress = (key) => {
-    // Cancel pending wrong-answer clear so new keystrokes aren't overwritten
+    // Cancel pending wrong-answer clear AND immediately clear stale letters
     if (wrongClearTimerRef.current) {
       clearTimeout(wrongClearTimerRef.current);
       wrongClearTimerRef.current = null;
+      // Clear old wrong letters (preserve spaces + fixed/hint letters)
+      setGuess((prev) => {
+        const cleared = [...prev];
+        for (let i = 0; i < cleared.length; i++) {
+          if (mexicanWord[i] !== " " && !fixedLetters.includes(i)) cleared[i] = "";
+        }
+        return cleared;
+      });
+      const firstEmpty = nextTypableIndex(0, mexicanWord);
+      setSelectedBoxIndex(firstEmpty);
+      return; // consume this keystroke for the clear, next one starts fresh
     }
     lastInputTimeRef.current = Date.now(); // reset guide gaze timer
     // Dismiss combo banner on first keypress of the next word (non-blocking, keeps comboCount)
@@ -1262,7 +1367,7 @@ export default function GameplayScreen({ navigation, route }) {
     }
     if (key === "CLEAR_ALL") {
       if (guess.length > 0) {
-        Animated.parallel(
+        Animated.stagger(10,
           scaleAnims.map((anim) =>
             Animated.sequence([
               Animated.timing(anim, { toValue: 0.8, duration: 80, useNativeDriver: true }),
@@ -1331,10 +1436,10 @@ export default function GameplayScreen({ navigation, route }) {
 
   // ─── Power-ups ───────────────────────────────────────────────────────────────
   const checkCoins = (cost, actionKey) => {
-    if (!userId || !user) { setShowAuthPrompt(true); return false; }
+    if (!userId || !user) { setOpenModal('authPrompt'); return false; }
     if ((user.coins || 0) < cost) {
       setPendingAction(actionKey);
-      setShowCoinsModal(true);
+      setOpenModal('coinsModal');
       return false;
     }
     return true;
@@ -1364,6 +1469,11 @@ export default function GameplayScreen({ navigation, route }) {
   // Revelar letra (A) – siempre gratis, sin monedas
   const handleReveal = () => {
     if (isLoading || !levelInfo || isCorrect) return;
+    // Cancel any pending wrong-answer clear so hint letter isn't wiped
+    if (wrongClearTimerRef.current) {
+      clearTimeout(wrongClearTimerRef.current);
+      wrongClearTimerRef.current = null;
+    }
     const emptyIndices = [];
     for (let i = 0; i < mexicanWord.length; i++) {
       if (!fixedLetters.includes(i) && (guess[i] === undefined || guess[i] === "" || guess[i] !== mexicanWord[i])) {
@@ -1408,6 +1518,21 @@ export default function GameplayScreen({ navigation, route }) {
       return;
     }
     if (!checkCoins(BORRAR_COST, "borrar")) return;
+    // Cancel any pending wrong-answer clear so it doesn't wipe user input
+    if (wrongClearTimerRef.current) {
+      clearTimeout(wrongClearTimerRef.current);
+      wrongClearTimerRef.current = null;
+    }
+    // Clear wrong letters from previous attempt so tiles are fresh
+    setGuess((prev) => {
+      const cleared = [...prev];
+      for (let i = 0; i < cleared.length; i++) {
+        if (mexicanWord[i] !== " " && !fixedLetters.includes(i)) cleared[i] = "";
+      }
+      return cleared;
+    });
+    setWrongLetters([]);
+    setSelectedBoxIndex(nextTypableIndex(0, mexicanWord));
     usedPowerupRef.current = true;
     updateUserCurrency({ userId, coins: -BORRAR_COST, diamonds: 0 }).catch(() => { });
     triggerMascota("celebrating", "🔑 ¡Mira las letras correctas!");
@@ -1427,6 +1552,11 @@ export default function GameplayScreen({ navigation, route }) {
   const handleVerificar = () => {
     if (isLoading || !levelInfo || isCorrect) return;
     if (!checkCoins(VERIFICAR_COST, "verificar")) return;
+    // Cancel any pending wrong-answer clear so completed word isn't wiped
+    if (wrongClearTimerRef.current) {
+      clearTimeout(wrongClearTimerRef.current);
+      wrongClearTimerRef.current = null;
+    }
     usedPowerupRef.current = true;
     updateUserCurrency({ userId, coins: -VERIFICAR_COST, diamonds: 0 }).catch(() => { });
     const allIndices = Array.from({ length: mexicanWord.length }, (_, i) => i).filter(i => mexicanWord[i] !== " ");
@@ -1498,6 +1628,77 @@ export default function GameplayScreen({ navigation, route }) {
     }
   };
 
+  // ── Dynamic styles (keyboard always at bottom) ─────────────────────────────
+  const dynamicStyles = useMemo(() => ({
+    gameContent: {
+      flex: 1,
+      paddingTop: 104,
+      paddingHorizontal: 16,
+      paddingBottom: kb.kbHeight + 10,
+    },
+    keyboardContainer: {
+      position: 'absolute',
+      bottom: TABLET_MODE ? 20 : 0,
+      left: TABLET_MODE ? 16 : 0,
+      right: TABLET_MODE ? 16 : 0,
+      borderRadius: TABLET_MODE ? 20 : 0,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      height: kb.kbHeight,
+      backgroundColor: '#EAECEE',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: TABLET_MODE ? 6 : -3 },
+      shadowOpacity: TABLET_MODE ? 0.28 : 0.12,
+      shadowRadius: TABLET_MODE ? 14 : 8,
+      elevation: 16,
+    },
+    keyboard: {
+      width: '100%',
+      paddingVertical: kb.kbPaddingV,
+      paddingHorizontal: 14,
+    },
+    keyboardRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      marginBottom: kb.kbRowMarginB,
+    },
+    key: {
+      width: kb.kbKeyW,
+      height: kb.kbKeyH,
+      marginHorizontal: kb.kbMargin,
+      backgroundColor: 'white',
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 2,
+      elevation: 3,
+    },
+    keyText: {
+      fontSize: kb.kbFontSize,
+      fontWeight: '800',
+      color: '#1A5276',
+    },
+    deleteKey: { width: kb.kbSpecialW, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
+    clearKey: { width: kb.kbSpecialW, backgroundColor: "#C8C8D0" },
+    deleteIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#1A5276' },
+    deleteIconText: { fontSize: TABLET_MODE ? 28 : 20, color: '#1A5276' },
+    clearIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#C0392B' },
+  }), [kb]);
+
+  // Pre-computed keyboard key styles — dynamic for orientation
+  const dynKeyStylesNormal = useMemo(() => ({
+    DELETE_ONE: [dynamicStyles.key, dynamicStyles.deleteKey],
+    CLEAR_ALL: [dynamicStyles.key, dynamicStyles.clearKey],
+  }), [dynamicStyles.key, dynamicStyles.deleteKey, dynamicStyles.clearKey]);
+  const dynKeyStylesDimmed = useMemo(() => ({
+    DELETE_ONE: [dynamicStyles.key, dynamicStyles.deleteKey, styles.keyDimmed],
+    CLEAR_ALL: [dynamicStyles.key, dynamicStyles.clearKey, styles.keyDimmed],
+    _default: [dynamicStyles.key, styles.keyDimmed],
+  }), [dynamicStyles.key, dynamicStyles.deleteKey, dynamicStyles.clearKey]);
+
   // ─── Loading ─────────────────────────────────────────────────────────────────
   if (isLoading || !levelInfo) {
     return (
@@ -1510,23 +1711,11 @@ export default function GameplayScreen({ navigation, route }) {
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.container}
       resizeMode="cover"
     >
       <SafeAreaView style={styles.container}>
-        {/* TopBar */}
-        <TopBar ref={topBarRef} showHomeButton={true} navigation={navigation} />
-
-        {/* Review badge */}
-        {isReviewMode && (
-          <View style={styles.zoneBadgeRow}>
-            <View style={styles.reviewBadge}>
-              <Text style={styles.reviewBadgeText}>📚 Repaso</Text>
-            </View>
-          </View>
-        )}
-
         {/* Enhanced combo counter overlay */}
         <EnhancedComboCounter comboCount={comboCount} visible={comboVisible} />
 
@@ -1547,18 +1736,30 @@ export default function GameplayScreen({ navigation, route }) {
           </PetErrorBoundary>
         )}
 
-        {/* DEV: botón saltar nivel — solo visible en modo desarrollador */}
-        {devEnabled && (
-          <TouchableOpacity
-            style={styles.devBtn}
-            onPress={() => { setDevLevelInput(""); setShowDevModal(true); }}
-          >
-            <Text style={styles.devBtnText}>🔧 Nivel</Text>
-          </TouchableOpacity>
-        )}
+        {/* TopBar */}
+        <TopBar ref={topBarRef} showHomeButton={true} navigation={navigation} />
 
-        {/* Game Content */}
-        <View style={styles.gameContent}>
+            {/* Review badge */}
+            {isReviewMode && (
+              <View style={styles.zoneBadgeRow}>
+                <View style={styles.reviewBadge}>
+                  <Text style={styles.reviewBadgeText}>📚 Repaso</Text>
+                </View>
+              </View>
+            )}
+
+            {/* DEV: botón saltar nivel — solo visible en modo desarrollador */}
+            {devEnabled && (
+              <TouchableOpacity
+                style={styles.devBtn}
+                onPress={() => { setDevLevelInput(""); setShowDevModal(true); }}
+              >
+                <Text style={styles.devBtnText}>🔧 Nivel</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Game Content */}
+            <View style={dynamicStyles.gameContent}>
 
           {/* ── Clue Card ── */}
           <View style={styles.clueCard}>
@@ -1649,99 +1850,96 @@ export default function GameplayScreen({ navigation, route }) {
               </View>
             ))}
           </Animated.View>
-        </View>
+            </View>
 
-        {/* ── Keyboard area ── */}
-        <View style={styles.keyboardContainer}>
+          {/* ── Keyboard (absolute bottom) ── */}
+          <View style={dynamicStyles.keyboardContainer}>
 
-          {/* Power-up row */}
-          <View style={styles.powerUpRow}>
-            {/* Revelar 1 letra (A) – 25🪙 */}
-            <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpReveal]} onPress={handleReveal}>
-              <Text style={styles.powerUpBtnLabel}>A</Text>
-              <View style={styles.powerUpCost}>
-                <Text style={styles.powerUpCostText}>🪙{HINT_COST}</Text>
-              </View>
-            </TouchableOpacity>
+            {/* Power-up row */}
+            <View style={styles.powerUpRow}>
+              {/* Revelar 1 letra (A) – 25🪙 */}
+              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpReveal]} onPress={handleReveal}>
+                <Text style={styles.powerUpBtnLabel}>A</Text>
+                <View style={styles.powerUpCost}>
+                  <Text style={styles.powerUpCostText}>🪙{HINT_COST}</Text>
+                </View>
+              </TouchableOpacity>
 
-            {/* Revelar 3 letras (🔓) – 75🪙 */}
-            <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpBorrar]} onPress={handleBorrar}>
-              <Text style={styles.powerUpBtnEmoji}>🔓</Text>
-              <View style={styles.powerUpCost}>
-                <Text style={styles.powerUpCostText}>🪙{BORRAR_COST}</Text>
-              </View>
-            </TouchableOpacity>
+              {/* Revelar 3 letras (🔓) – 75🪙 */}
+              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpBorrar]} onPress={handleBorrar}>
+                <Text style={styles.powerUpBtnEmoji}>🔓</Text>
+                <View style={styles.powerUpCost}>
+                  <Text style={styles.powerUpCostText}>🪙{BORRAR_COST}</Text>
+                </View>
+              </TouchableOpacity>
 
-            {/* Completar todo (⭐) – 200🪙 */}
-            <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpVerificar]} onPress={handleVerificar}>
-              <Text style={styles.powerUpBtnEmoji}>⭐</Text>
-              <View style={styles.powerUpCost}>
-                <Text style={styles.powerUpCostText}>🪙{VERIFICAR_COST}</Text>
-              </View>
-            </TouchableOpacity>
+              {/* Completar todo (⭐) – 200🪙 */}
+              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpVerificar]} onPress={handleVerificar}>
+                <Text style={styles.powerUpBtnEmoji}>⭐</Text>
+                <View style={styles.powerUpCost}>
+                  <Text style={styles.powerUpCostText}>🪙{VERIFICAR_COST}</Text>
+                </View>
+              </TouchableOpacity>
 
-            {/* Retar amigo (!) – comparte la pregunta sin revelar la respuesta */}
-            <TouchableOpacity
-              style={[styles.powerUpBtn, styles.powerUpChallenge]}
-              onPress={handleShareChallenge}
-            >
-              <Text style={styles.powerUpBtnLabel}>!</Text>
-            </TouchableOpacity>
-          </View>
+              {/* Retar amigo (!) – comparte la pregunta sin revelar la respuesta */}
+              <TouchableOpacity
+                style={[styles.powerUpBtn, styles.powerUpChallenge]}
+                onPress={handleShareChallenge}
+              >
+                <Text style={styles.powerUpBtnLabel}>!</Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Keyboard — JuicyButton for multisensory feedback */}
-          <View style={styles.keyboard}>
-            {KEYBOARD_LAYOUT.map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.keyboardRow}>
-                {row.map((key) => {
-                  const isSpecial = key === "DELETE_ONE" || key === "CLEAR_ALL";
-                  const isDimmed = revealedKeys !== null && !isSpecial && !revealedKeys.has(key);
-                  // keyStyle: base differs per key type; isDimmed rarely changes → stable for React.memo
-                  const keyStyle = isDimmed
-                    ? [styles.key, key === "DELETE_ONE" && styles.deleteKey, key === "CLEAR_ALL" && styles.clearKey, styles.keyDimmed]
-                    : key === "DELETE_ONE" ? [styles.key, styles.deleteKey]
-                    : key === "CLEAR_ALL"  ? [styles.key, styles.clearKey]
-                    : styles.key;
-                  return (
-                    <JuicyButton
-                      key={key}
-                      style={keyStyle}
-                      disabled={isDimmed}
-                      onPress={keyHandlers[key]}
-                      onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
-                      onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
-                      intensity={key === "CLEAR_ALL" ? "medium" : "light"}
-                      scaleDown={0.88}
-                    >
-                      {key === "DELETE_ONE" ? (
-                        Platform.OS === "android" ? (
-                          <Text style={styles.deleteIconText}>⌫</Text>
-                        ) : (
+            {/* Keyboard — JuicyButton for multisensory feedback */}
+            <View style={dynamicStyles.keyboard}>
+              {KEYBOARD_LAYOUT.map((row, rowIndex) => (
+                <View key={rowIndex} style={dynamicStyles.keyboardRow}>
+                  {row.map((key) => {
+                    const isSpecial = key === "DELETE_ONE" || key === "CLEAR_ALL";
+                    const isDimmed = revealedKeys !== null && !isSpecial && !revealedKeys.has(key);
+                    const keyStyle = isDimmed
+                      ? dynKeyStylesDimmed[key] || dynKeyStylesDimmed._default
+                      : dynKeyStylesNormal[key] || dynamicStyles.key;
+                    return (
+                      <JuicyButton
+                        key={key}
+                        style={keyStyle}
+                        disabled={isDimmed}
+                        onPress={keyHandlers[key]}
+                        onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
+                        onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
+                        intensity={key === "CLEAR_ALL" ? "medium" : "light"}
+                        scaleDown={0.88}
+                      >
+                        {key === "DELETE_ONE" ? (
+                          Platform.OS === "android" ? (
+                            <Text style={dynamicStyles.deleteIconText}>⌫</Text>
+                          ) : (
+                            <Image
+                              source={require("../../assets/images/delete_one.png")}
+                              style={dynamicStyles.deleteIcon}
+                            />
+                          )
+                        ) : key === "CLEAR_ALL" ? (
                           <Image
-                            source={require("../../assets/images/delete_one.png")}
-                            style={styles.deleteIcon}
+                            source={require("../../assets/icons/trash.png")}
+                            style={dynamicStyles.clearIcon}
                           />
-                        )
-                      ) : key === "CLEAR_ALL" ? (
-                        <Image
-                          source={require("../../assets/icons/trash.png")}
-                          style={styles.clearIcon}
-                        />
-                      ) : (
-                        <Text style={styles.keyText}>{key}</Text>
-                      )}
-                    </JuicyButton>
-                  );
-                })}
-              </View>
-            ))}
+                        ) : (
+                          <Text style={dynamicStyles.keyText}>{key}</Text>
+                        )}
+                      </JuicyButton>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
 
         {/* ── Modals ── */}
-        <DictionaryModal
-          visible={showDictionary}
-          onClose={() => setShowDictionary(false)}
+        {showDictionary && <DictionaryModal
+          visible
+          onClose={() => setOpenModal(null)}
           wordData={{
             word: mexicanWord,
             meaning: wordMeaning || "Significado no disponible",
@@ -1749,12 +1947,27 @@ export default function GameplayScreen({ navigation, route }) {
             example: wordExample || "Ejemplo no disponible",
             region: wordRegion || "Región no disponible",
           }}
+        />}
+        {showMexicanario && <MexicanarioModal visible onClose={() => setOpenModal(null)} />}
+        {showWheel && <WheelModal visible onClose={() => setOpenModal(null)} onOpenShop={() => { setOpenModal('shop'); }} />}
+        {showTerms && <TermsModal visible onClose={() => setOpenModal(null)} />}
+        {showSupport && <SupportModal visible onClose={() => setOpenModal(null)} />}
+        {showAdRemoval && <AdRemovalModal visible onClose={() => setOpenModal(null)} />}
+
+        {/* Rank-up celebration */}
+        <RankUpOverlay
+          visible={showRankUp}
+          oldRank={rankUpOld}
+          newRank={rankUpNew}
+          onDismiss={() => setShowRankUp(false)}
         />
-        <MexicanarioModal visible={showMexicanario} onClose={() => setShowMexicanario(false)} />
-        <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowWheel(false); setShowShop(true); }} />
-        <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
-        <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} />
-        <AdRemovalModal visible={showAdRemoval} onClose={() => setShowAdRemoval(false)} />
+
+        {/* Motivational friend toast */}
+        <FriendToast
+          visible={showFriendToast}
+          message={friendToastMsg}
+          onDone={() => { setShowFriendToast(false); setFriendToastMsg(null); }}
+        />
 
         {/* DEV: Saltar a nivel */}
         <Modal visible={showDevModal} transparent animationType="fade">
@@ -1830,11 +2043,11 @@ export default function GameplayScreen({ navigation, route }) {
               <Text style={styles.regTagline}>¡No cuesta nada y ganas un montón! 🌶️</Text>
               <TouchableOpacity
                 style={styles.regBtn}
-                onPress={() => { setShowAuthPrompt(false); setShowRegisterLure(true); }}
+                onPress={() => { setOpenModal('registerLure'); }}
               >
                 <Text style={styles.regBtnText}>¡Quiero mis varos! 🌮</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.regDismiss} onPress={() => setShowAuthPrompt(false)}>
+              <TouchableOpacity style={styles.regDismiss} onPress={() => setOpenModal(null)}>
                 <Text style={{ color: "#A0714F", fontSize: 13 }}>Ahora no</Text>
               </TouchableOpacity>
             </View>
@@ -1864,11 +2077,11 @@ export default function GameplayScreen({ navigation, route }) {
               <Text style={styles.regTagline}>¡Solo esta vez, no la cagues! 🌶️</Text>
               <TouchableOpacity
                 style={styles.regBtn}
-                onPress={() => { setShowRegisterLure(false); setShowCuatesReg(true); }}
+                onPress={() => { setOpenModal('cuatesReg'); }}
               >
                 <Text style={styles.regBtnText}>¡Registrarme y cobrar! 🎁</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.regDismiss} onPress={() => setShowRegisterLure(false)}>
+              <TouchableOpacity style={styles.regDismiss} onPress={() => setOpenModal(null)}>
                 <Text style={{ color: "#A0714F", fontSize: 13 }}>Quizás después</Text>
               </TouchableOpacity>
             </View>
@@ -1886,7 +2099,7 @@ export default function GameplayScreen({ navigation, route }) {
               <TouchableOpacity
                 style={styles.modalBtnPrimary}
                 onPress={() => {
-                  setShowExitPrompt(false);
+                  setOpenModal(null);
                   navigation.goBack();
                 }}
               >
@@ -1894,7 +2107,7 @@ export default function GameplayScreen({ navigation, route }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ marginTop: 15, paddingVertical: 10, width: "100%", alignItems: "center" }}
-                onPress={() => setShowExitPrompt(false)}
+                onPress={() => setOpenModal(null)}
               >
                 <Text style={{ color: "#1A5276", fontWeight: "bold", fontSize: 16 }}>
                   Cancelar
@@ -1905,7 +2118,7 @@ export default function GameplayScreen({ navigation, route }) {
         </Modal>
 
         {/* CuatesModal abierto desde los avisos */}
-        <CuatesModal visible={showCuatesReg} onClose={() => setShowCuatesReg(false)} />
+        {showCuatesReg && <CuatesModal visible onClose={() => setOpenModal(null)} />}
 
         {/* Coins Insufficient Modal */}
         <Modal visible={showCoinsModal} transparent animationType="slide">
@@ -1939,12 +2152,12 @@ export default function GameplayScreen({ navigation, route }) {
                           } catch {
                             return; // cooldown activo
                           }
-                          setShowCoinsModal(false);
+                          setOpenModal(null);
                           setPendingAction(null);
                           const target = await getCoinPillTarget();
                           triggerMainCoin({
-                            fromX: COIN_CENTER_X,
-                            fromY: COIN_CENTER_Y,
+                            fromX: coinCenterX,
+                            fromY: coinCenterY,
                             toX: target.x + target.w / 2,
                             toY: target.y + target.h / 2,
                             coins: 25,
@@ -1983,12 +2196,12 @@ export default function GameplayScreen({ navigation, route }) {
                             Alert.alert("Ya compartiste hoy", "Vuelve mañana para ganar más monedas 🌮");
                             return;
                           }
-                          setShowCoinsModal(false);
+                          setOpenModal(null);
                           setPendingAction(null);
                           const target = await getCoinPillTarget();
                           triggerMainCoin({
-                            fromX: COIN_CENTER_X,
-                            fromY: COIN_CENTER_Y,
+                            fromX: coinCenterX,
+                            fromY: coinCenterY,
                             toX: target.x + target.w / 2,
                             toY: target.y + target.h / 2,
                             coins: 50,
@@ -2022,12 +2235,12 @@ export default function GameplayScreen({ navigation, route }) {
                         if (userId) {
                           await updateUserCurrency({ userId, coins: 40 });
                         }
-                        setShowCoinsModal(false);
+                        setOpenModal(null);
                         setPendingAction(null);
                         const target = await getCoinPillTarget();
                         triggerMainCoin({
-                          fromX: COIN_CENTER_X,
-                          fromY: COIN_CENTER_Y,
+                          fromX: coinCenterX,
+                          fromY: coinCenterY,
                           toX: target.x + target.w / 2,
                           toY: target.y + target.h / 2,
                           coins: 40,
@@ -2038,11 +2251,11 @@ export default function GameplayScreen({ navigation, route }) {
                         // Ad no disponible en Expo Go — dar monedas directamente en dev
                         if (__DEV__ && userId) {
                           updateUserCurrency({ userId, coins: 40 }).then(async () => {
-                            setShowCoinsModal(false);
+                            setOpenModal(null);
                             setPendingAction(null);
                             const target = await getCoinPillTarget();
                             triggerMainCoin({
-                              fromX: COIN_CENTER_X, fromY: COIN_CENTER_Y,
+                              fromX: coinCenterX, fromY: coinCenterY,
                               toX: target.x + target.w / 2,
                               toY: target.y + target.h / 2,
                               coins: 40,
@@ -2063,28 +2276,29 @@ export default function GameplayScreen({ navigation, route }) {
               {/* Ir a la Tienda */}
               <TouchableOpacity
                 style={styles.coinsShopBtn}
-                onPress={() => { setShowCoinsModal(false); setPendingAction(null); setShowShop(true); }}
+                onPress={() => { setPendingAction(null); setOpenModal('shop'); }}
               >
                 <Text style={styles.coinsShopBtnText}>🛒 Ir a la Tienda</Text>
               </TouchableOpacity>
 
               {/* Close X */}
-              <TouchableOpacity style={styles.coinsModalClose} onPress={() => { setShowCoinsModal(false); setPendingAction(null); }}>
+              <TouchableOpacity style={styles.coinsModalClose} onPress={() => { setOpenModal(null); setPendingAction(null); }}>
                 <Text style={styles.coinsModalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
           </View>
         </Modal>
 
-        <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+        {showShop && <ShopScreen visible onClose={() => setOpenModal(null)} />}
 
         {/* Victory screen — extracted to VictoryModal component */}
-        <VictoryModal
-          visible={showLevelUp}
+        {showLevelUp && <VictoryModal
+          visible
           onContinue={() => {
             setShowLevelUp(false);
+            if (isChallengeMode) { navigation.navigate("MainMenu"); return; }
             if (isMapReview) { navigation.navigate("Map"); return; }
-            if (completedLevelsRef.current % 3 === 0 && completedLevelsRef.current > 0) { showInterstitial(); }
+            if (completedLevelsRef.current % 5 === 0 && completedLevelsRef.current > 0) { showInterstitial(); }
             skipNextInitRef.current = false;
             initGame();
           }}
@@ -2095,7 +2309,7 @@ export default function GameplayScreen({ navigation, route }) {
           isLastLevel={levelInfo?.isLastLevel}
           petHasPet={petState?.hasPet}
           maxCombo={maxCombo}
-          victoryPhrase={getVictoryPhrase(victoryLevel)}
+          victoryPhrase={isChallengeMode ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado") : getVictoryPhrase(victoryLevel)}
           word={victoryWord || mexicanWord}
           example={victoryExample}
           region={victoryRegion}
@@ -2105,13 +2319,15 @@ export default function GameplayScreen({ navigation, route }) {
           totalLevels={totalLevels}
           diamonds={levelUpReward?.diamonds || 0}
           coins={levelUpReward?.coins || 0}
+          isChallengeMode={isChallengeMode}
+          challengeResult={challengeResult}
           flyOverlay={
             <>
               <CoinFlyOverlay coins={victoryCoins} particles={victoryCoinParticles} onCoinArrived={onVictoryCoinArrived} />
               <DiamondFlyOverlay diamonds={victoryDiamonds} particles={victoryDiamondParticles} onDiamondArrived={onVictoryDiamondArrived} />
             </>
           }
-        />
+        />}
 
 
       </SafeAreaView>
@@ -2216,14 +2432,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: "100%",
     marginBottom: 16,
-  },
-
-  // Game layout
-  gameContent: {
-    flex: 1,
-    paddingTop: 104,
-    paddingHorizontal: 16,
-    paddingBottom: KEYBOARD_HEIGHT + 10,
   },
 
   // ── Clue Card ──────────────────────────────────────────────────────────────
@@ -2375,26 +2583,6 @@ const styles = StyleSheet.create({
     color: "#C0392B",
   },
 
-  // ── Keyboard container ──────────────────────────────────────────────────────
-  keyboardContainer: {
-    position: "absolute",
-    bottom: TABLET_MODE ? 20 : 0,
-    // Tablet: near-full-width floating card (like iPad system keyboard) with small margins.
-    // Phone: full-width, sticks to bottom edge.
-    left: TABLET_MODE ? 16 : 0,
-    right: TABLET_MODE ? 16 : 0,
-    borderRadius: TABLET_MODE ? 20 : 0,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: KEYBOARD_HEIGHT,
-    backgroundColor: "#EAECEE",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: TABLET_MODE ? 6 : -3 },
-    shadowOpacity: TABLET_MODE ? 0.28 : 0.12,
-    shadowRadius: TABLET_MODE ? 14 : 8,
-    elevation: 16,
-  },
-
   // ── Power-up row ────────────────────────────────────────────────────────────
   powerUpRow: {
     flexDirection: "row",
@@ -2453,42 +2641,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  // ── Keyboard ────────────────────────────────────────────────────────────────
-  keyboard: {
-    width: "100%",
-    paddingVertical: TABLET_MODE ? 8 : 4,
-    paddingHorizontal: 14,
-  },
-  keyboardRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: TABLET_MODE ? 10 : 7,
-  },
-  key: {
-    width: TABLET_KEY_W,
-    height: TABLET_MODE ? 84 : 54,
-    marginHorizontal: _KB_MARGIN,
-    backgroundColor: "white",
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  deleteKey: { width: TABLET_SPECIAL_W, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
-  clearKey: { width: TABLET_SPECIAL_W, backgroundColor: "#C8C8D0" },
+  // ── Keyboard (only sub-styles still referenced — main styles are in dynamicStyles) ──
+  deleteKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
+  clearKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: "#C8C8D0" },
   keyDimmed: { backgroundColor: "#D0D0D8", opacity: 0.25 },
-  keyText: {
-    fontSize: TABLET_MODE ? 24 : 18,
-    fontWeight: "800",
-    color: "#1A5276",
-  },
-  deleteIcon: { width: TABLET_MODE ? 32 : 22, height: TABLET_MODE ? 32 : 22, tintColor: "#1A5276" },
-  deleteIconText: { fontSize: TABLET_MODE ? 28 : 20, color: "#1A5276" },
-  clearIcon: { width: TABLET_MODE ? 32 : 22, height: TABLET_MODE ? 32 : 22, tintColor: "#C0392B" },
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   modalOverlay: {
@@ -3117,7 +3273,7 @@ const styles = StyleSheet.create({
   // ── GameMascot wrapper ──
   gameMascotWrap: {
     position: "absolute",
-    bottom: KEYBOARD_HEIGHT + 10,
+    bottom: _STATIC_KB_HEIGHT + 10,
     right: 8,
     width: 100,
     height: 120,
@@ -3232,4 +3388,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
+
 

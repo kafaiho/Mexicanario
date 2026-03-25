@@ -1,8 +1,46 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
+import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '../../convex/_generated/api';
 import { Alert } from 'react-native';
+
+// ── Secure credential helpers ──────────────────────────────────────────────────
+// Uses Keychain (iOS) / EncryptedSharedPreferences (Android) instead of plaintext AsyncStorage.
+const CRED_EMAIL_KEY = 'mexicanario_email';
+const CRED_PASS_KEY  = 'mexicanario_pass';
+
+async function secureGetCredentials() {
+  try {
+    const email = await SecureStore.getItemAsync(CRED_EMAIL_KEY);
+    const pass  = await SecureStore.getItemAsync(CRED_PASS_KEY);
+    return { email, pass };
+  } catch (_) {
+    return { email: null, pass: null };
+  }
+}
+
+async function secureSaveCredentials(email, password) {
+  await SecureStore.setItemAsync(CRED_EMAIL_KEY, email.toLowerCase().trim());
+  await SecureStore.setItemAsync(CRED_PASS_KEY, password);
+}
+
+async function secureClearCredentials() {
+  await SecureStore.deleteItemAsync(CRED_EMAIL_KEY);
+  await SecureStore.deleteItemAsync(CRED_PASS_KEY);
+}
+
+/** One-time migration: move plaintext creds from AsyncStorage → SecureStore, then wipe old keys. */
+async function migrateCredsToSecureStore() {
+  try {
+    const oldEmail = await AsyncStorage.getItem('@mexicanario:savedEmail');
+    const oldPass  = await AsyncStorage.getItem('@mexicanario:savedPass');
+    if (oldEmail && oldPass) {
+      await secureSaveCredentials(oldEmail, oldPass);
+      await AsyncStorage.multiRemove(['@mexicanario:savedEmail', '@mexicanario:savedPass']);
+    }
+  } catch (_) { /* best effort */ }
+}
 
 const AuthContext = createContext(null);
 
@@ -55,11 +93,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Auto-restore: if we have saved email+password, login automatically
+  // Auto-restore: if we have saved email+password in SecureStore, login automatically
   const tryAutoRestoreByEmail = async () => {
     try {
-      const savedEmail = await AsyncStorage.getItem('@mexicanario:savedEmail');
-      const savedPass  = await AsyncStorage.getItem('@mexicanario:savedPass');
+      // Migrate old plaintext creds on first run after update
+      await migrateCredsToSecureStore();
+
+      const { email: savedEmail, pass: savedPass } = await secureGetCredentials();
       if (!savedEmail || !savedPass) return false;
 
       const result = await loginWithEmailMut({ email: savedEmail, password: savedPass });
@@ -72,7 +112,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Auto-restore by email failed:', err);
       // Clear saved credentials if they're invalid
-      await AsyncStorage.multiRemove(['@mexicanario:savedEmail', '@mexicanario:savedPass']);
+      await secureClearCredentials();
     }
     return false;
   };
@@ -145,26 +185,26 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Save email + password locally so the session auto-restores on next app open.
-   * Call this after a successful registerAccount or loginWithEmail.
+   * Save email + password securely so the session auto-restores on next app open.
+   * Uses Keychain (iOS) / EncryptedSharedPreferences (Android).
    */
   const saveCredentials = async (email, password) => {
-    await AsyncStorage.setItem('@mexicanario:savedEmail', email.toLowerCase().trim());
-    await AsyncStorage.setItem('@mexicanario:savedPass', password);
+    await secureSaveCredentials(email, password);
   };
 
   /**
    * Clear saved credentials (on logout or account deletion).
    */
   const clearCredentials = async () => {
-    await AsyncStorage.multiRemove(['@mexicanario:savedEmail', '@mexicanario:savedPass']);
+    await secureClearCredentials();
   };
 
   // ── Logout ─────────────────────────────────────────────────────────────────
 
   const logout = async () => {
     try {
-      await clearCredentials();
+      // Keep saved credentials so Face ID / biometric re-login still works.
+      // Credentials are only wiped on account deletion.
       await AsyncStorage.removeItem('userId');
       setUserId(null);
       staleCheckDone.current = true;

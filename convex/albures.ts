@@ -51,7 +51,7 @@ export const getLeaderboard = query({
         }
         return Promise.all(rows.map(async (row, i) => {
             const user = await ctx.db.get(row.userId as Id<"users">);
-            return { rank: i + 1, userId: row.userId, name: user?.name ?? "Jugador", avatar: user?.avatar ?? "🌮", score: row.score };
+            return { rank: i + 1, userId: row.userId, name: user?.name ?? "Jugador", avatar: (user?.avatar && user.avatar !== "default") ? user.avatar : "🌮", score: row.score };
         }));
     },
 });

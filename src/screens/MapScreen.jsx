@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
 import { getZone } from "../config/mexicoZones";
@@ -286,6 +287,7 @@ const getShopScreen = () => {
 };
 
 export default function MapScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const { userId, user } = useAuth();
   const listRef = useRef(null);
   const [openedLevel, setOpenedLevel] = useState(null);
@@ -359,14 +361,14 @@ export default function MapScreen({ navigation, route }) {
 
   return (
     <ImageBackground
-      source={require("../../assets/images/bg.png")}
+      source={require("../../assets/images/bg.webp")}
       style={styles.screen}
       resizeMode="cover"
     >
       <View style={styles.overlay} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
@@ -454,7 +456,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 52,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",

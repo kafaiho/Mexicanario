@@ -32,6 +32,7 @@ export function useRewardedAd() {
   const adRef       = useRef(null);
   const onRewardRef = useRef(null);
   const cleanupRef  = useRef(null);
+  const retryTimerRef = useRef(null);
 
   const loadAd = () => {
     // Limpiar listeners anteriores
@@ -56,13 +57,13 @@ export function useRewardedAd() {
           onRewardRef.current?.();
           onRewardRef.current = null;
           // Pre-cargar el siguiente anuncio
-          setTimeout(loadAd, 500);
+          retryTimerRef.current = setTimeout(loadAd, 500);
         }
       );
 
       const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
         setReady(false);
-        setTimeout(loadAd, 5000); // reintentar en 5 segundos
+        retryTimerRef.current = setTimeout(loadAd, 5000); // reintentar en 5 segundos
       });
 
       cleanupRef.current = () => {
@@ -74,13 +75,15 @@ export function useRewardedAd() {
       ad.load();
     } catch (e) {
       console.warn("[useRewardedAd] loadAd error:", e);
-      // Si falla la inicialización, la app sigue funcionando sin anuncios
     }
   };
 
   useEffect(() => {
     loadAd();
-    return () => cleanupRef.current?.();
+    return () => {
+      cleanupRef.current?.();
+      clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
   /**

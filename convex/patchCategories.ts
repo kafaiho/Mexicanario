@@ -241,10 +241,8 @@ export const forceCorrectAllCategories = mutation({
 
             let correctCat = CORRECT_CATEGORY_MAP[key] || CORRECT_CATEGORY_MAP[normalizedKey];
 
-            // Fallback: unknown words go to Modismos (NOT Historia)
-            if (!correctCat) {
-                correctCat = "Modismos";
-            }
+            // No fallback: keep current category if word not in map
+            if (!correctCat) continue;
 
             if (word.category !== correctCat || word.category === "Arepas" || word.category === "Misceláneo") {
                 await ctx.db.patch(word._id, { category: correctCat });
@@ -316,10 +314,9 @@ export const autoFixDatabase = mutation({
             if (key === "trompo") correctCat = "Juegos";
             if (key === "balero") correctCat = "Juegos";
 
-            // Fallback: unknown words go to Modismos (NOT Historia)
-            if (!correctCat) {
-                correctCat = "Modismos";
-            }
+            // No fallback: if word is not in the map, keep its current category
+            // (reclassifyModismos:migrateAll already distributed words to 19 categories)
+            if (!correctCat) continue;
 
             if (word.category !== correctCat || word.category === "Arepas" || word.category === "Misceláneo") {
                 await ctx.db.patch(word._id, { category: correctCat });

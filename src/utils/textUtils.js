@@ -36,9 +36,12 @@ export const normalizeText = (text) => {
 
   try {
     if (typeof upperText.normalize === 'function') {
+      // Preserve Ñ: replace before NFD decomposition, restore after
       return upperText
-        .normalize('NFD') // Decompose characters with accents (é → e + ́)
-        .replace(/[\u0300-\u036f]/g, ''); // Remove diacritics (accents)
+        .replace(/Ñ/g, '\x01')        // Protect Ñ from decomposition
+        .normalize('NFD')              // Decompose accented chars (é → e + ́)
+        .replace(/[\u0300-\u036f]/g, '') // Strip diacritics
+        .replace(/\x01/g, 'Ñ');        // Restore Ñ
     }
   } catch (e) {
     // Fallback if normalize is not supported or throws an error

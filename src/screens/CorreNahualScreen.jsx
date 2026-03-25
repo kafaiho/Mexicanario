@@ -194,8 +194,8 @@ export default function CorreNahualScreen({ navigation }) {
     }
     const checkCollision = () => {
       if (!isPlayingRef.current) return;
-      const cy = charY._value;
-      const ox = obsX._value;
+      const cy = charY.__getValue();
+      const ox = obsX.__getValue();
 
       const pLeft  = PLAYER_X + PLAYER_SIZE * 0.15;
       const pRight = PLAYER_X + PLAYER_SIZE * 0.85;

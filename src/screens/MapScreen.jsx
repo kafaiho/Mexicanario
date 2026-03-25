@@ -307,11 +307,11 @@ export default function MapScreen({ navigation, route }) {
   const waveX = useMemo(() => WAVE_RATIOS.map((r) => listW * r), [listW]);
 
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
-  const allLevels = useQuery(api.levels.getAllLevels, userId ? { userId } : {});
+  const allLevels = useQuery(api.levels.getAllLevels, userId ? { userId } : "skip");
 
   const currentLevel = levelInfo?.level ?? 1;
-  const items = useMemo(() => buildItems(allLevels, totalLevels), [allLevels, totalLevels]);
   const totalLevels = allLevels?.length ?? 0;
+  const items = useMemo(() => buildItems(allLevels, totalLevels), [allLevels, totalLevels]);
   const completedLevels = Math.max(0, currentLevel - 1);
 
   // Pre-compute item heights for getItemLayout — zone banners are ~104px, level rows are ROW_H.

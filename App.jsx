@@ -13,6 +13,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { api } from "./convex/_generated/api";
 import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { setupNotificationHandler } from "./src/services/notificationService";
 import { addCustomerInfoListener, initRevenueCat } from "./src/services/RevenueCatService";
 
@@ -591,12 +592,14 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ConvexProvider client={convex}>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ConvexProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <ConvexProvider client={convex}>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ConvexProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

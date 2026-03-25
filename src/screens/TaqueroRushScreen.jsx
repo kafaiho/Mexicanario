@@ -96,16 +96,24 @@ export default function TaqueroRushScreen({ navigation }) {
         setShuffledButtons(shuffleArray(ALL_INGREDIENTS));
     };
 
+    // Pre-allocate pool of Animated.Values to avoid creating new ones per tap
+    const animPool = useRef(Array.from({ length: 20 }, () => new Animated.Value(0))).current;
+    const animIdx = useRef(0);
+
     const handleIngredientTap = (ingredient) => {
         if (!isPlaying || isGameOver) return;
         if (ingredient === currentRecipe[currentStep]) {
-            // Generar nuevo ingrediente visual
+            // Reuse Animated.Value from pool (no leak)
+            const anim = animPool[animIdx.current % animPool.length];
+            anim.setValue(0);
+            animIdx.current++;
+
             const newIng = {
                 id: Date.now().toString(),
                 icon: getIngredientIcon(ingredient),
                 rotate: `${Math.random() * 20 - 10}deg`,
                 offsetX: Math.random() * 16 - 8,
-                anim: new Animated.Value(0),
+                anim,
             };
 
             setTacoStack((prev) => [...prev, newIng]);

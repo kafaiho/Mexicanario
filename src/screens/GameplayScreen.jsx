@@ -1497,13 +1497,16 @@ export default function GameplayScreen({ navigation, route }) {
         return newGuess;
       });
       bounceAtIndex(randomIndex);
-      // Check completion
+      // Check completion — read guess via ref to avoid side-effect inside setState
       setTimeout(() => {
         setGuess((prev) => {
           const isComplete =
             prev.length >= mexicanWord.length &&
             Array.from({ length: mexicanWord.length }).every((_, idx) => prev[idx] && prev[idx] !== "");
-          if (isComplete) validateWhenFull(prev.join(""));
+          if (isComplete) {
+            // Defer validation outside setState to avoid side-effect in updater
+            requestAnimationFrame(() => validateWhenFull(prev.join("")));
+          }
           return prev;
         });
       }, 50);
@@ -1577,7 +1580,7 @@ export default function GameplayScreen({ navigation, route }) {
     // Después de que todas las letras aparecen: celebrate + validar
     const fillDuration = allIndices.length * 80 + 120;
     setTimeout(() => {
-      celebrate();
+      // celebrate() is already called inside validateWhenFull on correct — don't double-call
       const fullGuess = Array.from({ length: mexicanWord.length }).map((_, i) => mexicanWord[i]);
       validateWhenFull(fullGuess.join(""));
     }, fillDuration);

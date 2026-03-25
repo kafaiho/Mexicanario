@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 export function useGameSession(userId) {
   // Get current session and level
   const currentSession = useQuery(api.gameSessions.getCurrentSession, userId ? { userId } : "skip");
-  const levelInfo = useQuery(api.levels.getCurrentLevel, { userId }); // Always query for level info
+  const levelInfo = useQuery(api.levels.getCurrentLevel, userId ? { userId } : "skip");
   
   // Mutations
   const startSession = useMutation(api.gameSessions.startGameSession);

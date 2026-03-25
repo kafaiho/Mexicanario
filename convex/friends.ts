@@ -931,7 +931,7 @@ export const createChallenge = mutation({
         q.eq("userId", challengerId).eq("friendId", challengedId)
       )
       .first();
-    if (!friendship || (friendship.status !== "accepted" && friendship.status !== null)) {
+    if (!friendship || (friendship.status !== "accepted" && friendship.status != null)) {
       throw new ConvexError("Solo puedes retar a tus cuates.");
     }
 

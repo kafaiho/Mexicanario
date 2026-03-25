@@ -21,6 +21,8 @@ const MAX_EFFECTIVE_WIDTH = 550; // ≈ 1.4× iPhone 14 Pro — escala cómoda p
 const realScreen = Dimensions.get("screen");
 
 export const TABLET_MODE = realScreen.width > MAX_EFFECTIVE_WIDTH;
+// Use getters so these always return current screen dims (rotation-safe)
+export const getRealDims = () => Dimensions.get("screen");
 export const REAL_WIDTH   = realScreen.width;
 export const REAL_HEIGHT  = realScreen.height;
 

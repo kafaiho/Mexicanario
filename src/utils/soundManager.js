@@ -88,7 +88,7 @@ export async function preloadSounds() {
     try {
       const { sound } = await Audio.Sound.createAsync(file, {
         shouldPlay: false,
-        isLooping: false,
+        isLooping: true, // native gapless looping — no audible gap between loops
         volume: 0.35, // subtle background level
       });
       loadedBgm[key] = sound;
@@ -163,22 +163,11 @@ async function fadeVolume(sound, from, to, ms) {
   }
 }
 
-/** Manual seamless loop: when track finishes, rewind and replay with fade */
+/** Loop handler — no-op now that native isLooping:true handles gapless repeat.
+ *  Kept as stub so callers don't break. */
 function attachLoopHandler(sound) {
-  const handler = async (status) => {
-    if (!status.isLoaded) return;
-    if (status.didJustFinish && !status.isLooping) {
-      // Track ended — seamless restart with quick fade-in
-      try {
-        await sound.setPositionAsync(0);
-        await sound.setVolumeAsync(0);
-        await sound.playAsync();
-        fadeVolume(sound, 0, BGM_VOLUME, 300);
-      } catch (_) { }
-    }
-  };
-  sound.setOnPlaybackStatusUpdate(handler);
-  return handler;
+  // Native isLooping handles seamless repeat — no manual handler needed
+  return null;
 }
 
 /**

@@ -460,7 +460,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       const { w, h } = dimsRef.current;
       const sz = petSizeRef.current;
       const maxX = w - sz;
-      const currentX = pan.x._value;
+      const currentX = pan.x.__getValue();
       const goLeft = currentX + sz / 2 < w / 2;
       const homeX = goLeft ? Math.round(maxX * 0.07) : Math.round(maxX * 0.86);
       pan.setValue({ x: homeX, y: getHomeY(w, h, sz) });
@@ -492,7 +492,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   const bounceHome = useCallback(() => {
     const { w, h } = dimsRef.current;
     const sz = petSizeRef.current;
-    const currentX = pan.x._value;
+    const currentX = pan.x.__getValue();
     const maxX = w - sz;
     const safeX = isFinite(currentX) ? currentX : maxX * 0.86;
     const goLeft = safeX + sz / 2 < w / 2;
@@ -521,7 +521,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       },
       onPanResponderGrant: () => {
         gestureRef.current = { startT: Date.now(), moved: false };
-        offsetRef.current = { x: pan.x._value, y: pan.y._value };
+        offsetRef.current = { x: pan.x.__getValue(), y: pan.y.__getValue() };
         activeZoneRef.current = null;
         topZoneHitRef.current = false;
         pan.setOffset(offsetRef.current);
@@ -594,8 +594,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         const { w, h } = dimsRef.current;
         const sz = petSizeRef.current;
         const topBarBottom = (Platform.OS === 'ios' ? h * 0.058 : h * 0.04) + w * 0.1 + 8;
-        const finalX = pan.x._value;
-        const finalY = pan.y._value;
+        const finalX = pan.x.__getValue();
+        const finalY = pan.y.__getValue();
 
         const inKeyboardZone = finalY > h - KEYBOARD_ZONE_H - sz;
         const aboveTopBar = finalY < topBarBottom || topZoneHitRef.current;

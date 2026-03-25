@@ -1,4 +1,4 @@
-# Google Play Store Listing — Mexicanario v1.4.0
+# Google Play Store Listing — Mexicanario v1.5.0
 
 ## App Name (30 chars max)
 Mexicanario - Modismos MX
@@ -66,7 +66,7 @@ Palabras de todo México: Chilango, Norteño, Tapatío, Jarocho, Oaxaqueño, Yuc
 GRATIS PARA JUGAR
 Sin paywalls. Gana monedas jugando, mira anuncios opcionales o suscríbete a Mexicanario Plus para quitar anuncios y obtener beneficios exclusivos.
 
-Mexicanario — Porque ser mexicano es un verbo. 🇲🇽
+Mexicanario — Porque ser mexicano es un verbo.
 
 ## Category
 Education > Language
@@ -76,6 +76,37 @@ modismos mexicanos, diccionario mexicano, palabras mexicanas, jerga mexicana, wo
 
 ## Content Rating
 Everyone 10+ (Mild Language — albures/picaresca content)
+
+## What's New (Patch Notes v1.5.0)
+
+v1.5.0 — Actualización Mayor
+
+NUEVO MOTOR
+- Expo SDK 55 con React Native 0.83 y React 19.2
+- Compatibilidad completa con Android 15 (APIs actualizadas)
+- Inicio más rápido y menor consumo de memoria
+
+21 BUGS CORREGIDOS
+- Crash al teclear después de revelar teclado
+- Zonas del mapa ahora se asignan correctamente
+- Ñ se distingue de N en las respuestas
+- Retos entre amigos funcionan con amistades antiguas
+- Racha semanal de liga ahora cuenta semanas consecutivas
+- Combo grace: pierdes -1 en vez de todo el combo
+- Música sin cortes entre loops
+- Mascota sigue el dedo al arrastrarla
+- Botón atrás funciona en pantalla de victoria (Android)
+- Piñata del día 7 muestra el premio correcto
+- Eliminación de cuenta limpia todos los datos (GDPR)
+
+COLECCIONES REDISTRIBUIDAS
+- 19 categorías balanceadas (antes 1 tenía 1115 palabras)
+- "Expresiones y Modismos" bajó de 1115 a 226
+
+MEJORAS
+- Error boundary: la app ya no se cierra por errores inesperados
+- Descripción optimizada para búsquedas en la tienda
+- Interstitial cada 5 niveles (menos intrusivo)
 
 ## Contact Email
 (tu email de soporte)

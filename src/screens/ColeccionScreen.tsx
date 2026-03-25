@@ -300,7 +300,7 @@ const CollectionCard = React.memo(function CollectionCard({ category, index, onP
   );
 });
 
-export default function ColeccionScreen() {
+export default function ColeccionScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   // TopBar uses its own topPad (~32px Android) regardless of insets, so we must clear it
   const topBarPad = Math.max(20, height * 0.04);

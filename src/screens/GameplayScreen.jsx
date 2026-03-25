@@ -1080,7 +1080,7 @@ export default function GameplayScreen({ navigation, route }) {
         // ── Challenge mode: submit result, no level advance ──
         if (isChallengeMode && challengeIdParam) {
           playSound("correct");
-          celebrate();
+          // celebrate() already called above at line 1041 — don't double-call
           notifySuccess();
           triggerMascota("celebrating", "¡Reto completado!");
           const elapsedMs = Date.now() - (challengeStartTime || Date.now());

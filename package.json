@@ -60,6 +60,13 @@
     "typescript": "~5.9.2"
   },
   "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["expo-av"]
+      }
+    }
+  },
   "overrides": {
     "expo-application": "~6.1.5"
   }

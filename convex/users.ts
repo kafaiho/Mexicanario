@@ -541,6 +541,10 @@ export const deleteAccount = mutation({
       "loteriaScores",
       "leagueBadges",
       "seasonalRankings",
+      "friendChallenges",
+      "pvpMatches",
+      "dailyMiniScores",
+      "userRankCache",
     ] as const;
 
     for (const table of tables) {

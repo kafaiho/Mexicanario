@@ -3,7 +3,7 @@
     "name": "Mexicanario - Modismos MX",
     "slug": "mexicanario",
     "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y cultura de México con niveles, retos PvP, colecciones regionales y mascotas. ¡El Wordle mexicano!",
-    "version": "1.4.1",
+    "version": "1.5.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -16,7 +16,6 @@
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -47,7 +46,8 @@
           "faceIDPermission": "Mexicanario usa Face ID para iniciar sesión rápidamente."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "ios": {
       "bundleIdentifier": "com.kafaiho.mexicanario",
@@ -71,12 +71,11 @@
       }
     },
     "android": {
-      "versionCode": 23,
+      "versionCode": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.kafaiho.mexicanario",
       "permissions": [
         "com.google.android.gms.permission.AD_ID"

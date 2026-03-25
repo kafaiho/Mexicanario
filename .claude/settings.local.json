@@ -133,7 +133,32 @@
       "Bash(CONVEX_DEPLOYMENT=prod:enchanted-penguin-105 npx convex:*)",
       "Bash(powershell:*)",
       "Bash(pip install:*)",
-      "Bash(\"C:/Users/kafai/bin/infsh\" whoami:*)"
+      "Bash(\"C:/Users/kafai/bin/infsh\" whoami:*)",
+      "Bash(xargs head:*)",
+      "Bash(npx eas-cli:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(xargs du:*)",
+      "Bash(find assets:*)",
+      "Bash(npx:*)",
+      "Bash(./gradlew compileDebugKotlin:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(export:*)",
+      "Bash(echo === Remaining PNGs > 100KB ===:*)",
+      "Bash(npm run:*)",
+      "Bash(do echo:*)",
+      "Bash(node -e \":*)",
+      "Bash(cp \"/c/Users/kafai/Downloads/fiesta_arcade.mp3\" \"c:/Users/kafai/Desktop/MexicanarioApp-main/assets/sounds/bgm_menu.mp3\")",
+      "Bash(cp \"/c/Users/kafai/Downloads/fiesta_digital.mp3\" \"c:/Users/kafai/Desktop/MexicanarioApp-main/assets/sounds/bgm_gameplay.mp3\")",
+      "Bash(cp \"/c/Users/kafai/Downloads/el_triunfo_radiante.mp3\" \"c:/Users/kafai/Desktop/MexicanarioApp-main/assets/sounds/bgm_victory.mp3\")",
+      "Bash(cp \"/c/Users/kafai/Downloads/countdown_conga.mp3\" \"c:/Users/kafai/Desktop/MexicanarioApp-main/assets/sounds/bgm_minigame.mp3\")",
+      "Bash(for f:*)",
+      "Read(//c/Users/kafai/Desktop/MexicanarioApp-main/src/screens/**)",
+      "Bash(yes)",
+      "Bash(eas submit:*)",
+      "Bash(npm info:*)",
+      "Bash(node -e \"console.log\\(require\\(''./node_modules/react-native-screens/package.json''\\).version\\)\")",
+      "Bash(eas build:cancel)"
     ]
   }
 }

@@ -3,7 +3,7 @@
     "name": "Mexicanario - Modismos MX",
     "slug": "mexicanario",
     "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y cultura de México con niveles, retos PvP, colecciones regionales y mascotas. ¡El Wordle mexicano!",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -71,7 +71,7 @@
       }
     },
     "android": {
-      "versionCode": 22,
+      "versionCode": 23,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

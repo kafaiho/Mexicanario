@@ -391,7 +391,6 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   const tapAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [bubble, setBubble] = useState(null);
-  const [bubblePos, setBubblePos] = useState({ x: 0, y: 0 });
   const bubbleTimer = useRef(null);
   // Drag state stored in refs so PanResponder (created once) can reliably access them
   const offsetRef = useRef({ x: 0, y: 0 });       // position when drag started
@@ -402,13 +401,6 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   // Game events (correct answer, hints) push a bubble from GameplayScreen
   useEffect(() => {
     if (!gameBubble) return;
-    // Compute position above current pet location
-    const petX = pan.x._value;
-    const petY = pan.y._value;
-    const sw = dimsRef.current.w;
-    const bx = Math.max(5, Math.min(petX - 75, sw - 185));
-    const by = Math.max(60, petY - 65);
-    setBubblePos({ x: bx, y: by });
     setBubble(gameBubble);
     clearTimeout(bubbleTimer.current);
     bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
@@ -476,16 +468,11 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     return () => sub?.remove();
   }, []);
 
-  const showBubble = useCallback((dir = 'bottom', petX, petY) => {
+  const showBubble = useCallback((dir = 'bottom') => {
     const list = PHRASES[dir] ?? PHRASES.bottom;
     const phrase = pickPhrase(list, { current: lastIdxRef.current[dir] ?? -1 });
     const phraseIdx = list.indexOf(phrase);
     lastIdxRef.current = { ...lastIdxRef.current, [dir]: phraseIdx };
-    const sw = dimsRef.current.w;
-    const bx = petX != null ? Math.max(5, Math.min(petX - 75, sw - 185)) : 5;
-    // position right above the pet
-    const by = petY != null ? Math.max(10, petY - 60) : 60;
-    setBubblePos({ x: bx, y: by });
     setBubble(phrase);
     clearTimeout(bubbleTimer.current);
     bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
@@ -569,16 +556,16 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
         if (hitBottom && activeZoneRef.current !== 'bottom') {
           activeZoneRef.current = 'bottom';
-          showBubble('bottom', safeX, safeY);
+          showBubble('bottom');
           shakeIt();
         } else if (hitTop && activeZoneRef.current !== 'top') {
           activeZoneRef.current = 'top';
           topZoneHitRef.current = true;
-          showBubble('top', safeX, safeY);
+          showBubble('top');
           shakeIt();
         } else if (hitSide && activeZoneRef.current !== 'side') {
           activeZoneRef.current = 'side';
-          showBubble('side', safeX, safeY);
+          showBubble('side');
           shakeIt();
         } else if (!hitBottom && !hitTop && !hitSide) {
           activeZoneRef.current = null;
@@ -593,7 +580,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
         if (isTap) {
           // ── Tap: show random phrase + scale pulse ──
-          showBubble('tap', pan.x._value, pan.y._value);
+          showBubble('tap');
 
           Animated.sequence([
             Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: false }),
@@ -649,17 +636,22 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         </Animated.View>
       </Animated.View>
 
-      {/* Bubble is a sibling — avoids any clipping from the pet's transformed wrapper */}
+      {/* Bubble follows the pet via Animated transform — moves with drag */}
       {bubble && (
-        <View
+        <Animated.View
           pointerEvents="none"
           style={[
             styles.bubble,
-            bubblePos && bubblePos.x !== undefined ? { top: bubblePos.y, left: bubblePos.x } : { top: pan.y._value - 60, left: pan.x._value - 50 }
+            {
+              transform: [
+                { translateX: Animated.add(pan.x, -50) },
+                { translateY: Animated.add(pan.y, -65) },
+              ],
+            },
           ]}
         >
           <Text style={styles.bubbleText}>{bubble}</Text>
-        </View>
+        </Animated.View>
       )}
     </>
   );

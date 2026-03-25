@@ -49,7 +49,7 @@
   "submit": {
     "production": {
       "android": {
-        "track": "internal",
+        "track": "production",
         "releaseStatus": "completed",
         "changesNotSentForReview": false
       }

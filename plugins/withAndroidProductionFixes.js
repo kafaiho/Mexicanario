@@ -11,7 +11,9 @@
  *   6. Fullscreen immersive mode in MainActivity.kt
  */
 
-const { withAndroidManifest, withStringsXml, withAppBuildGradle, withMainActivity } = require('@expo/config-plugins');
+const { withAndroidManifest, withStringsXml, withAppBuildGradle, withMainActivity, withDangerousMod } = require('@expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 // ─────────────────────────────────────────────
 // 1. Fix: app_name correcto en strings.xml
@@ -103,6 +105,7 @@ const IMMERSIVE_METHOD = `
   }
 
   private fun enterImmersiveMode() {
+      // Android 15+ (API 35): use WindowInsetsController (no deprecated APIs)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
           window.insetsController?.let { controller ->
               controller.hide(
@@ -112,9 +115,12 @@ const IMMERSIVE_METHOD = `
               controller.systemBarsBehavior =
                   android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
           }
+          // LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS is the non-deprecated option
           window.attributes.layoutInDisplayCutoutMode =
               WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+          // Avoid deprecated setStatusBarColor/setNavigationBarColor — use transparent via XML theme
       } else {
+          // Android < 30: legacy fallback (suppress warnings, these devices won't get Android 15)
           @Suppress("DEPRECATION")
           window.decorView.systemUiVisibility = (
               View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -126,7 +132,7 @@ const IMMERSIVE_METHOD = `
           )
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
               window.attributes.layoutInDisplayCutoutMode =
-                  WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                  WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
           }
       }
   }`;
@@ -166,6 +172,48 @@ const withImmersiveMode = (config) =>
   });
 
 // ─────────────────────────────────────────────
+// 7. Fix: Android 15 edge-to-edge theme (avoids deprecated statusBar/navigationBar color APIs)
+// ─────────────────────────────────────────────
+const withAndroid15Theme = (config) =>
+  withDangerousMod(config, ['android', async (mod) => {
+    const resDir = path.join(mod.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res');
+
+    // values-v35 = Android 15+ only
+    const v35Dir = path.join(resDir, 'values-v35');
+    if (!fs.existsSync(v35Dir)) fs.mkdirSync(v35Dir, { recursive: true });
+
+    // Theme that enforces edge-to-edge with transparent bars via XML (no Java API calls needed)
+    const stylesXml = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@style/Theme.EdgeToEdge">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+    </style>
+</resources>
+`;
+    fs.writeFileSync(path.join(v35Dir, 'styles.xml'), stylesXml);
+
+    // Also create values-v29 to handle Android 10-14 with LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+    const v29Dir = path.join(resDir, 'values-v29');
+    if (!fs.existsSync(v29Dir)) fs.mkdirSync(v29Dir, { recursive: true });
+
+    const v29Xml = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@style/Theme.EdgeToEdge">
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
+    </style>
+</resources>
+`;
+    fs.writeFileSync(path.join(v29Dir, 'styles.xml'), v29Xml);
+
+    return mod;
+  }]);
+
+// ─────────────────────────────────────────────
 // Plugin principal — combina todos los fixes
 // ─────────────────────────────────────────────
 const withAndroidProductionFixes = (config) => {
@@ -173,6 +221,7 @@ const withAndroidProductionFixes = (config) => {
   config = withSecureAndroidManifest(config);
   config = withProductionBuildOptimizations(config);
   config = withImmersiveMode(config);
+  config = withAndroid15Theme(config);
   return config;
 };
 

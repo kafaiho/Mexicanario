@@ -447,7 +447,7 @@ export default function GameplayScreen({ navigation, route }) {
   // Rewarded ad para el modal de monedas
   const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
 
-  // Interstitial ad — shown every 3 completed levels
+  // Interstitial ad — shown every 5 completed levels
   const { showAd: showInterstitial } = useInterstitialAd();
   const completedLevelsRef = useRef(0);
 

@@ -100,10 +100,8 @@ export function useDailyReward() {
     if (!userId || claimed) return;
     try {
       const today = getTodayString();
-      const coinsActual = currentDay === 7
-        ? getPiñataReward()
-        : (DAY_REWARDS[currentDay - 1] ?? 10);
-      setRewardCoins(coinsActual);
+      // Use the already-computed rewardCoins from check() — don't re-roll piñata
+      const coinsActual = rewardCoins || (DAY_REWARDS[currentDay - 1] ?? 10);
       await AsyncStorage.setItem(STORAGE_KEY_DATE, today);
       await AsyncStorage.setItem(STORAGE_KEY_DAY, String(currentDay));
       await updateCurrency({ userId, coins: coinsActual, diamonds: 0 });

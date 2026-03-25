@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mexicanario - Modismos MX",
     "slug": "mexicanario",
-    "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y cultura de México con niveles, retos PvP, colecciones regionales y mascotas. ¡El Wordle mexicano!",
+    "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y expresiones de México. +1250 palabras en 19 categorías, retos PvP, colecciones regionales, mascotas y minijuegos. ¡El Wordle mexicano! Juego de palabras trivia cultura mexicana.",
     "version": "1.5.0",
     "runtimeVersion": {
       "policy": "appVersion"

@@ -122,7 +122,7 @@ export default function VictoryModal({
     : "";
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onContinue}>
       {flyOverlay}
       <View style={s.overlay}>
 

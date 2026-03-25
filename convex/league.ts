@@ -652,7 +652,13 @@ export const processWeekEnd = internalMutation({
 
         const highestDiv = Math.max((user as any).leagueHighestDiv ?? 1, newDiv);
         const prevWeekId = (user as any).lastLeagueWeekId ?? "";
-        const weeklyStreak = prevWeekId === weekId
+        // Streak increments if user played the immediately prior week (consecutive)
+        const prevWeekNum = parseInt(prevWeekId.split("-W")[1] || "0", 10);
+        const currWeekNum = parseInt(weekId.split("-W")[1] || "0", 10);
+        const isConsecutive = prevWeekId.split("-W")[0] === weekId.split("-W")[0]
+          ? currWeekNum - prevWeekNum === 1
+          : prevWeekNum >= 52 && currWeekNum === 1; // year boundary
+        const weeklyStreak = isConsecutive
           ? ((user as any).leagueWeeklyStreak ?? 0) + 1
           : 1;
 

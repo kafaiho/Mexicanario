@@ -446,7 +446,7 @@ export default function ColeccionScreen() {
       style={styles.container}
       resizeMode="cover"
     >
-      <TopBar navigation={() => { }} />
+      <TopBar navigation={navigation} />
 
       {/* Header */}
       <View style={[styles.header, { marginTop: HEADER_TOP }]}>

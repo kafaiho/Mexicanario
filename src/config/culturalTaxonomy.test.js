@@ -7,7 +7,7 @@ const {
   normalizeCulturalKey,
   resolvePlace,
 } = require('./culturalTaxonomy.js');
-const { getRegionMeta, getMacroKey, LEGACY_REGIONS } = require('./regionConfig.js');
+const { MACRO_REGIONS, getRegionMeta, getMacroKey, LEGACY_REGIONS } = require('./regionConfig.js');
 
 const expectedPathIds = [
   'patio-recreo', 'casa-abuela', 'calle-barrio', 'mercado-antojitos',
@@ -44,6 +44,16 @@ for (const place of PLACES) {
   for (const alias of place.aliases) assert.equal(resolvePlace(alias).id, place.id);
 }
 
+const normalizedPlaceOwners = new Map();
+for (const place of PLACES) {
+  for (const value of [place.id, place.name, ...place.aliases]) {
+    const key = normalizeCulturalKey(value);
+    const owner = normalizedPlaceOwners.get(key);
+    assert.ok(!owner || owner === place.id, `normalized place key ${key} collides between ${owner} and ${place.id}`);
+    normalizedPlaceOwners.set(key, place.id);
+  }
+}
+
 assert.equal(normalizeCulturalKey('  MÉXICO  '), 'mexico');
 assert.equal(resolvePlace('Huasteca').id, 'huasteca');
 assert.notEqual(resolvePlace('Nayarit').id, 'guerrero');
@@ -55,15 +65,24 @@ assert.notEqual(resolvePlace('Guadalajara').id, resolvePlace('Jalisco').id);
 assert.equal(resolvePlace('región imaginaria').id, 'unclassified');
 assert.notEqual(resolvePlace('cdmx').icon, '🌮');
 
+const expectedMacroKeys = ['nacional', 'cdmx', 'norte', 'jalisco', 'veracruz', 'oaxaca', 'centro', 'bajio', 'sureste', 'chiapas', 'guerrero', 'michoacan'];
+assert.deepEqual(MACRO_REGIONS.map(({ key }) => key), expectedMacroKeys);
+for (const macro of MACRO_REGIONS) {
+  assert.ok(Array.isArray(macro.rawRegions) && macro.rawRegions.length > 0);
+  assert.match(macro.dark, /^#[0-9A-F]{6}$/i);
+  assert.notEqual(macro.dark.toLowerCase(), macro.color.toLowerCase());
+  for (const raw of macro.rawRegions) assert.equal(getMacroKey(raw), macro.key, `${raw} must resolve through MACRO_REGIONS`);
+}
+
 const legacyGroups = {
   nacional: ['Infantil', 'Juvenil', 'Escuela', 'Callejero', 'Tradicional', 'Familiar', 'Feria', 'Colonial'],
   norte: ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Baja California Sur', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas', 'Frontera Norte', 'Sierra Madre'],
   centro: ['Centro', 'Estado de México', 'Morelos', 'Hidalgo', 'Tlaxcala'],
   bajio: ['Bajío', 'Guanajuato', 'Querétaro', 'Aguascalientes', 'San Luis Potosí'],
-  occidente: ['Occidente', 'Centro-Occidente'],
+  jalisco: ['Occidente', 'Centro-Occidente'],
   sureste: ['Sureste'],
-  sur: ['Sur'],
-  pacifico: ['Pacífico', 'Costas'],
+  chiapas: ['Sur'],
+  guerrero: ['Pacífico', 'Costas'],
 };
 assert.ok(Array.isArray(LEGACY_REGIONS));
 for (const [key, rawRegions] of Object.entries(legacyGroups)) {

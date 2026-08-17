@@ -57,7 +57,16 @@ function normalizeCulturalKey(value) {
 }
 
 const PLACE_BY_KEY = new Map();
-for (const item of PLACES) for (const key of [item.id, item.name, ...item.aliases]) PLACE_BY_KEY.set(normalizeCulturalKey(key), item);
+for (const item of PLACES) {
+  for (const value of [item.id, item.name, ...item.aliases]) {
+    const key = normalizeCulturalKey(value);
+    const existing = PLACE_BY_KEY.get(key);
+    if (existing && existing.id !== item.id) {
+      throw new Error(`Cultural place key collision: "${key}" belongs to both "${existing.id}" and "${item.id}"`);
+    }
+    PLACE_BY_KEY.set(key, item);
+  }
+}
 
 function resolvePlace(value) {
   return PLACE_BY_KEY.get(normalizeCulturalKey(value)) || PLACE_BY_KEY.get('unclassified');

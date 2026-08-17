@@ -21,7 +21,7 @@ for (const testModule of testModules) {
 }
 
 for (const testModule of typescriptTestModules) {
-  const result = spawnSync(process.execPath, ['--no-warnings', '--experimental-strip-types', testModule], {
+  const result = spawnSync(process.execPath, ['--import', 'tsx', testModule], {
     stdio: 'inherit',
   });
 

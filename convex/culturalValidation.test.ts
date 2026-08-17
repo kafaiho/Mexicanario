@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildCulturalAudit, validateCulturalWord } from "./culturalValidation.ts";
+import { buildCulturalAudit, buildCulturalAuditPage, validateCulturalWord } from "./culturalValidation.ts";
 
 const validWord = {
   word: "balero",
@@ -80,7 +80,7 @@ assert.deepEqual(buildCulturalAudit([
   validStoredWord,
   invalidStoredWord,
 ]), {
-  total: 3,
+  pageTotal: 3,
   audited: 2,
   valid: 1,
   invalid: 1,
@@ -98,12 +98,33 @@ const cappedAudit = buildCulturalAudit([
   { ...invalidStoredWord, _id: "invalid-2" },
   { ...invalidStoredWord, _id: "invalid-3" },
 ], { limit: 2 });
-assert.equal(cappedAudit.total, 3);
+assert.equal(cappedAudit.pageTotal, 3);
 assert.equal(cappedAudit.audited, 3);
 assert.equal(cappedAudit.valid, 0);
 assert.equal(cappedAudit.invalid, 3);
 assert.equal(cappedAudit.issueCount, 3);
 assert.equal(cappedAudit.issues.length, 2);
 assert.equal(cappedAudit.truncated, true);
+
+assert.deepEqual(buildCulturalAuditPage({
+  page: [validStoredWord, invalidStoredWord],
+  continueCursor: "next-page",
+  isDone: false,
+}), {
+  pageTotal: 2,
+  audited: 2,
+  valid: 1,
+  invalid: 1,
+  issues: [{
+    wordId: "invalid-id",
+    word: "inválida",
+    errors: ["collectionId desconocido o ausente"],
+  }],
+  issueCount: 1,
+  truncated: false,
+  continueCursor: "next-page",
+  isDone: false,
+  pageStatus: "has_more",
+});
 
 console.log("culturalValidation: all assertions passed");

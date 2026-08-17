@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internalQuery } from "./_generated/server.js";
 import {
   CULTURAL_COLLECTION_IDS,
@@ -23,6 +24,11 @@ type CulturalWordInput = {
 type ValidationOptions = { requireCulturalMetadata?: boolean };
 type AuditOptions = ValidationOptions & { limit?: number };
 type StoredCulturalWord = CulturalWordInput & { _id: unknown; word: unknown };
+type CulturalAuditPageInput = {
+  page: StoredCulturalWord[];
+  continueCursor: string;
+  isDone: boolean;
+};
 
 const paths = new Set<unknown>(CULTURAL_PATH_IDS);
 const collections = new Set<unknown>(CULTURAL_COLLECTION_IDS);
@@ -105,7 +111,7 @@ export function buildCulturalAudit(
   }
 
   return {
-    total: words.length,
+    pageTotal: words.length,
     audited,
     valid: audited - invalid,
     invalid,
@@ -115,11 +121,29 @@ export function buildCulturalAudit(
   };
 }
 
+export function buildCulturalAuditPage(
+  result: CulturalAuditPageInput,
+  options: AuditOptions = {},
+) {
+  return {
+    ...buildCulturalAudit(result.page, options),
+    continueCursor: result.continueCursor,
+    isDone: result.isDone,
+    pageStatus: result.isDone ? "complete" : "has_more",
+  };
+}
+
 export const auditCulturalWords = internalQuery({
-  args: { requireCulturalMetadata: v.optional(v.boolean()) },
+  args: {
+    paginationOpts: paginationOptsValidator,
+    requireCulturalMetadata: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
-    const words = await ctx.db.query("words").collect();
-    return buildCulturalAudit(words, {
+    const pageResult = await ctx.db.query("words").paginate({
+      cursor: args.paginationOpts.cursor,
+      numItems: Math.min(args.paginationOpts.numItems, 200),
+    });
+    return buildCulturalAuditPage(pageResult, {
       requireCulturalMetadata: args.requireCulturalMetadata,
     });
   },

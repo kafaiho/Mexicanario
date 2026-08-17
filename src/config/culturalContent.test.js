@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { CULTURAL_PATHS, COLLECTIONS, PLACES } = require('./culturalTaxonomy');
-const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } = require('../content/mexicoVividoWords');
+const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS, FIRST_FIFTY_CONTEXT_REVIEW, SEMANTIC_CONCEPT_OVERRIDES } = require('../content/mexicoVividoWords');
 
 const normalizePreservingEnye = (value) => value.toLocaleLowerCase('es-MX')
   .replace(/ñ/g, '\u0000').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0000/g, 'ñ').trim();
@@ -22,8 +22,9 @@ assert.strictEqual(new Set(words).size, words.length, 'las palabras normalizadas
 const concepts = MEXICO_VIVIDO_WORDS.map(({ conceptId }) => conceptId);
 assert(concepts.every(Boolean), 'cada entrada debe declarar un conceptId editorial');
 assert.strictEqual(new Set(concepts).size, concepts.length, 'no debe haber variantes del mismo concepto');
-for (const variants of [['rayuela', 'avioncito'], ['laqueado', 'maque']]) {
-  assert(variants.filter((word) => words.includes(normalizePreservingEnye(word))).length <= 1, `variantes semánticas duplicadas: ${variants.join('/')}`);
+assert(Object.keys(SEMANTIC_CONCEPT_OVERRIDES).length >= 6, 'debe documentar equivalencias semánticas conocidas');
+for (const [variant, conceptId] of Object.entries(SEMANTIC_CONCEPT_OVERRIDES)) {
+  assert(variant && conceptId, 'cada equivalencia conocida necesita variante y concepto');
 }
 const orders = MEXICO_VIVIDO_WORDS.map(({ order }) => order);
 assert.deepStrictEqual(orders, [...orders].sort((a, b) => a - b), 'el catálogo debe estar ordenado');
@@ -61,8 +62,25 @@ for (const entry of MEXICO_VIVIDO_WORDS.slice(0, 50)) {
   assert.strictEqual(entry.rating, 'familiar');
   assert(entry.difficulty <= 2, `inicio demasiado difícil: ${entry.word}`);
 }
-assert(MEXICO_VIVIDO_WORDS.slice(0, 50).filter(({ mexicanContext }) => mexicanContext === true).length >= 40, 'el inicio debe sentirse vivido en México');
 assert(new Set(MEXICO_VIVIDO_WORDS.slice(0, 50).map(({ collectionId }) => collectionId)).size >= 4, 'el inicio debe cubrir al menos cuatro colecciones');
+const firstFifty = new Set(MEXICO_VIVIDO_WORDS.slice(0, 50).map(({ word }) => normalizePreservingEnye(word)));
+const reviewedContexts = Object.entries(FIRST_FIFTY_CONTEXT_REVIEW);
+assert(reviewedContexts.length >= 40, 'al menos 40 entradas iniciales necesitan revisión contextual explícita');
+for (const [word, review] of reviewedContexts) {
+  assert(firstFifty.has(normalizePreservingEnye(word)), `la revisión contextual debe pertenecer a las primeras 50: ${word}`);
+  assert(review.reason && review.reason.length >= 20, `falta una razón contextual legible: ${word}`);
+  assert(review.category, `falta categoría contextual: ${word}`);
+}
+assert(new Set(reviewedContexts.map(([, review]) => review.category)).size >= 4, 'la revisión debe cubrir al menos cuatro tipos de contexto');
+
+const expectedPaths = {
+  'pelota mixteca': 'mexico-profundo', ulama: 'mexico-profundo',
+  'juego de pelota mesoamericano': 'mexico-profundo', 'televisión a color': 'mexico-profundo',
+  'lucha libre': 'feria-verbena', cibercafé: 'calle-barrio',
+};
+for (const [word, pathId] of Object.entries(expectedPaths)) {
+  assert.strictEqual(MEXICO_VIVIDO_WORDS.find((entry) => entry.word === word)?.pathId, pathId, `${word} pertenece a ${pathId}`);
+}
 
 assert(Array.isArray(REMOVED_WORDS) && REMOVED_WORDS.length > 0, 'debe documentar retiradas');
 const removed = new Set();

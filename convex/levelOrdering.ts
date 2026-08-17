@@ -61,7 +61,7 @@ function normWord(s: string): string {
 // ─── Main ordering function ───────────────────────────────────────────────────
 
 type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any };
-type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string };
+type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; isRetired?: boolean };
 
 /**
  *   positions 1-STARTER_COUNT → easy words sorted by length (same for all users)
@@ -78,11 +78,25 @@ export function getOrderedLevels(
   userId: string,
 ): LevelDoc[] {
   const wordMap = new Map(words.map((w) => [w._id.toString(), w]));
+  const activeLevels = levels.filter((level) => {
+    const word = level.wordId ? wordMap.get(level.wordId.toString()) : undefined;
+    return word && word.isRetired !== true;
+  });
+  const editorial = activeLevels.filter((level) => {
+    const order = wordMap.get(level.wordId.toString())?.editorialOrder;
+    return Number.isInteger(order) && (order as number) > 0;
+  }).sort((a, b) => {
+    const aw = wordMap.get(a.wordId.toString())!;
+    const bw = wordMap.get(b.wordId.toString())!;
+    return (aw.editorialOrder! - bw.editorialOrder!) || (a.levelNumber - b.levelNumber) || a.wordId.toString().localeCompare(b.wordId.toString());
+  });
+  const editorialIds = new Set(editorial.map((level) => level._id.toString()));
 
   const easyLevels: LevelDoc[] = [];
   const hardLevels: LevelDoc[] = [];
 
-  for (const lvl of levels) {
+  for (const lvl of activeLevels) {
+    if (editorialIds.has(lvl._id.toString())) continue;
     if (!lvl.wordId) continue; // skip levels with missing wordId
     const w = wordMap.get(lvl.wordId.toString());
     if (w && isEasyWord(w.word, w.region, w.difficulty)) {
@@ -129,7 +143,7 @@ export function getOrderedLevels(
   // Append any unused transition-easy words
   while (ei < transitionEasy.length) transitionZone.push(transitionEasy[ei++]);
 
-  const result = [...starterLevels, ...transitionZone, ...afterTransitionHard, ...remainingEasy];
+  const result = [...editorial, ...starterLevels, ...transitionZone, ...afterTransitionHard, ...remainingEasy];
 
   // Pin specific words to fixed positions (sorted by target position to avoid offsets)
   const pins = Object.entries(PINNED_POSITIONS).sort((a, b) => a[1] - b[1]);

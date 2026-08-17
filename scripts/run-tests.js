@@ -8,6 +8,9 @@ const testModules = [
 
 const typescriptTestModules = [
   'convex/culturalValidation.test.ts',
+  'convex/migrations/migrateMexicoVivido.test.ts',
+  'convex/migrations/mexicoVividoCatalogParity.test.ts',
+  'convex/levelOrdering.test.ts',
 ];
 
 for (const testModule of testModules) {

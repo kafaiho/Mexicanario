@@ -41,8 +41,9 @@ export default defineSchema({
     sourceNote: v.optional(v.string()),
     relatedConceptId: v.optional(v.string()),
     conceptId: v.optional(v.string()),
+    normalizedWordKey: v.optional(v.string()),
     isRetired: v.optional(v.boolean()),
-  }),
+  }).index("by_word", ["word"]).index("by_normalized_word_key", ["normalizedWordKey"]),
 
   // Levels table to store level configurations
   levels: defineTable({

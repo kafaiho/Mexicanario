@@ -1,5 +1,7 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } from "./mexicoVividoCatalog.generated";
 
 type ExistingWord = { _id: any; word: string; [key: string]: unknown };
@@ -87,42 +89,122 @@ export function planMexicoVividoMigration(
   return { patches, inserts, retires, unchanged, conflicts, unclassified };
 }
 
-export const migrateBatch = internalMutation({
-  args: { dryRun: v.boolean(), limit: v.optional(v.number()), cursor: v.optional(v.string()) },
+export function planFromPages(
+  pages: readonly (readonly ExistingWord[])[],
+  catalog: readonly CatalogWord[],
+  removed: readonly RemovedWord[],
+) {
+  return planMexicoVividoMigration(pages.flat(), catalog, removed);
+}
+
+export function normalizeBatchSize(value?: number): number {
+  if (value === undefined || !Number.isFinite(value)) return 100;
+  return Math.max(1, Math.min(200, Math.floor(value)));
+}
+
+type ScanRequest = { cursor: string | null; endCursor: string | null };
+type ScanResult = { continueCursor: string; isDone: boolean; splitCursor?: string | null; pageStatus?: "SplitRecommended" | "SplitRequired" | null };
+
+export function nextScanRequests(request: ScanRequest, result: ScanResult): ScanRequest[] {
+  if (result.pageStatus === "SplitRequired" && result.splitCursor) {
+    const ranges: ScanRequest[] = [
+      { cursor: request.cursor, endCursor: result.splitCursor },
+      { cursor: result.splitCursor, endCursor: result.continueCursor },
+    ];
+    if (!request.endCursor && !result.isDone) ranges.push({ cursor: result.continueCursor, endCursor: null });
+    return ranges;
+  }
+  if (!result.isDone && !request.endCursor) return [{ cursor: result.continueCursor, endCursor: null }];
+  return [];
+}
+
+export function summarizeMigrationPlan(plan: ReturnType<typeof planMexicoVividoMigration>, dryRun: boolean, detailLimit = 20) {
+  const conflicts = plan.conflicts.slice(0, detailLimit);
+  const unclassified = plan.unclassified.slice(0, detailLimit).map((word) => ({ _id: word._id, word: word.word }));
+  return {
+    patched: plan.patches.length,
+    inserted: plan.inserts.length,
+    retired: plan.retires.length,
+    unchanged: plan.unchanged.length,
+    conflicts: plan.conflicts.length,
+    unclassified: plan.unclassified.length,
+    dryRun,
+    details: { conflicts, unclassified, truncated: conflicts.length < plan.conflicts.length || unclassified.length < plan.unclassified.length },
+  };
+}
+
+export const scanWordsPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
-    const page = await ctx.db.query("words").paginate({ cursor: args.cursor ?? null, numItems: limit });
-    const plan = planMexicoVividoMigration(page.page, MEXICO_VIVIDO_WORDS, REMOVED_WORDS);
-    let inserted = 0;
-    const details = {
-      conflicts: plan.conflicts.slice(0, 20),
-      unclassified: plan.unclassified.slice(0, 20).map((word) => ({ _id: word._id, word: word.word })),
-    };
-    if (!args.dryRun) {
-      for (const item of plan.patches) await ctx.db.patch(item._id, item.patch);
-      for (const item of plan.retires) await ctx.db.patch(item._id, item.patch);
-      // Inserts are delayed until the final page. Prior pages have already canonicalized retained words.
-      if (page.isDone) {
-        for (const entry of plan.inserts) {
-          const matches = await ctx.db.query("words").withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", entry.normalizedWordKey as string)).take(2);
-          if (matches.length === 0) {
-            await ctx.db.insert("words", entry as any);
-            inserted += 1;
-          }
-        }
+    return await ctx.db.query("words").paginate({
+      cursor: args.paginationOpts.cursor,
+      endCursor: args.paginationOpts.endCursor,
+      numItems: normalizeBatchSize(args.paginationOpts.numItems),
+    } as any);
+  },
+});
+
+export const applyMigrationBatch = internalMutation({
+  args: { operations: v.array(v.any()) },
+  handler: async (ctx, args) => {
+    const result = { patched: 0, inserted: 0, retired: 0, unchanged: 0, skipped: 0 };
+    const retainedKeys = new Set(MEXICO_VIVIDO_WORDS.map((entry) => normalizeWordKey(entry.word)));
+    const removedKeys = new Set(REMOVED_WORDS.map((entry) => normalizeWordKey(entry.word)));
+    for (const operation of args.operations) {
+      if (operation.kind === "patch") {
+        const current: any = await ctx.db.get(operation._id);
+        if (!current || normalizeWordKey(current.word) !== normalizeWordKey(operation.patch.word)) { result.skipped += 1; continue; }
+        const patch = Object.fromEntries(Object.entries(operation.patch).filter(([field, value]) => !sameValue((current as any)[field], value)));
+        if (Object.keys(patch).length === 0) result.unchanged += 1;
+        else { await ctx.db.patch(operation._id, patch); result.patched += 1; }
+      } else if (operation.kind === "retire") {
+        const current: any = await ctx.db.get(operation._id);
+        if (!current) { result.skipped += 1; continue; }
+        const key = normalizeWordKey(current.word);
+        if (!removedKeys.has(key) || retainedKeys.has(key)) { result.skipped += 1; continue; }
+        if (current.isRetired === true) result.unchanged += 1;
+        else { await ctx.db.patch(operation._id, { isRetired: true }); result.retired += 1; }
+      } else if (operation.kind === "insert") {
+        const desired = operation.document;
+        const normalizedMatches = await ctx.db.query("words").withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", desired.normalizedWordKey)).take(2);
+        const exactMatches = await ctx.db.query("words").withIndex("by_word", (q) => q.eq("word", desired.word)).take(2);
+        if (normalizedMatches.length || exactMatches.length) result.unchanged += 1;
+        else { await ctx.db.insert("words", desired); result.inserted += 1; }
       }
     }
-    return {
-      patched: plan.patches.length,
-      inserted: args.dryRun ? plan.inserts.length : inserted,
-      retired: plan.retires.length,
-      unchanged: plan.unchanged.length,
-      conflicts: plan.conflicts.length,
-      unclassified: plan.unclassified.length,
-      dryRun: args.dryRun,
-      continueCursor: page.isDone ? null : page.continueCursor,
-      isDone: page.isDone,
-      details,
-    };
+    return result;
+  },
+});
+
+export const migrateMexicoVivido = internalAction({
+  args: { dryRun: v.boolean(), batchSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const batchSize = normalizeBatchSize(args.batchSize);
+    const requests: ScanRequest[] = [{ cursor: null, endCursor: null }];
+    const pages: ExistingWord[][] = [];
+    while (requests.length) {
+      const request = requests.shift()!;
+      const page: any = await ctx.runQuery((internal as any).migrations.migrateMexicoVivido.scanWordsPage, {
+        paginationOpts: { cursor: request.cursor, endCursor: request.endCursor, numItems: batchSize },
+      });
+      if (page.pageStatus !== "SplitRequired") pages.push(page.page);
+      requests.unshift(...nextScanRequests(request, page));
+    }
+    const plan = planFromPages(pages, MEXICO_VIVIDO_WORDS, REMOVED_WORDS);
+    const summary = summarizeMigrationPlan(plan, args.dryRun);
+    if (args.dryRun) return { ...summary, applied: null };
+    const operations = [
+      ...plan.patches.map((item) => ({ kind: "patch", ...item })),
+      ...plan.inserts.map((document) => ({ kind: "insert", document })),
+      ...plan.retires.map((item) => ({ kind: "retire", ...item })),
+    ];
+    const applied = { patched: 0, inserted: 0, retired: 0, unchanged: 0, skipped: 0 };
+    for (let index = 0; index < operations.length; index += batchSize) {
+      const batch: any = await ctx.runMutation((internal as any).migrations.migrateMexicoVivido.applyMigrationBatch, {
+        operations: operations.slice(index, index + batchSize),
+      });
+      for (const key of Object.keys(applied) as (keyof typeof applied)[]) applied[key] += batch[key];
+    }
+    return { ...summary, applied };
   },
 });

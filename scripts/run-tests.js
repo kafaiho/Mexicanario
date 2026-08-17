@@ -13,6 +13,11 @@ const typescriptTestModules = [
   'convex/levelOrdering.test.ts',
 ];
 
+const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {
+  stdio: 'inherit',
+});
+if (catalogCheck.status !== 0) process.exit(catalogCheck.status ?? 1);
+
 for (const testModule of testModules) {
   const result = spawnSync(process.execPath, [testModule], {
     stdio: 'inherit',

@@ -5,9 +5,9 @@ const level = (id: string, levelNumber: number) => ({ _id: `l-${id}`, wordId: id
 const words = [
   { _id: "legacy-b", word: "Sol", region: "Nacional" },
   { _id: "legacy-a", word: "Pan", region: "Nacional" },
-  { _id: "retired", word: "Rayuela", region: "Nacional", editorialOrder: 1, isRetired: true },
-  { _id: "ordered-b", word: "Balero", region: "Nacional", editorialOrder: 2 },
-  { _id: "ordered-a", word: "Trompo", region: "Nacional", editorialOrder: 1 },
+  { _id: "retired", word: "Rayuela", region: "Nacional", editorialOrder: 1, isRetired: true, legacyWord: "Rayuela", legacyRegion: "Nacional" },
+  { _id: "ordered-b", word: "Balero", region: "Nacional", editorialOrder: 2, legacyWord: "Balero", legacyRegion: "Nacional" },
+  { _id: "ordered-a", word: "Trompo", region: "Nacional", editorialOrder: 1, legacyWord: "Trompo", legacyRegion: "Nacional" },
 ];
 const levels = words.map((word, index) => level(word._id, index + 1));
 const legacy = getOrderedLevels(levels, words, "");
@@ -29,3 +29,23 @@ const ties = getOrderedLevels(
 );
 assert.deepEqual(ties.map((item) => item.wordId), ["a", "z"]);
 console.log("levelOrdering: orden editorial y legado válidos");
+
+const historicalWords = [
+  { _id: "old-a", word: "Sol", region: "Nacional" },
+  { _id: "old-b", word: "Ferrocarril", region: "Norte", difficulty: 3 },
+];
+const historicalLevels = [level("old-a", 1), level("old-b", 2)];
+const before = getOrderedLevels(historicalLevels, historicalWords, "returning");
+const beforeIds = before.map((item) => item.wordId);
+const beforeDone = [...completedWordIds(before, 2)];
+const migratedWords = [
+  { _id: "old-a", word: "Transformada", region: "Sur", difficulty: 3, isRetired: true, editorialOrder: 2, legacyWord: "Sol", legacyRegion: "Nacional" },
+  { _id: "old-b", word: "Tren", region: "Nacional", difficulty: 1, editorialOrder: 3, legacyWord: "Ferrocarril", legacyRegion: "Norte", legacyDifficulty: 3 },
+  { _id: "new", word: "Pan", region: "Nacional", difficulty: 1, editorialOrder: 1 },
+];
+const migratedLevels = [...historicalLevels, { ...level("new", 3), introducedOrderVersion: 2 }];
+const afterV1 = getOrderedLevels(migratedLevels, migratedWords, "returning", 1);
+assert.deepEqual(afterV1.map((item) => item.wordId), beforeIds);
+assert.deepEqual([...completedWordIds(afterV1, 2)], beforeDone);
+const afterV2 = getOrderedLevels(migratedLevels, migratedWords, "returning", 2);
+assert.deepEqual(afterV2.map((item) => item.wordId), ["new", "old-b"]);

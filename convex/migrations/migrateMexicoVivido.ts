@@ -193,7 +193,8 @@ async function allocateLevelNumber(ctx: any): Promise<number> {
 
 async function insertLevelForWord(ctx: any, wordId: any) {
   const levelNumber = await allocateLevelNumber(ctx);
-  await ctx.db.insert("levels", { levelNumber, wordId, reward: { coins: 2, diamonds: 0 } });
+  // Repairs are v2-only: exposing an orphan in v1 would shift returning users.
+  await ctx.db.insert("levels", { levelNumber, wordId, reward: { coins: 2, diamonds: 0 }, introducedOrderVersion: 2 });
 }
 
 type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };
@@ -351,19 +352,31 @@ export const migrateCatalogBatch = internalMutation({
         .withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", key))
         .take(3);
       const decision = catalogOperationDecision(operation, matches);
+      const existing = matches.length === 1 ? matches[0] : null;
+      const legacySnapshot = existing && existing.legacyWord === undefined ? {
+        legacyWord: existing.word,
+        legacyRegion: existing.region,
+        ...(existing.difficulty === undefined ? {} : { legacyDifficulty: existing.difficulty }),
+      } : {};
       let orphanWordId: any = null;
+      let matchedLevel: any = null;
       if (operation.kind === "retain" && matches.length === 1 && decision.kind !== "conflict") {
-        const existingLevel = await ctx.db.query("levels").withIndex("by_word", (q) => q.eq("wordId", matches[0]._id)).first();
-        if (needsLevelRepair(decision.kind, Boolean(existingLevel))) {
+        matchedLevel = await ctx.db.query("levels").withIndex("by_word", (q) => q.eq("wordId", matches[0]._id)).first();
+        if (needsLevelRepair(decision.kind, Boolean(matchedLevel))) {
           counts.levelRepairs += 1;
           orphanWordId = matches[0]._id;
         }
       }
+      const snapshotNeeded = existing && existing.legacyWord === undefined && (!matchedLevel || (matchedLevel.introducedOrderVersion ?? 1) <= 1);
       if (decision.kind === "conflict") counts.conflicts += 1;
+      else if (decision.kind === "unchanged" && snapshotNeeded) {
+        counts.patched += 1;
+        if (!args.dryRun) await ctx.db.patch(existing._id, legacySnapshot);
+      }
       else if (decision.kind === "unchanged") counts.unchanged += 1;
       else if (decision.kind === "patch") {
         counts.patched += 1;
-        if (!args.dryRun) await ctx.db.patch(decision._id, decision.patch);
+        if (!args.dryRun) await ctx.db.patch(decision._id, { ...decision.patch, ...legacySnapshot });
       } else if (decision.kind === "insert") {
         counts.inserted += 1;
         if (!args.dryRun) {
@@ -372,7 +385,7 @@ export const migrateCatalogBatch = internalMutation({
         }
       } else if (decision.kind === "retire") {
         counts.retired += 1;
-        if (!args.dryRun) await ctx.db.patch(decision._id, { isRetired: true });
+        if (!args.dryRun) await ctx.db.patch(decision._id, { isRetired: true, ...legacySnapshot });
       }
       if (!args.dryRun && orphanWordId) await insertLevelForWord(ctx, orphanWordId);
       if (details.length < 20 && decision.kind !== "unchanged") details.push({ word: operation.entry.word, result: decision.kind });

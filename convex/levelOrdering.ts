@@ -60,8 +60,8 @@ function normWord(s: string): string {
 
 // ─── Main ordering function ───────────────────────────────────────────────────
 
-type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any };
-type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; isRetired?: boolean };
+type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any; introducedOrderVersion?: number };
+type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; isRetired?: boolean; legacyWord?: string; legacyRegion?: string; legacyDifficulty?: number };
 
 /**
  *   positions 1-STARTER_COUNT → easy words sorted by length (same for all users)
@@ -81,11 +81,17 @@ export function getOrderedLevels(
   userId: string,
   orderingVersion = 1,
 ): LevelDoc[] {
-  const wordMap = new Map(words.map((w) => [w._id.toString(), w]));
+  const currentWordMap = new Map(words.map((w) => [w._id.toString(), w]));
+  const wordMap = orderingVersion === 1
+    ? new Map(words.map((w) => [w._id.toString(), w.legacyWord ? { ...w, word: w.legacyWord, region: w.legacyRegion ?? w.region, difficulty: w.legacyDifficulty } : w]))
+    : currentWordMap;
   const activeLevels = orderingVersion === 2 ? levels.filter((level) => {
-    const word = level.wordId ? wordMap.get(level.wordId.toString()) : undefined;
+    const word = level.wordId ? currentWordMap.get(level.wordId.toString()) : undefined;
     return word && word.isRetired !== true;
-  }) : levels;
+  }) : levels.filter((level) => {
+    const word = level.wordId ? currentWordMap.get(level.wordId.toString()) : undefined;
+    return (level.introducedOrderVersion ?? 1) <= 1 && !(word?.editorialOrder && !word.legacyWord);
+  });
   const editorial = orderingVersion === 2 ? activeLevels.filter((level) => {
     const order = wordMap.get(level.wordId.toString())?.editorialOrder;
     return Number.isInteger(order) && (order as number) > 0;

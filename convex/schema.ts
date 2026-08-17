@@ -42,6 +42,9 @@ export default defineSchema({
     relatedConceptId: v.optional(v.string()),
     conceptId: v.optional(v.string()),
     normalizedWordKey: v.optional(v.string()),
+    legacyWord: v.optional(v.string()),
+    legacyDifficulty: v.optional(v.number()),
+    legacyRegion: v.optional(v.string()),
     isRetired: v.optional(v.boolean()),
   }).index("by_word", ["word"]).index("by_normalized_word_key", ["normalizedWordKey"]),
 
@@ -53,6 +56,7 @@ export default defineSchema({
       coins: v.number(),
       diamonds: v.number(),
     }),
+    introducedOrderVersion: v.optional(v.number()),
   }).index("by_level_number", ["levelNumber"]).index("by_word", ["wordId"]),
 
   migrationState: defineTable({

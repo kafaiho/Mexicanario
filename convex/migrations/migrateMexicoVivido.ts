@@ -1,8 +1,13 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internal } from "../_generated/api";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 import { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } from "./mexicoVividoCatalog.generated";
+
+/**
+ * Run Phase A until isDone (respecting splitCursor/pageStatus), then run Phase B
+ * from cursor 0 until isDone. If Phase B returns keys_not_ready, restart Phase A;
+ * a writer inserted a legacy row without normalizedWordKey.
+ */
 
 type ExistingWord = { _id: any; word: string; [key: string]: unknown };
 type CatalogWord = (typeof MEXICO_VIVIDO_WORDS)[number] | Record<string, unknown> & { word: string };
@@ -89,122 +94,122 @@ export function planMexicoVividoMigration(
   return { patches, inserts, retires, unchanged, conflicts, unclassified };
 }
 
-export function planFromPages(
-  pages: readonly (readonly ExistingWord[])[],
-  catalog: readonly CatalogWord[],
-  removed: readonly RemovedWord[],
-) {
-  return planMexicoVividoMigration(pages.flat(), catalog, removed);
-}
-
-export function normalizeBatchSize(value?: number): number {
+export function normalizeBackfillLimit(value?: number): number {
   if (value === undefined || !Number.isFinite(value)) return 100;
   return Math.max(1, Math.min(200, Math.floor(value)));
 }
 
-type ScanRequest = { cursor: string | null; endCursor: string | null };
-type ScanResult = { continueCursor: string; isDone: boolean; splitCursor?: string | null; pageStatus?: "SplitRecommended" | "SplitRequired" | null };
+export function normalizeCatalogBatchSize(value?: number): number {
+  if (value === undefined || !Number.isFinite(value)) return 25;
+  return Math.max(1, Math.min(50, Math.floor(value)));
+}
 
-export function nextScanRequests(request: ScanRequest, result: ScanResult): ScanRequest[] {
-  if (result.pageStatus === "SplitRequired" && result.splitCursor) {
-    const ranges: ScanRequest[] = [
-      { cursor: request.cursor, endCursor: result.splitCursor },
-      { cursor: result.splitCursor, endCursor: result.continueCursor },
-    ];
-    if (!request.endCursor && !result.isDone) ranges.push({ cursor: result.continueCursor, endCursor: null });
-    return ranges;
+export function planBackfillPage(words: readonly ExistingWord[]) {
+  const patches = words.flatMap((word) => {
+    const normalizedWordKey = normalizeWordKey(word.word);
+    return word.normalizedWordKey === normalizedWordKey ? [] : [{ _id: word._id, normalizedWordKey }];
+  });
+  return { patches, unchanged: words.length - patches.length };
+}
+
+type RetainOperation = { kind: "retain"; entry: CatalogWord };
+type RemoveOperation = { kind: "remove"; entry: RemovedWord };
+type CatalogOperation = RetainOperation | RemoveOperation;
+
+const CATALOG_OPERATIONS: readonly CatalogOperation[] = [
+  ...MEXICO_VIVIDO_WORDS.map((entry) => ({ kind: "retain" as const, entry })),
+  ...REMOVED_WORDS.map((entry) => ({ kind: "remove" as const, entry })),
+];
+
+export function sliceCatalogOperations<T>(operations: readonly T[], cursor: number, batchSize: number) {
+  const safeCursor = Number.isFinite(cursor) ? Math.max(0, Math.min(operations.length, Math.floor(cursor))) : 0;
+  const size = normalizeCatalogBatchSize(batchSize);
+  const batch = operations.slice(safeCursor, safeCursor + size);
+  const nextCursor = safeCursor + batch.length;
+  return { operations: batch, cursor: safeCursor, nextCursor, isDone: nextCursor >= operations.length };
+}
+
+export function hasMissingNormalizedKeys(word: unknown): boolean {
+  return word !== undefined && word !== null;
+}
+
+export function catalogOperationDecision(operation: CatalogOperation, matches: readonly ExistingWord[]) {
+  if (matches.length >= 2) return { kind: "conflict" as const };
+  const existing = matches[0];
+  if (operation.kind === "remove") {
+    if (!existing || existing.isRetired === true) return { kind: "unchanged" as const };
+    return { kind: "retire" as const, _id: existing._id };
   }
-  if (!result.isDone && !request.endCursor) return [{ cursor: result.continueCursor, endCursor: null }];
-  return [];
+  const desired = catalogPatch(operation.entry);
+  if (!existing) return { kind: "insert" as const, document: desired };
+  const patch = Object.fromEntries(Object.entries(desired).filter(([field, value]) => !sameValue(existing[field], value)));
+  if (!Object.keys(patch).length) return { kind: "unchanged" as const };
+  return { kind: "patch" as const, _id: existing._id, patch };
 }
 
-export function summarizeMigrationPlan(plan: ReturnType<typeof planMexicoVividoMigration>, dryRun: boolean, detailLimit = 20) {
-  const conflicts = plan.conflicts.slice(0, detailLimit);
-  const unclassified = plan.unclassified.slice(0, detailLimit).map((word) => ({ _id: word._id, word: word.word }));
-  return {
-    patched: plan.patches.length,
-    inserted: plan.inserts.length,
-    retired: plan.retires.length,
-    unchanged: plan.unchanged.length,
-    conflicts: plan.conflicts.length,
-    unclassified: plan.unclassified.length,
-    dryRun,
-    details: { conflicts, unclassified, truncated: conflicts.length < plan.conflicts.length || unclassified.length < plan.unclassified.length },
-  };
-}
-
-export const scanWordsPage = internalQuery({
-  args: { paginationOpts: paginationOptsValidator },
+export const backfillNormalizedKeysBatch = internalMutation({
+  args: { paginationOpts: paginationOptsValidator, dryRun: v.boolean() },
   handler: async (ctx, args) => {
-    return await ctx.db.query("words").paginate({
+    const page = await ctx.db.query("words").paginate({
       cursor: args.paginationOpts.cursor,
       endCursor: args.paginationOpts.endCursor,
-      numItems: normalizeBatchSize(args.paginationOpts.numItems),
+      numItems: normalizeBackfillLimit(args.paginationOpts.numItems),
     } as any);
+    const plan = planBackfillPage(page.page);
+    if (!args.dryRun) {
+      for (const item of plan.patches) await ctx.db.patch(item._id, { normalizedWordKey: item.normalizedWordKey });
+    }
+    return {
+      status: "ok" as const,
+      patched: plan.patches.length,
+      unchanged: plan.unchanged,
+      dryRun: args.dryRun,
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+      splitCursor: page.splitCursor ?? null,
+      pageStatus: page.pageStatus ?? null,
+    };
   },
 });
 
-export const applyMigrationBatch = internalMutation({
-  args: { operations: v.array(v.any()) },
+export const migrateCatalogBatch = internalMutation({
+  args: { dryRun: v.boolean(), cursor: v.optional(v.number()), batchSize: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const result = { patched: 0, inserted: 0, retired: 0, unchanged: 0, skipped: 0 };
-    const retainedKeys = new Set(MEXICO_VIVIDO_WORDS.map((entry) => normalizeWordKey(entry.word)));
-    const removedKeys = new Set(REMOVED_WORDS.map((entry) => normalizeWordKey(entry.word)));
-    for (const operation of args.operations) {
-      if (operation.kind === "patch") {
-        const current: any = await ctx.db.get(operation._id);
-        if (!current || normalizeWordKey(current.word) !== normalizeWordKey(operation.patch.word)) { result.skipped += 1; continue; }
-        const patch = Object.fromEntries(Object.entries(operation.patch).filter(([field, value]) => !sameValue((current as any)[field], value)));
-        if (Object.keys(patch).length === 0) result.unchanged += 1;
-        else { await ctx.db.patch(operation._id, patch); result.patched += 1; }
-      } else if (operation.kind === "retire") {
-        const current: any = await ctx.db.get(operation._id);
-        if (!current) { result.skipped += 1; continue; }
-        const key = normalizeWordKey(current.word);
-        if (!removedKeys.has(key) || retainedKeys.has(key)) { result.skipped += 1; continue; }
-        if (current.isRetired === true) result.unchanged += 1;
-        else { await ctx.db.patch(operation._id, { isRetired: true }); result.retired += 1; }
-      } else if (operation.kind === "insert") {
-        const desired = operation.document;
-        const normalizedMatches = await ctx.db.query("words").withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", desired.normalizedWordKey)).take(2);
-        const exactMatches = await ctx.db.query("words").withIndex("by_word", (q) => q.eq("word", desired.word)).take(2);
-        if (normalizedMatches.length || exactMatches.length) result.unchanged += 1;
-        else { await ctx.db.insert("words", desired); result.inserted += 1; }
+    // This indexed range read shares the write transaction. A concurrent legacy
+    // insert without a key conflicts with it; rerun Phase A before retrying.
+    const missing = await ctx.db.query("words")
+      .withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", undefined))
+      .first();
+    const sliced = sliceCatalogOperations(CATALOG_OPERATIONS, args.cursor ?? 0, normalizeCatalogBatchSize(args.batchSize));
+    if (hasMissingNormalizedKeys(missing)) {
+      return {
+        status: "keys_not_ready" as const, dryRun: args.dryRun,
+        cursor: sliced.cursor, nextCursor: sliced.cursor, isDone: false,
+        patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, details: [],
+      };
+    }
+    const counts = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0 };
+    const details: Array<{ word: string; result: string }> = [];
+    for (const operation of sliced.operations) {
+      const key = normalizeWordKey(operation.entry.word);
+      const matches = await ctx.db.query("words")
+        .withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", key))
+        .take(3);
+      const decision = catalogOperationDecision(operation, matches);
+      if (decision.kind === "conflict") counts.conflicts += 1;
+      else if (decision.kind === "unchanged") counts.unchanged += 1;
+      else if (decision.kind === "patch") {
+        counts.patched += 1;
+        if (!args.dryRun) await ctx.db.patch(decision._id, decision.patch);
+      } else if (decision.kind === "insert") {
+        counts.inserted += 1;
+        if (!args.dryRun) await ctx.db.insert("words", decision.document as any);
+      } else if (decision.kind === "retire") {
+        counts.retired += 1;
+        if (!args.dryRun) await ctx.db.patch(decision._id, { isRetired: true });
       }
+      if (details.length < 20 && decision.kind !== "unchanged") details.push({ word: operation.entry.word, result: decision.kind });
     }
-    return result;
-  },
-});
-
-export const migrateMexicoVivido = internalAction({
-  args: { dryRun: v.boolean(), batchSize: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const batchSize = normalizeBatchSize(args.batchSize);
-    const requests: ScanRequest[] = [{ cursor: null, endCursor: null }];
-    const pages: ExistingWord[][] = [];
-    while (requests.length) {
-      const request = requests.shift()!;
-      const page: any = await ctx.runQuery((internal as any).migrations.migrateMexicoVivido.scanWordsPage, {
-        paginationOpts: { cursor: request.cursor, endCursor: request.endCursor, numItems: batchSize },
-      });
-      if (page.pageStatus !== "SplitRequired") pages.push(page.page);
-      requests.unshift(...nextScanRequests(request, page));
-    }
-    const plan = planFromPages(pages, MEXICO_VIVIDO_WORDS, REMOVED_WORDS);
-    const summary = summarizeMigrationPlan(plan, args.dryRun);
-    if (args.dryRun) return { ...summary, applied: null };
-    const operations = [
-      ...plan.patches.map((item) => ({ kind: "patch", ...item })),
-      ...plan.inserts.map((document) => ({ kind: "insert", document })),
-      ...plan.retires.map((item) => ({ kind: "retire", ...item })),
-    ];
-    const applied = { patched: 0, inserted: 0, retired: 0, unchanged: 0, skipped: 0 };
-    for (let index = 0; index < operations.length; index += batchSize) {
-      const batch: any = await ctx.runMutation((internal as any).migrations.migrateMexicoVivido.applyMigrationBatch, {
-        operations: operations.slice(index, index + batchSize),
-      });
-      for (const key of Object.keys(applied) as (keyof typeof applied)[]) applied[key] += batch[key];
-    }
-    return { ...summary, applied };
+    return { status: "ok" as const, dryRun: args.dryRun, cursor: sliced.cursor, nextCursor: sliced.nextCursor, isDone: sliced.isDone, ...counts, details };
   },
 });

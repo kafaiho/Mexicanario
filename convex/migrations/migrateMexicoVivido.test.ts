@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeBatchSize, normalizeWordKey, planFromPages, planMexicoVividoMigration, nextScanRequests, summarizeMigrationPlan } from "./migrateMexicoVivido";
+import { catalogOperationDecision, hasMissingNormalizedKeys, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
 
 const catalog = [{ word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", order: 7, conceptId: "nino-heroe" }];
 
@@ -35,32 +35,36 @@ assert.equal(duplicate.patches.length, 0);
 const unknown = planMexicoVividoMigration([{ _id: "x", word: "desconocida" }], catalog, []);
 assert.deepEqual(unknown.unclassified.map((x) => x._id), ["x"]);
 
-const global = planFromPages([
-  [{ _id: "page-1", word: "Trompo" }, { _id: "present-1", word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", region: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", editorialOrder: 7, conceptId: "nino-heroe", normalizedWordKey: "niño heroe", isRetired: false }],
-  [{ _id: "page-2", word: " trompo " }],
-], catalog, []);
-assert.equal(global.conflicts.length, 1, "duplicados separados por páginas se detectan globalmente");
-assert.equal(global.patches.length, 0);
-assert.equal(global.inserts.length, 0, "dry-run global no cuenta como ausente una palabra presente en otra página");
+const backfillOne = planBackfillPage([{ _id: "a", word: "Trompo" }, { _id: "b", word: " trompo ", normalizedWordKey: "bad" }]);
+const backfillTwo = planBackfillPage([{ _id: "c", word: "Niño" }, { _id: "d", word: "Sol", normalizedWordKey: "sol" }]);
+assert.equal(backfillOne.patches.length, 2, "ambos duplicados reciben la clave, sin escoger ganador");
+assert.deepEqual(backfillOne.patches.map((item) => item.normalizedWordKey), ["trompo", "trompo"]);
+assert.equal(backfillTwo.patches.length, 1);
+assert.equal(backfillTwo.unchanged, 1);
 
-assert.equal(normalizeBatchSize(undefined), 100);
-assert.equal(normalizeBatchSize(Number.NaN), 100);
-assert.equal(normalizeBatchSize(Number.POSITIVE_INFINITY), 100);
-assert.equal(normalizeBatchSize(999), 200);
-assert.equal(normalizeBatchSize(0), 1);
+assert.equal(normalizeBackfillLimit(undefined), 100);
+assert.equal(normalizeBackfillLimit(Number.NaN), 100);
+assert.equal(normalizeBackfillLimit(Number.POSITIVE_INFINITY), 100);
+assert.equal(normalizeBackfillLimit(999), 200);
+assert.equal(normalizeCatalogBatchSize(undefined), 25);
+assert.equal(normalizeCatalogBatchSize(Number.NaN), 25);
+assert.equal(normalizeCatalogBatchSize(999), 50);
+assert.equal(normalizeCatalogBatchSize(0), 1);
 
-const split = nextScanRequests({ cursor: null, endCursor: null }, { continueCursor: "end", splitCursor: "mid", pageStatus: "SplitRequired", isDone: false });
-assert.deepEqual(split, [
-  { cursor: null, endCursor: "mid" },
-  { cursor: "mid", endCursor: "end" },
-  { cursor: "end", endCursor: null },
-]);
-assert.deepEqual(nextScanRequests({ cursor: "a", endCursor: null }, { continueCursor: "b", isDone: false }), [{ cursor: "b", endCursor: null }]);
+const operations = [{ kind: "retain", entry: catalog[0] }, { kind: "remove", entry: { word: "rayuela" } }] as const;
+const firstBatch = sliceCatalogOperations(operations, 0, 1);
+const secondBatch = sliceCatalogOperations(operations, firstBatch.nextCursor, 1);
+assert.deepEqual(firstBatch.operations.map((op) => op.kind), ["retain"]);
+assert.deepEqual(secondBatch.operations.map((op) => op.kind), ["remove"]);
+assert.equal(firstBatch.operations.length + secondBatch.operations.length, 2, "dry-runs paginados no duplican operaciones");
+assert.equal(secondBatch.isDone, true);
 
-const summary = summarizeMigrationPlan(global, true, 1);
-assert.equal(summary.dryRun, true);
-assert.equal(summary.conflicts, 1);
-assert.equal(summary.details.conflicts.length, 1);
-assert.equal(summary.details.truncated, false);
+assert.equal(catalogOperationDecision(operations[0], []).kind, "insert");
+assert.equal(catalogOperationDecision(operations[0], [{ _id: "a", word: "niño héroe" }, { _id: "b", word: "niño héroe" }]).kind, "conflict");
+assert.equal(catalogOperationDecision(operations[0], [applied[0]]).kind, "unchanged", "la segunda pasada del catálogo produce cero escrituras");
+assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela", isRetired: false }]).kind, "retire");
+assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela", isRetired: true }]).kind, "unchanged");
+assert.equal(hasMissingNormalizedKeys(undefined), false);
+assert.equal(hasMissingNormalizedKeys({ _id: "legacy" }), true);
 
 console.log("migrateMexicoVivido: helpers puros válidos");

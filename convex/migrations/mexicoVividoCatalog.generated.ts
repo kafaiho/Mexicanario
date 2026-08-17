@@ -1,4 +1,5 @@
 // GENERATED FILE — do not edit by hand.
+// Canonical source: shared/mexicoVividoCatalogSource.js
 // Regenerate: node scripts/generate-mexico-vivido-convex-catalog.js
 // Source SHA-256: 95580da1138058ad4c547a63338385eb20cd4b848d6daaedcae6a4797539752e
 export const MEXICO_VIVIDO_WORDS = [

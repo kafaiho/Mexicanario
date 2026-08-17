@@ -1,13 +1,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } = require('../src/content/mexicoVividoWords');
+const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } = require('../shared/mexicoVividoCatalogSource');
 
 const outputPath = path.join(__dirname, '..', 'convex', 'migrations', 'mexicoVividoCatalog.generated.ts');
 const payload = { MEXICO_VIVIDO_WORDS, REMOVED_WORDS };
 const hash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 const output = [
   '// GENERATED FILE — do not edit by hand.',
+  '// Canonical source: shared/mexicoVividoCatalogSource.js',
   '// Regenerate: node scripts/generate-mexico-vivido-convex-catalog.js',
   `// Source SHA-256: ${hash}`,
   `export const MEXICO_VIVIDO_WORDS = ${JSON.stringify(MEXICO_VIVIDO_WORDS, null, 2)} as const;`,

@@ -51,6 +51,8 @@ export const getCurrentLevel = query({
     const idx = Math.min(position - 1, ordered.length - 1);
     const lvl = ordered[idx];
     const word = wordMap.get(lvl.wordId.toString());
+    const nextLevel = ordered[idx + 1];
+    const nextWord = nextLevel ? wordMap.get(nextLevel.wordId.toString()) : undefined;
 
     return {
       level: position,
@@ -58,6 +60,11 @@ export const getCurrentLevel = query({
       meaning: word?.meaning || "Default",
       example: word?.example || "Default",
       region: word?.region || "Default",
+      pathId: word?.pathId,
+      placeId: word?.placeId,
+      editorialOrder: word?.editorialOrder,
+      culturalOrderVersion: orderingVersion,
+      nextPathId: nextWord?.pathId,
       reward: lvl.reward,
       isLastLevel: position >= ordered.length,
       isDefaultLevel,
@@ -176,6 +183,9 @@ export const getAllLevels = query({
         ...lvl,
         word: normalizeWord(wordDoc?.word ?? `Nivel ${lvl.levelNumber}`),
         meaning: wordDoc?.meaning ?? "",
+        pathId: wordDoc?.pathId,
+        placeId: wordDoc?.placeId,
+        editorialOrder: wordDoc?.editorialOrder,
       };
     });
   },
@@ -199,6 +209,9 @@ export const getLevelByNumber = query({
       meaning: wordDoc?.meaning ?? "",
       example: wordDoc?.example ?? "",
       region: wordDoc?.region ?? "",
+      pathId: wordDoc?.pathId,
+      placeId: wordDoc?.placeId,
+      editorialOrder: wordDoc?.editorialOrder,
       reward: lvl.reward,
     };
   },

@@ -189,11 +189,11 @@ export default function VictoryModal({
           {zoneCompleted && (
             <View style={[s.zoneBanner, { borderColor: zoneCompleted.color }]}>
               <Text style={s.zoneTitle}>
-                🎊 ¡Conquistaste {zoneCompleted.name}! {zoneCompleted.emoji}
+                🎊 ¡Completaste el camino {zoneCompleted.name}! {zoneCompleted.emoji}
               </Text>
               {zoneCompletedNext && (
                 <Text style={s.zoneNext}>
-                  Siguiente destino: {zoneCompletedNext.emoji} {zoneCompletedNext.name}
+                  Siguiente camino: {zoneCompletedNext.emoji} {zoneCompletedNext.name}
                 </Text>
               )}
             </View>

@@ -1,6 +1,6 @@
 const record = (id, name, icon, color, description) => ({ id, name, icon, color, description });
 
-const CULTURAL_PATHS = [
+const CULTURAL_PATH_DEFINITIONS = [
   record('patio-recreo', 'Patio y Recreo', '🪀', '#E76F51', 'Juegos, escuela y recuerdos de la niñez.'),
   record('casa-abuela', 'Casa de la Abuela', '🏡', '#B56576', 'Sabores, dichos y costumbres compartidas en familia.'),
   record('calle-barrio', 'Calle y Barrio', '⚽', '#457B9D', 'La vida cotidiana, sus personajes y sus voces.'),
@@ -12,6 +12,18 @@ const CULTURAL_PATHS = [
   record('historias-leyendas', 'Historias y Leyendas', '🕯️', '#6D597A', 'Relatos, personajes y memorias que siguen vivos.'),
   record('mexico-profundo', 'México Profundo', '🌽', '#606C38', 'Lenguas, raíces, conocimiento y diversidad cultural.'),
 ];
+
+// Conteos del catálogo editorial publicado, en el mismo orden de los caminos.
+// Centralizarlos aquí evita que la UI vuelva a repartir niveles de forma matemática.
+const CULTURAL_PATH_ENTRY_COUNTS = [20, 20, 25, 20, 21, 20, 20, 20, 20, 20];
+let culturalPathStart = 1;
+const CULTURAL_PATHS = CULTURAL_PATH_DEFINITIONS.map((path, index) => {
+  const entryCount = CULTURAL_PATH_ENTRY_COUNTS[index];
+  const editorialStart = culturalPathStart;
+  const editorialEnd = editorialStart + entryCount - 1;
+  culturalPathStart = editorialEnd + 1;
+  return Object.freeze({ ...path, entryCount, editorialStart, editorialEnd });
+});
 
 const collectionNames = [
   ['juegos-ninez', 'Juegos de la Niñez', '🪀'], ['dulces-antojitos', 'Dulces y Antojitos', '🍭'],

@@ -44,7 +44,8 @@ import { getRank, getRankIndex, didRankUp } from "../config/xpRanks";
 import VictoryModal from "../components/VictoryModal";
 import VictoryShareCard from "../components/VictoryShareCard";
 import WheelModal from "../components/WheelModal";
-import { getNextZone, getZone, isZoneStart } from "../config/mexicoZones";
+import { getCulturalPathTransition } from "../config/mexicoZones";
+import { getCulturalEmojis, getCulturalVictoryPhrase } from "../config/culturalPresentation";
 import { useAuth } from "../context/AuthContext";
 import useCoinFly from "../hooks/useCoinFly";
 import useDiamondFly from "../hooks/useDiamondFly";
@@ -85,68 +86,6 @@ const KEYBOARD_LAYOUT = [
   ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
   ["CLEAR_ALL", "Z", "X", "C", "V", "B", "N", "M", "DELETE_ONE"],
 ];
-
-// Region-aware emoji sets
-const REGION_EMOJIS = {
-  "CDMX": ["🏙️", "🌮", "🚇"],
-  "Ciudad de México": ["🏙️", "🌮", "🚇"],
-  "Jalisco": ["🤠", "🎺", "🌵"],
-  "Oaxaca": ["🏺", "🦋", "🌽"],
-  "Puebla": ["🌶️", "⛪", "🍫"],
-  "Norte": ["🌵", "🤠", "🐂"],
-  "Sinaloa": ["🎵", "🌊", "🌶️"],
-  "Veracruz": ["⚓", "🌊", "💃"],
-  "Yucatán": ["🏛️", "🦜", "🌴"],
-  "Guerrero": ["🏖️", "🐢", "🌺"],
-  "Chiapas": ["🌿", "🏯", "🦜"],
-  "Michoacán": ["🦋", "🏔️", "🫙"],
-  "Nacional": ["🇲🇽", "🌮", "🎶"],
-  "Todo México": ["🇲🇽", "🌵", "🎉"],
-  "Tradicional": ["🏺", "🎊", "🪅"],
-  "Infantil": ["🧸", "🎈", "🪀"],
-  "Juvenil": ["🎮", "🎧", "✏️"],
-  "Callejero": ["🛤️", "🎨", "🚲"],
-  "default": ["🇲🇽", "🌮", "🌵"],
-};
-
-function getRegionEmojis(region) {
-  if (!region) return REGION_EMOJIS["default"];
-  // Try exact match first
-  if (REGION_EMOJIS[region]) return REGION_EMOJIS[region];
-  // Try partial match (e.g. "Norte de México" → "Norte")
-  const key = Object.keys(REGION_EMOJIS).find(k =>
-    k !== "default" && region.toLowerCase().includes(k.toLowerCase())
-  );
-  return REGION_EMOJIS[key] || REGION_EMOJIS["default"];
-}
-
-// Frases de victoria que rotan por nivel
-const VICTORY_PHRASES = [
-  "¡Pasaron la arena por la zaranda!",
-  "¡Órale, qué chido!",
-  "¡Le entraste con todo el rollo!",
-  "¡A todo dar, campeón!",
-  "¡Qué bárbaro, lo lograste!",
-  "¡Fierro, ya lo tenías!",
-  "¡Neta que la armaste!",
-  "¡Le echaste muchas ganas!",
-  "¡Eso es, mero mero!",
-  "¡Bien hecho, gran mexica!",
-  "¡La neta del planeta!",
-  "¡No manches, qué listo!",
-  "¡Más chilango que el metro!",
-  "¡Órale, ya la hiciste!",
-  "¡A darle que es mole de olla!",
-  "¡Sale y vale, campeón!",
-  "¡Eso mero, así se hace!",
-  "¡Chido, le atinaste!",
-  "¡Tú sí sabes!",
-  "¡Le cayó el veinte!",
-];
-
-/** Devuelve la frase de victoria correspondiente al nivel */
-const getVictoryPhrase = (level) =>
-  VICTORY_PHRASES[(level - 1) % VICTORY_PHRASES.length] || VICTORY_PHRASES[0];
 
 /** Mensajes aleatorios de celebración cuando el jugador adivina la palabra */
 const WIN_PHRASES_PERFECT = [
@@ -500,10 +439,11 @@ export default function GameplayScreen({ navigation, route }) {
   const [wordMeaning, setWordMeaning] = useState("");
   const [wordExample, setWordExample] = useState("");
   const [wordRegion, setWordRegion] = useState("");
+  const [wordPlaceId, setWordPlaceId] = useState(null);
   // Victory snapshot — frozen copy of current-level data shown in the modal
   // (needed because completeLevelMutation increments the level immediately,
   //  causing levelInfo to update reactively before the modal closes)
-  const [victorySnap, setVictorySnap] = useState({ word: "", example: "", region: "", level: 1 });
+  const [victorySnap, setVictorySnap] = useState({ word: "", example: "", region: "", level: 1, pathId: null, placeId: null });
   const victoryWord = victorySnap.word;
   const victoryExample = victorySnap.example;
   const victoryRegion = victorySnap.region;
@@ -532,11 +472,14 @@ export default function GameplayScreen({ navigation, route }) {
     reviewLevelParam ? { levelNumber: reviewLevelParam } : "skip"
   );
 
-  // Zone completion — set when user clears the last level of a zone
+  // Cultural path completion — only set from exact consecutive backend metadata.
   const [zoneCompleted, setZoneCompleted] = useState(null);
   const [zoneCompletedNext, setZoneCompletedNext] = useState(null);
   const [selectedBoxIndex, setSelectedBoxIndex] = useState(0);
-  const categoryEmojis = useMemo(() => getRegionEmojis(wordRegion), [wordRegion]);
+  const categoryEmojis = useMemo(
+    () => getCulturalEmojis(wordPlaceId || wordRegion),
+    [wordPlaceId, wordRegion]
+  );
 
   // Hint costs (no free/inventory system — always charged)
   const HINT_COST = 25;       // A — revela 1 letra
@@ -807,6 +750,7 @@ export default function GameplayScreen({ navigation, route }) {
     setWordMeaning("");
     setWordExample("");
     setWordRegion("");
+    setWordPlaceId(null);
     setSelectedBoxIndex(0);
     setFixedLetters([]);
     setWrongLetters([]);
@@ -840,6 +784,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(mapReviewData.meaning);
         setWordExample(mapReviewData.example);
         setWordRegion(mapReviewData.region);
+        setWordPlaceId(mapReviewData.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
         const firstNonSpace = initial.findIndex((ch) => ch !== " ");
@@ -857,6 +802,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(challengeWordParam.meaning || "");
         setWordExample(challengeWordParam.example || "");
         setWordRegion(challengeWordParam.region || "");
+        setWordPlaceId(challengeWordParam.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
         const firstNonSpace = initial.findIndex((ch) => ch !== " ");
@@ -878,6 +824,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(activeReview.meaning || "");
         setWordExample(activeReview.example || "");
         setWordRegion(activeReview.region || "");
+        setWordPlaceId(activeReview.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
         const firstNonSpace = initial.findIndex((ch) => ch !== " ");
@@ -904,6 +851,7 @@ export default function GameplayScreen({ navigation, route }) {
           setWordMeaning(levelInfo.meaning || "");
           setWordExample(levelInfo.example || "");
           setWordRegion(levelInfo.region || "");
+          setWordPlaceId(levelInfo.placeId || null);
 
           // Try to restore a saved session for this level
           let restored = false;
@@ -1047,14 +995,18 @@ export default function GameplayScreen({ navigation, route }) {
           resolveWordMutation({ userId, wordId: reviewWordId }).catch(() => { });
         }
 
-        // Zone completion check (normal mode only, not review)
+        // Cultural path transition: never infer from legacy level numbers.
         let didCompleteZone = false;
         if (!isReviewMode && levelInfo?.level) {
-          const nextLevel = levelInfo.level + 1;
-          if (isZoneStart(nextLevel, totalLevels)) {
+          const transition = getCulturalPathTransition(
+            levelInfo.pathId,
+            levelInfo.nextPathId,
+            levelInfo.culturalOrderVersion
+          );
+          if (transition) {
             didCompleteZone = true;
-            setZoneCompleted(getZone(levelInfo.level, totalLevels));
-            setZoneCompletedNext(getNextZone(levelInfo.level, totalLevels));
+            setZoneCompleted(transition.completed);
+            setZoneCompletedNext(transition.next);
           }
         }
 
@@ -1068,6 +1020,8 @@ export default function GameplayScreen({ navigation, route }) {
             example: wordExample,
             region: wordRegion,
             level: reviewLevelParam || 1,
+            pathId: mapReviewData?.pathId,
+            placeId: mapReviewData?.placeId,
           });
           setLevelUpReward({ coins: 0, diamonds: 0 });
           setTimeout(() => {
@@ -1100,6 +1054,8 @@ export default function GameplayScreen({ navigation, route }) {
             example: wordExample,
             region: wordRegion,
             level: levelInfo?.level || 1,
+            pathId: challengeWordParam?.pathId,
+            placeId: challengeWordParam?.placeId,
           });
           setLevelUpReward({ coins: 0, diamonds: 0 });
           setTimeout(() => {
@@ -1164,6 +1120,8 @@ export default function GameplayScreen({ navigation, route }) {
         const snapExample = wordExample;
         const snapRegion = wordRegion;
         const snapLevel = levelInfo?.level || 1;
+        const snapPathId = levelInfo?.pathId;
+        const snapPlaceId = levelInfo?.placeId;
         // Block levelInfo useEffect from resetting game while victory modal is open
         skipNextInitRef.current = true;
         // Calculate reward synchronously (needs levelInfo before mutation runs)
@@ -1180,7 +1138,7 @@ export default function GameplayScreen({ navigation, route }) {
         // instead of 5 immediate + 1 delayed. Keeps JS thread free for animations.
         const victoryDelay = attempts === 0 ? 1350 : 500;
         setTimeout(() => {
-          setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel });
+          setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel, pathId: snapPathId, placeId: snapPlaceId });
           setLevelUpReward(displayReward);
           setShowLevelUp(true);
           playSound("celebration");
@@ -2312,7 +2270,7 @@ export default function GameplayScreen({ navigation, route }) {
           isLastLevel={levelInfo?.isLastLevel}
           petHasPet={petState?.hasPet}
           maxCombo={maxCombo}
-          victoryPhrase={isChallengeMode ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado") : getVictoryPhrase(victoryLevel)}
+          victoryPhrase={isChallengeMode ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado") : getCulturalVictoryPhrase(victoryLevel, victorySnap.pathId || levelInfo?.pathId, victorySnap.placeId || levelInfo?.placeId)}
           word={victoryWord || mexicanWord}
           example={victoryExample}
           region={victoryRegion}

@@ -33,7 +33,8 @@ import SinAnuncios from "../components/SinAnuncios";
 import TermsModal from "../components/TermsModal";
 import TopBar from "../components/TopBar";
 import WheelModal from "../components/WheelModal";
-import { getZone, getZoneProgress } from "../config/mexicoZones";
+import { getCulturalPathProgress } from "../config/mexicoZones";
+import { getCurrentPathPresentation } from "../config/culturalPathSelection";
 import { useAuth } from "../context/AuthContext";
 import useDevMode from "../hooks/useDevMode";
 import { useOnboarding } from "../hooks/useOnboarding";
@@ -294,9 +295,9 @@ export default function MainMenuScreen({ navigation }) {
             <>
               {/* Zone chip — only on active slide */}
               {isActive && (() => {
-                const zone = getZone(currentLevel, totalLevels);
-                const zoneProgress = getZoneProgress(currentLevel, totalLevels);
-                const zoneSize = zone.levels[1] - zone.levels[0] + 1;
+                const zone = getCurrentPathPresentation(levelInfo);
+                const zoneProgress = zone.isNeutral ? null : getCulturalPathProgress(levelInfo?.editorialOrder, zone.id);
+                const zoneSize = zone.entryCount;
                 return (
                   <TouchableOpacity
                     style={[styles.zoneChip, { backgroundColor: zone.color + "DD" }]}
@@ -304,7 +305,8 @@ export default function MainMenuScreen({ navigation }) {
                     activeOpacity={0.85}
                   >
                     <Text style={styles.zoneChipText}>
-                      {zone.emoji} {zone.name}  ·  {zoneProgress}/{zoneSize}  🗺️
+                      {zone.emoji} {zone.name}
+                      {zoneProgress ? `  ·  ${zoneProgress}/${zoneSize}` : ""}  🗺️
                     </Text>
                   </TouchableOpacity>
                 );

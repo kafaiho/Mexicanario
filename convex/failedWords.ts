@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { buildDueReviewWord } from "./failedWordPresentation";
 
 const TWO_DAYS_MS = 172_800_000;
 
@@ -97,16 +98,7 @@ export const getDueWord = query({
     const wordData = await ctx.db.get(record.wordId);
     if (!wordData) return null;
 
-    return {
-      recordId: record._id,
-      wordId: record.wordId,
-      wordText: wordData.word,
-      meaning: wordData.meaning,
-      example: wordData.example,
-      region: wordData.region,
-      failCount: record.failCount,
-      failedAt: record.failedAt,
-    };
+    return buildDueReviewWord(record, wordData);
   },
 });
 

@@ -19,7 +19,8 @@ import { PET_ASSETS } from "../components/PetCompanion/petAssets";
 import ProfileModal from "../components/ProfileModal";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
-import { getZone, getZoneProgress, getNextZone } from "../config/mexicoZones";
+import { getCulturalPathProgress, getNextCulturalPath } from "../config/mexicoZones";
+import { getCurrentPathPresentation } from "../config/culturalPathSelection";
 import EloBadge from "../components/EloBadge";
 
 const { width, height } = Dimensions.get("window");
@@ -108,13 +109,19 @@ export default function ProfileScreen({ visible, onClose }) {
     ? PET_ASSETS[petType][petStage]?.body ?? null
     : null;
 
-  // Viaje de México (zona del mapa)
+  // Viaje de México: v2 usa metadatos editoriales; v1 conserva etiqueta neutral.
   const totalLevels  = allLevels?.length ?? 0;
-  const currentZone  = totalLevels > 0 ? getZone(level, totalLevels) : null;
-  const zoneProgress = totalLevels > 0 ? getZoneProgress(level, totalLevels) : 0;
-  const zoneSize     = currentZone ? (currentZone.levels[1] - currentZone.levels[0] + 1) : 1;
+  const currentLevelMeta = allLevels?.[Math.min(Math.max(level - 1, 0), Math.max(totalLevels - 1, 0))];
+  const currentZone  = totalLevels > 0 ? getCurrentPathPresentation({
+    pathId: currentLevelMeta?.pathId,
+    culturalOrderVersion: userData?.culturalOrderVersion,
+  }) : null;
+  const zoneProgress = currentZone && !currentZone.isNeutral
+    ? getCulturalPathProgress(currentLevelMeta?.editorialOrder, currentZone.id)
+    : Math.min(level, totalLevels);
+  const zoneSize     = currentZone?.entryCount ?? Math.max(totalLevels, 1);
   const zonePct      = zoneSize > 0 ? zoneProgress / zoneSize : 0;
-  const nextZone     = totalLevels > 0 ? getNextZone(level, totalLevels) : null;
+  const nextZone     = currentZone && !currentZone.isNeutral ? getNextCulturalPath(currentZone.id) : null;
 
   // Cuates count
   const cuatesCount = myFriends?.length ?? 0;
@@ -215,9 +222,11 @@ export default function ProfileScreen({ visible, onClose }) {
                       <View style={[styles.viajeBarFill, { width: `${Math.round(zonePct * 100)}%`, backgroundColor: currentZone.color }]} />
                     </View>
                     <Text style={styles.viajeHint}>
-                      {nextZone
+                      {currentZone.isNeutral
+                        ? "Tu avance conserva el orden original"
+                        : nextZone
                         ? `Siguiente: ${nextZone.emoji} ${nextZone.name}`
-                        : "¡Última zona del mapa!"}
+                        : "¡Último camino del mapa!"}
                     </Text>
                   </View>
                 </View>

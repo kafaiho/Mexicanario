@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
+import { buildChallengeWordData } from "./friendsPresentation";
 
 // ── SHA-256 usando Web Crypto API (disponible en V8 runtime de Convex) ────────
 async function hashPassword(password: string): Promise<string> {
@@ -1018,12 +1019,7 @@ export const acceptChallenge = mutation({
     return {
       expired: false,
       challengeId: challenge._id,
-      wordData: {
-        word: word?.word ?? "???",
-        meaning: word?.meaning ?? "",
-        example: word?.example ?? "",
-        region: word?.region ?? "",
-      },
+      wordData: buildChallengeWordData(word),
       betCoins: CHALLENGE_BET,
       challengerName: (await ctx.db.get(challenge.challengerId))?.name ?? "Cuate",
     };

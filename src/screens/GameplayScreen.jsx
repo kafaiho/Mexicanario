@@ -439,6 +439,7 @@ export default function GameplayScreen({ navigation, route }) {
   const [wordMeaning, setWordMeaning] = useState("");
   const [wordExample, setWordExample] = useState("");
   const [wordRegion, setWordRegion] = useState("");
+  const [wordPathId, setWordPathId] = useState(null);
   const [wordPlaceId, setWordPlaceId] = useState(null);
   // Victory snapshot — frozen copy of current-level data shown in the modal
   // (needed because completeLevelMutation increments the level immediately,
@@ -750,6 +751,7 @@ export default function GameplayScreen({ navigation, route }) {
     setWordMeaning("");
     setWordExample("");
     setWordRegion("");
+    setWordPathId(null);
     setWordPlaceId(null);
     setSelectedBoxIndex(0);
     setFixedLetters([]);
@@ -784,6 +786,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(mapReviewData.meaning);
         setWordExample(mapReviewData.example);
         setWordRegion(mapReviewData.region);
+        setWordPathId(mapReviewData.pathId || null);
         setWordPlaceId(mapReviewData.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
@@ -802,6 +805,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(challengeWordParam.meaning || "");
         setWordExample(challengeWordParam.example || "");
         setWordRegion(challengeWordParam.region || "");
+        setWordPathId(challengeWordParam.pathId || null);
         setWordPlaceId(challengeWordParam.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
@@ -824,6 +828,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordMeaning(activeReview.meaning || "");
         setWordExample(activeReview.example || "");
         setWordRegion(activeReview.region || "");
+        setWordPathId(activeReview.pathId || null);
         setWordPlaceId(activeReview.placeId || null);
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
@@ -851,6 +856,7 @@ export default function GameplayScreen({ navigation, route }) {
           setWordMeaning(levelInfo.meaning || "");
           setWordExample(levelInfo.example || "");
           setWordRegion(levelInfo.region || "");
+          setWordPathId(levelInfo.pathId || null);
           setWordPlaceId(levelInfo.placeId || null);
 
           // Try to restore a saved session for this level
@@ -913,10 +919,19 @@ export default function GameplayScreen({ navigation, route }) {
   }, [mapReviewData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!reviewLevelParam && levelInfo && !skipNextInitRef.current) {
+    if (!reviewLevelParam && !isChallengeMode && levelInfo && !skipNextInitRef.current) {
       initGame();
     }
   }, [levelInfo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Retos y repasos fallidos traen su propia palabra y no deben esperar al nivel normal.
+  useEffect(() => {
+    if (isChallengeMode && challengeWordParam && !skipNextInitRef.current) initGame();
+  }, [isChallengeMode, challengeWordParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!reviewLevelParam && !isChallengeMode && reviewWord && !skipNextInitRef.current) initGame();
+  }, [reviewWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Aviso de registro al pasar niveles clave (solo usuarios sin cuenta) ────
   const REGISTER_PROMPT_LEVELS = [5, 15, 30];
@@ -997,7 +1012,7 @@ export default function GameplayScreen({ navigation, route }) {
 
         // Cultural path transition: never infer from legacy level numbers.
         let didCompleteZone = false;
-        if (!isReviewMode && levelInfo?.level) {
+        if (!isReviewMode && !isMapReview && !isChallengeMode && levelInfo?.level) {
           const transition = getCulturalPathTransition(
             levelInfo.pathId,
             levelInfo.nextPathId,
@@ -1120,8 +1135,8 @@ export default function GameplayScreen({ navigation, route }) {
         const snapExample = wordExample;
         const snapRegion = wordRegion;
         const snapLevel = levelInfo?.level || 1;
-        const snapPathId = levelInfo?.pathId;
-        const snapPlaceId = levelInfo?.placeId;
+        const snapPathId = wordPathId;
+        const snapPlaceId = wordPlaceId;
         // Block levelInfo useEffect from resetting game while victory modal is open
         skipNextInitRef.current = true;
         // Calculate reward synchronously (needs levelInfo before mutation runs)
@@ -1405,7 +1420,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Show synonym / example hint – uses inventory first, then costs SYNONYM_COST coins
   const handleShowSynonym = async () => {
-    if (isLoading || !levelInfo || isCorrect) return;
+    if (isLoading || !mexicanWord || isCorrect) return;
     if (showSynonym) return; // already revealed
     if (!wordExample && !wordMeaning) {
       Alert.alert("Sin pista", "No hay pista adicional disponible para esta palabra.");
@@ -1426,7 +1441,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Revelar letra (A) – siempre gratis, sin monedas
   const handleReveal = () => {
-    if (isLoading || !levelInfo || isCorrect) return;
+    if (isLoading || !mexicanWord || isCorrect) return;
     // Cancel any pending wrong-answer clear so hint letter isn't wiped
     if (wrongClearTimerRef.current) {
       clearTimeout(wrongClearTimerRef.current);
@@ -1473,7 +1488,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Revelar letras correctas en el teclado (🔓) – 75🪙
   const handleBorrar = () => {
-    if (isLoading || !levelInfo || isCorrect) return;
+    if (isLoading || !mexicanWord || isCorrect) return;
     if (revealedKeys !== null) {
       Alert.alert("Teclado ya revelado", "¡Ya puedes ver las letras correctas en el teclado!");
       return;
@@ -1511,7 +1526,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Completar palabra (⭐) – 200🪙, completa todas las letras
   const handleVerificar = () => {
-    if (isLoading || !levelInfo || isCorrect) return;
+    if (isLoading || !mexicanWord || isCorrect) return;
     if (!checkCoins(VERIFICAR_COST, "verificar")) return;
     // Cancel any pending wrong-answer clear so completed word isn't wiped
     if (wrongClearTimerRef.current) {
@@ -1661,7 +1676,7 @@ export default function GameplayScreen({ navigation, route }) {
   }), [dynamicStyles.key, dynamicStyles.deleteKey, dynamicStyles.clearKey]);
 
   // ─── Loading ─────────────────────────────────────────────────────────────────
-  if (isLoading || !levelInfo) {
+  if (isLoading || (!levelInfo && !mexicanWord)) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator size="large" color="#1A5276" />
@@ -2270,7 +2285,13 @@ export default function GameplayScreen({ navigation, route }) {
           isLastLevel={levelInfo?.isLastLevel}
           petHasPet={petState?.hasPet}
           maxCombo={maxCombo}
-          victoryPhrase={isChallengeMode ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado") : getCulturalVictoryPhrase(victoryLevel, victorySnap.pathId || levelInfo?.pathId, victorySnap.placeId || levelInfo?.placeId)}
+          victoryPhrase={isChallengeMode
+            ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado")
+            : getCulturalVictoryPhrase(
+                victoryLevel,
+                victorySnap.pathId ?? ((isReviewMode || isMapReview) ? undefined : levelInfo?.pathId),
+                victorySnap.placeId ?? ((isReviewMode || isMapReview) ? undefined : levelInfo?.placeId)
+              )}
           word={victoryWord || mexicanWord}
           example={victoryExample}
           region={victoryRegion}

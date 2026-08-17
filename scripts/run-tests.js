@@ -14,6 +14,9 @@ const typescriptTestModules = [
   'convex/levelWrites.test.ts',
   'src/config/mexicoZones.test.ts',
   'src/config/culturalPresentation.test.ts',
+  'src/config/culturalPathSelection.test.ts',
+  'convex/failedWords.test.ts',
+  'convex/friendsPresentation.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

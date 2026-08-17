@@ -131,6 +131,10 @@ export const getCurrentLevel = query({
     }
 
     const word = await ctx.db.get(levelConfig.wordId as Id<"words">);
+    const nextLevelConfig = ordered[clampedLevel];
+    const nextWord = nextLevelConfig
+      ? await ctx.db.get(nextLevelConfig.wordId as Id<"words">)
+      : null;
 
     return {
       level: clampedLevel,
@@ -139,6 +143,11 @@ export const getCurrentLevel = query({
       meaning: word?.meaning || "",
       example: word?.example || "",
       region: word?.region || "",
+      pathId: word?.pathId,
+      placeId: word?.placeId,
+      editorialOrder: word?.editorialOrder,
+      culturalOrderVersion: user.culturalOrderVersion ?? 1,
+      nextPathId: nextWord?.pathId,
       reward: levelConfig.reward,
       isLastLevel: clampedLevel >= maxLevel,
       isDefaultLevel: false,

@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
-import { getZone } from "../config/mexicoZones";
+import { buildCulturalMapItems } from "../config/culturalPathSelection";
 import { useAuth } from "../context/AuthContext";
 import { notifySuccess, tapMedium } from "../services/haptics";
 import { TABLET_MODE } from "../utils/tabletSetup";
@@ -42,33 +42,6 @@ const ROW_H = TABLET_MODE ? 130 : 160;
 
 
 
-// ── Build items ───────────────────────────────────────────────────────────────
-function buildItems(allLevels, totalLevels) {
-  if (!allLevels || allLevels.length === 0) return [];
-  const items = [];
-  let lastZoneId = null;
-  let waveIdx = 0;
-  for (let i = 0; i < allLevels.length; i++) {
-    const lvl = allLevels[i];
-    // displayIndex is the 1-based position in the sorted gameplay order.
-    // currentLevel from Convex also uses this same ordering, so we must
-    // compare displayIndex (not lvl.levelNumber) against currentLevel.
-    const displayIndex = i + 1;
-
-    const zone = getZone(displayIndex, totalLevels);
-    if (zone.id !== lastZoneId) {
-      items.push({ type: "zone", zone });
-      lastZoneId = zone.id;
-      waveIdx = 0;
-    }
-    items.push({ type: "level", level: lvl, zone, waveIdx: waveIdx % WAVE_RATIOS.length, displayIndex });
-    waveIdx++;
-  }
-  return items;
-}
-
-
-
 // ── ZoneBanner ────────────────────────────────────────────────────────────────
 function ZoneBanner({ zone }) {
   return (
@@ -78,11 +51,13 @@ function ZoneBanner({ zone }) {
         <Text style={styles.zoneBannerName}>{zone.name.toUpperCase()}</Text>
         <Text style={styles.zoneBannerDesc}>{zone.desc}</Text>
       </View>
-      <View style={styles.zoneBannerBadge}>
-        <Text style={styles.zoneBannerBadgeText}>
-          {zone.levels[0]}–{zone.levels[1]}
-        </Text>
-      </View>
+      {zone.levels && (
+        <View style={styles.zoneBannerBadge}>
+          <Text style={styles.zoneBannerBadgeText}>
+            {zone.levels[0]}–{zone.levels[1]}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -311,7 +286,7 @@ export default function MapScreen({ navigation, route }) {
 
   const currentLevel = levelInfo?.level ?? 1;
   const totalLevels = allLevels?.length ?? 0;
-  const items = useMemo(() => buildItems(allLevels, totalLevels), [allLevels, totalLevels]);
+  const items = useMemo(() => buildCulturalMapItems(allLevels, WAVE_RATIOS.length), [allLevels]);
   const completedLevels = Math.max(0, currentLevel - 1);
 
   // Pre-compute item heights for getItemLayout — zone banners are ~104px, level rows are ROW_H.
@@ -320,7 +295,7 @@ export default function MapScreen({ navigation, route }) {
   const itemLayouts = useMemo(() => {
     let offset = 0;
     return items.map((item, index) => {
-      const length = item.type === "zone" ? ZONE_H : ROW_H;
+      const length = item.type === "path" ? ZONE_H : ROW_H;
       const layout = { length, offset, index };
       offset += length;
       return layout;
@@ -345,7 +320,7 @@ export default function MapScreen({ navigation, route }) {
 
 
   const renderItem = ({ item }) => {
-    if (item.type === "zone") return <ZoneBanner zone={item.zone} />;
+    if (item.type === "path") return <ZoneBanner zone={item.zone} />;
     return (
       <DuoNode
         item={item}
@@ -404,9 +379,7 @@ export default function MapScreen({ navigation, route }) {
         <FlatList
           ref={listRef}
           data={items}
-          keyExtractor={(it) =>
-            it.type === "zone" ? `z-${it.zone.id}` : `l-${it.level.levelNumber}`
-          }
+          keyExtractor={(it) => it.key}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

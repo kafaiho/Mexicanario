@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { catalogOperationDecision, hasMissingNormalizedKeys, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
+import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, hasMissingNormalizedKeys, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
 
 const catalog = [{ word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", order: 7, conceptId: "nino-heroe" }];
 
@@ -41,6 +41,17 @@ assert.equal(backfillOne.patches.length, 2, "ambos duplicados reciben la clave, 
 assert.deepEqual(backfillOne.patches.map((item) => item.normalizedWordKey), ["trompo", "trompo"]);
 assert.equal(backfillTwo.patches.length, 1);
 assert.equal(backfillTwo.unchanged, 1);
+const incomplete = planBackfillResult({
+  page: [{ _id: "incomplete", word: "Trompo" }],
+  pageStatus: "SplitRequired", splitCursor: "middle", continueCursor: "end", isDone: false,
+}, false, "start");
+assert.equal(incomplete.status, "split_required");
+assert.equal(incomplete.patched, 0);
+assert.equal(incomplete.unchanged, 0);
+assert.deepEqual(incomplete.operations, []);
+assert.equal(incomplete.splitCursor, "middle");
+assert.equal(incomplete.continueCursor, "end");
+assert.equal(incomplete.endCursor, "start");
 
 assert.equal(normalizeBackfillLimit(undefined), 100);
 assert.equal(normalizeBackfillLimit(Number.NaN), 100);
@@ -66,5 +77,28 @@ assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela
 assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela", isRetired: true }]).kind, "unchanged");
 assert.equal(hasMissingNormalizedKeys(undefined), false);
 assert.equal(hasMissingNormalizedKeys({ _id: "legacy" }), true);
+
+const previewOperations = [
+  { kind: "retain" as const, entry: catalog[0] },
+  { kind: "retain" as const, entry: { ...catalog[0], word: "ausente", order: 8 } },
+  { kind: "remove" as const, entry: { word: "rayuela" } },
+];
+const previewKeys = new Set(previewOperations.map((op) => normalizeWordKey(op.entry.word)));
+const inventory = new Map();
+assert.equal(accumulatePreviewPage(inventory, {
+  page: [{ _id: "discarded", word: "Niño héroe" }], pageStatus: "SplitRequired",
+  splitCursor: "mid", continueCursor: "end", isDone: false,
+}, previewKeys), false);
+assert.equal(inventory.size, 0, "el preview descarta por completo páginas incompletas");
+accumulatePreviewInventory(inventory, [{ _id: "p1", ...applied[0] }], previewKeys);
+accumulatePreviewInventory(inventory, [{ _id: "p2", word: "Rayuela", normalizedWordKey: "rayuela", isRetired: false }], previewKeys);
+const preview = planFromPreviewInventory(inventory, previewOperations);
+assert.equal(preview.inserted, 1, "solo la clave realmente ausente se inserta");
+assert.equal(preview.unchanged, 1, "una palabra retenida vista en otra página no es falso insert");
+assert.equal(preview.retired, 1);
+accumulatePreviewInventory(inventory, [{ _id: "p3", word: "Niño héroe", normalizedWordKey: "niño heroe" }], previewKeys);
+const duplicatePreview = planFromPreviewInventory(inventory, previewOperations);
+assert.equal(duplicatePreview.conflicts, 1, "duplicados entre páginas son conflicto");
+assert.ok(inventory.size <= previewKeys.size, "el inventario nunca supera las claves operativas");
 
 console.log("migrateMexicoVivido: helpers puros válidos");

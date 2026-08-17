@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } from "./mexicoVividoCatalog.generated";
 
 /**
@@ -112,6 +113,30 @@ export function planBackfillPage(words: readonly ExistingWord[]) {
   return { patches, unchanged: words.length - patches.length };
 }
 
+type BackfillPage = {
+  page: ExistingWord[];
+  continueCursor: string;
+  isDone: boolean;
+  splitCursor?: string | null;
+  pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+};
+
+export function planBackfillResult(page: BackfillPage, dryRun: boolean, endCursor?: string | null) {
+  const metadata = {
+    dryRun,
+    continueCursor: page.continueCursor,
+    isDone: page.isDone,
+    splitCursor: page.splitCursor ?? null,
+    pageStatus: page.pageStatus ?? null,
+    endCursor: endCursor ?? null,
+  };
+  if (page.pageStatus === "SplitRequired") {
+    return { status: "split_required" as const, patched: 0, unchanged: 0, operations: [], ...metadata };
+  }
+  const plan = planBackfillPage(page.page);
+  return { status: "ok" as const, patched: plan.patches.length, unchanged: plan.unchanged, operations: plan.patches, ...metadata };
+}
+
 type RetainOperation = { kind: "retain"; entry: CatalogWord };
 type RemoveOperation = { kind: "remove"; entry: RemovedWord };
 type CatalogOperation = RetainOperation | RemoveOperation;
@@ -147,6 +172,63 @@ export function catalogOperationDecision(operation: CatalogOperation, matches: r
   return { kind: "patch" as const, _id: existing._id, patch };
 }
 
+type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };
+export type PreviewInventory = Map<string, PreviewInventoryEntry>;
+
+function compactPreviewWord(word: ExistingWord, normalizedWordKey: string): ExistingWord {
+  const compact: ExistingWord = { _id: word._id, word: word.word, normalizedWordKey };
+  for (const field of [...PATCH_FIELDS, "editorialOrder", "region", "isRetired"] as const) {
+    if (word[field] !== undefined) (compact as Record<string, unknown>)[field] = word[field];
+  }
+  return compact;
+}
+
+export function accumulatePreviewInventory(
+  inventory: PreviewInventory,
+  words: readonly ExistingWord[],
+  operationKeys: ReadonlySet<string>,
+) {
+  for (const word of words) {
+    const key = normalizeWordKey(word.word);
+    if (!operationKeys.has(key)) continue;
+    const entry = inventory.get(key) ?? { count: 0, docs: [] };
+    entry.count += 1;
+    if (entry.docs.length < 2) entry.docs.push(compactPreviewWord(word, key));
+    inventory.set(key, entry);
+  }
+  return inventory;
+}
+
+export function accumulatePreviewPage(
+  inventory: PreviewInventory,
+  page: BackfillPage,
+  operationKeys: ReadonlySet<string>,
+) {
+  if (page.pageStatus === "SplitRequired") return false;
+  accumulatePreviewInventory(inventory, page.page, operationKeys);
+  return true;
+}
+
+export function planFromPreviewInventory(inventory: PreviewInventory, operations: readonly CatalogOperation[]) {
+  const counts = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0 };
+  const details: Array<{ word: string; result: string; ids?: any[] }> = [];
+  for (const operation of operations) {
+    const key = normalizeWordKey(operation.entry.word);
+    const found = inventory.get(key);
+    const matches = found?.docs ?? [];
+    const decision = found && found.count >= 2 ? { kind: "conflict" as const } : catalogOperationDecision(operation, matches);
+    if (decision.kind === "conflict") counts.conflicts += 1;
+    else if (decision.kind === "patch") counts.patched += 1;
+    else if (decision.kind === "insert") counts.inserted += 1;
+    else if (decision.kind === "retire") counts.retired += 1;
+    else counts.unchanged += 1;
+    if (details.length < 20 && decision.kind !== "unchanged") {
+      details.push({ word: operation.entry.word, result: decision.kind, ...(decision.kind === "conflict" ? { ids: matches.map((word) => word._id) } : {}) });
+    }
+  }
+  return { ...counts, details, detailsTruncated: operations.length > details.length + counts.unchanged };
+}
+
 export const backfillNormalizedKeysBatch = internalMutation({
   args: { paginationOpts: paginationOptsValidator, dryRun: v.boolean() },
   handler: async (ctx, args) => {
@@ -155,19 +237,68 @@ export const backfillNormalizedKeysBatch = internalMutation({
       endCursor: args.paginationOpts.endCursor,
       numItems: normalizeBackfillLimit(args.paginationOpts.numItems),
     } as any);
-    const plan = planBackfillPage(page.page);
-    if (!args.dryRun) {
-      for (const item of plan.patches) await ctx.db.patch(item._id, { normalizedWordKey: item.normalizedWordKey });
+    const plan = planBackfillResult(page, args.dryRun, args.paginationOpts.endCursor);
+    if (!args.dryRun && plan.status === "ok") {
+      for (const item of plan.operations) await ctx.db.patch(item._id, { normalizedWordKey: item.normalizedWordKey });
+    }
+    return {
+      status: plan.status,
+      patched: plan.patched,
+      unchanged: plan.unchanged,
+      dryRun: plan.dryRun,
+      continueCursor: plan.continueCursor,
+      isDone: plan.isDone,
+      splitCursor: plan.splitCursor,
+      pageStatus: plan.pageStatus,
+      endCursor: plan.endCursor,
+    };
+  },
+});
+
+export const scanWordsForPreview = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => await ctx.db.query("words").paginate({
+    cursor: args.paginationOpts.cursor,
+    endCursor: args.paginationOpts.endCursor,
+    numItems: normalizeBackfillLimit(args.paginationOpts.numItems),
+  } as any),
+});
+
+type PreviewRequest = { cursor: string | null; endCursor: string | null };
+
+export const previewMexicoVividoMigration = internalAction({
+  args: { pageSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const pageSize = normalizeBackfillLimit(args.pageSize);
+    const operationKeys = new Set(CATALOG_OPERATIONS.map((operation) => normalizeWordKey(operation.entry.word)));
+    const inventory: PreviewInventory = new Map();
+    const queue: PreviewRequest[] = [{ cursor: null, endCursor: null }];
+    while (queue.length) {
+      const request = queue.shift()!;
+      const page: BackfillPage = await ctx.runQuery((internal as any).migrations.migrateMexicoVivido.scanWordsForPreview, {
+        paginationOpts: { cursor: request.cursor, endCursor: request.endCursor, numItems: pageSize },
+      });
+      if (page.pageStatus === "SplitRequired" && page.splitCursor) {
+        queue.unshift(
+          { cursor: request.cursor, endCursor: page.splitCursor },
+          { cursor: page.splitCursor, endCursor: page.continueCursor },
+        );
+        if (!request.endCursor && !page.isDone) queue.push({ cursor: page.continueCursor, endCursor: null });
+        continue;
+      }
+      if (page.pageStatus === "SplitRequired") throw new Error("SplitRequired sin splitCursor");
+      accumulatePreviewPage(inventory, page, operationKeys);
+      if (!page.isDone) queue.unshift({ cursor: page.continueCursor, endCursor: request.endCursor });
     }
     return {
       status: "ok" as const,
-      patched: plan.patches.length,
-      unchanged: plan.unchanged,
-      dryRun: args.dryRun,
-      continueCursor: page.continueCursor,
-      isDone: page.isDone,
-      splitCursor: page.splitCursor ?? null,
-      pageStatus: page.pageStatus ?? null,
+      ...planFromPreviewInventory(inventory, CATALOG_OPERATIONS),
+      dryRun: true,
+      writes: 0,
+      snapshotConsistent: false,
+      note: "Las consultas paginadas no comparten una transacción; escrituras administrativas concurrentes pueden cambiar el resultado.",
+      inventoryKeys: inventory.size,
+      maximumInventoryKeys: operationKeys.size,
     };
   },
 });

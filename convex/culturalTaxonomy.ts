@@ -33,4 +33,3 @@ export type CulturalCollectionId = typeof CULTURAL_COLLECTION_IDS[number];
 export type CulturalPlaceId = typeof CULTURAL_PLACE_IDS[number];
 export type CulturalRating = typeof CULTURAL_RATINGS[number];
 export type CulturalGeneration = typeof CULTURAL_GENERATIONS[number];
-

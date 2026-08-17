@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateCulturalWord } from "./culturalValidation.ts";
+import { buildCulturalAudit, validateCulturalWord } from "./culturalValidation.ts";
 
 const validWord = {
   word: "balero",
@@ -41,17 +41,69 @@ for (const fragment of [
 }
 
 assert.deepEqual(validateCulturalWord({ word: "registro antiguo" }), []);
-assert.ok(validateCulturalWord({ word: "registro antiguo" }, { requireCulturalMetadata: true }).length >= 8);
+assert.deepEqual(validateCulturalWord({ word: "registro antiguo" }, { requireCulturalMetadata: true }), [
+  "collectionId desconocido o ausente",
+  "pathId desconocido o ausente",
+  "placeId desconocido o ausente",
+  "difficulty debe ser 1, 2 o 3",
+  "rating debe ser familiar o adulto",
+  "generation debe incluir al menos un valor",
+  "icon no puede estar vacío",
+  "editorialOrder debe ser un entero positivo",
+]);
+assert.deepEqual(validateCulturalWord({ ...validWord, placeId: "unclassified" }, { requireCulturalMetadata: true }), [
+  "placeId no puede ser unclassified en contenido publicable",
+]);
 
-for (const invalidAdult of [
-  { ...validWord, rating: "adulto", collectionId: "juegos-ninez", pathId: "historias-leyendas", editorialOrder: 151 },
-  { ...validWord, rating: "adulto", collectionId: "albures-picaresca", pathId: "patio-recreo", editorialOrder: 151 },
-  { ...validWord, rating: "adulto", collectionId: "albures-picaresca", pathId: "historias-leyendas", editorialOrder: 150 },
-]) {
-  assert.ok(validateCulturalWord(invalidAdult, { requireCulturalMetadata: true }).some((error) => error.includes("contenido adulto")));
-}
+const validAdult = {
+  ...validWord,
+  rating: "adulto",
+  collectionId: "albures-picaresca",
+  pathId: "historias-leyendas",
+  editorialOrder: 151,
+};
+assert.deepEqual(validateCulturalWord(validAdult, { requireCulturalMetadata: true }), []);
+assert.ok(validateCulturalWord({ ...validAdult, collectionId: "juegos-ninez" }, { requireCulturalMetadata: true })
+  .includes("contenido adulto solo puede pertenecer a albures-picaresca"));
+assert.ok(validateCulturalWord({ ...validAdult, pathId: "patio-recreo" }, { requireCulturalMetadata: true })
+  .includes("contenido adulto solo puede aparecer en un camino tardío"));
+assert.ok(validateCulturalWord({ ...validAdult, editorialOrder: 150 }, { requireCulturalMetadata: true })
+  .includes("contenido adulto requiere editorialOrder mayor que 150"));
 
 assert.ok(validateCulturalWord({ ...validWord, generation: ["futuro"] }, { requireCulturalMetadata: true })
   .some((error) => error.includes("generation contiene un valor desconocido")));
+
+const validStoredWord = { _id: "valid-id", ...validWord };
+const invalidStoredWord = { _id: "invalid-id", ...validWord, word: "inválida", collectionId: "inventada" };
+assert.deepEqual(buildCulturalAudit([
+  { _id: "legacy-id", word: "legado" },
+  validStoredWord,
+  invalidStoredWord,
+]), {
+  total: 3,
+  audited: 2,
+  valid: 1,
+  invalid: 1,
+  issues: [{
+    wordId: "invalid-id",
+    word: "inválida",
+    errors: ["collectionId desconocido o ausente"],
+  }],
+  issueCount: 1,
+  truncated: false,
+});
+
+const cappedAudit = buildCulturalAudit([
+  { ...invalidStoredWord, _id: "invalid-1" },
+  { ...invalidStoredWord, _id: "invalid-2" },
+  { ...invalidStoredWord, _id: "invalid-3" },
+], { limit: 2 });
+assert.equal(cappedAudit.total, 3);
+assert.equal(cappedAudit.audited, 3);
+assert.equal(cappedAudit.valid, 0);
+assert.equal(cappedAudit.invalid, 3);
+assert.equal(cappedAudit.issueCount, 3);
+assert.equal(cappedAudit.issues.length, 2);
+assert.equal(cappedAudit.truncated, true);
 
 console.log("culturalValidation: all assertions passed");

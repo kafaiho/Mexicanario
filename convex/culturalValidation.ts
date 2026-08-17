@@ -21,6 +21,8 @@ type CulturalWordInput = {
 };
 
 type ValidationOptions = { requireCulturalMetadata?: boolean };
+type AuditOptions = ValidationOptions & { limit?: number };
+type StoredCulturalWord = CulturalWordInput & { _id: unknown; word: unknown };
 
 const paths = new Set<unknown>(CULTURAL_PATH_IDS);
 const collections = new Set<unknown>(CULTURAL_COLLECTION_IDS);
@@ -79,34 +81,46 @@ export function validateCulturalWord(
   return errors;
 }
 
+export function buildCulturalAudit(
+  words: StoredCulturalWord[],
+  options: AuditOptions = {},
+) {
+  const issues: Array<{ wordId: string; word: string; errors: string[] }> = [];
+  const limit = options.limit ?? 200;
+  let audited = 0;
+  let invalid = 0;
+
+  for (const word of words) {
+    if (!options.requireCulturalMetadata && !hasCulturalMetadata(word)) continue;
+    audited += 1;
+    const errors = validateCulturalWord(word, {
+      requireCulturalMetadata: options.requireCulturalMetadata,
+    });
+    if (errors.length > 0) {
+      invalid += 1;
+      if (issues.length < limit) {
+        issues.push({ wordId: String(word._id), word: String(word.word), errors });
+      }
+    }
+  }
+
+  return {
+    total: words.length,
+    audited,
+    valid: audited - invalid,
+    invalid,
+    issues,
+    issueCount: invalid,
+    truncated: invalid > issues.length,
+  };
+}
+
 export const auditCulturalWords = internalQuery({
   args: { requireCulturalMetadata: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const words = await ctx.db.query("words").collect();
-    const issues: Array<{ wordId: string; word: string; errors: string[] }> = [];
-    let audited = 0;
-    let invalid = 0;
-
-    for (const word of words) {
-      if (!args.requireCulturalMetadata && !hasCulturalMetadata(word)) continue;
-      audited += 1;
-      const errors = validateCulturalWord(word, {
-        requireCulturalMetadata: args.requireCulturalMetadata,
-      });
-      if (errors.length > 0) {
-        invalid += 1;
-        if (issues.length < 200) issues.push({ wordId: word._id, word: word.word, errors });
-      }
-    }
-
-    return {
-      total: words.length,
-      audited,
-      valid: audited - invalid,
-      invalid,
-      issues,
-      issueCount: invalid,
-      truncated: invalid > issues.length,
-    };
+    return buildCulturalAudit(words, {
+      requireCulturalMetadata: args.requireCulturalMetadata,
+    });
   },
 });

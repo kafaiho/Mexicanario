@@ -21,9 +21,12 @@ const legacy = (key, demonym, emoji, color, rawRegions) => ({
 // Regiones generales históricas de la interfaz. No forman parte de PLACES:
 // una etiqueta amplia nunca debe convertirse en un estado o ciudad concreta.
 const LEGACY_REGIONS = [
-  legacy('norte', 'Norteño', '🏜️', '#6D4C41', ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas']),
+  legacy('nacional', 'Nacional', '🦅', '#006847', ['Infantil', 'Juvenil', 'Escuela', 'Callejero', 'Tradicional', 'Familiar', 'Feria', 'Colonial']),
+  legacy('norte', 'Norteño', '🏜️', '#6D4C41', ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Baja California Sur', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas', 'Frontera Norte', 'Sierra Madre']),
   legacy('centro', 'Del Centro', '🏛️', '#5D4037', ['Centro', 'Estado de México', 'Morelos', 'Hidalgo', 'Tlaxcala']),
   legacy('bajio', 'Del Bajío', '🌾', '#F57F17', ['Bajío', 'Guanajuato', 'Querétaro', 'Aguascalientes', 'San Luis Potosí']),
+  legacy('occidente', 'De Occidente', '🌄', '#2E7D32', ['Occidente', 'Centro-Occidente']),
+  legacy('sureste', 'Del Sureste', '🌺', '#6A1B9A', ['Sureste']),
   legacy('sur', 'Del Sur', '🌿', '#00695C', ['Sur']),
   legacy('pacifico', 'Del Pacífico', '🌊', '#00838F', ['Pacífico', 'Costas']),
 ];

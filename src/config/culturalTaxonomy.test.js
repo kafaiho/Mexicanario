@@ -56,9 +56,12 @@ assert.equal(resolvePlace('región imaginaria').id, 'unclassified');
 assert.notEqual(resolvePlace('cdmx').icon, '🌮');
 
 const legacyGroups = {
-  norte: ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas'],
+  nacional: ['Infantil', 'Juvenil', 'Escuela', 'Callejero', 'Tradicional', 'Familiar', 'Feria', 'Colonial'],
+  norte: ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Baja California Sur', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas', 'Frontera Norte', 'Sierra Madre'],
   centro: ['Centro', 'Estado de México', 'Morelos', 'Hidalgo', 'Tlaxcala'],
   bajio: ['Bajío', 'Guanajuato', 'Querétaro', 'Aguascalientes', 'San Luis Potosí'],
+  occidente: ['Occidente', 'Centro-Occidente'],
+  sureste: ['Sureste'],
   sur: ['Sur'],
   pacifico: ['Pacífico', 'Costas'],
 };

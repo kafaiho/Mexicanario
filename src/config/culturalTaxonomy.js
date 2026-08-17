@@ -46,6 +46,7 @@ const PLACES = [
   place('campeche', 'Campeche', 'state', 'Campechano', '🏰', '#AD1457', ['Estado de Campeche']),
   place('quintana-roo', 'Quintana Roo', 'state', 'Quintanarroense', '🐠', '#00897B', ['Estado de Quintana Roo']),
   place('tabasco', 'Tabasco', 'state', 'Tabasqueño', '🍫', '#558B2F', ['Estado de Tabasco']),
+  place('sinaloa', 'Sinaloa', 'state', 'Sinaloense', '🥁', '#0277BD', ['Sinaloa']),
   place('nayarit', 'Nayarit', 'state', 'Nayarita', '🌊', '#0277BD', ['Estado de Nayarit']),
   place('huasteca', 'La Huasteca', 'cultural-region', 'Huasteco', '🎻', '#00838F', ['Huasteca', 'Región Huasteca', 'Region Huasteca']),
   place('unclassified', 'Sin clasificar', 'unclassified', 'Sin clasificar', '📍', '#757575', ['Desconocido', 'Sin región', 'Sin region']),

@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { CULTURAL_PATHS, COLLECTIONS, PLACES } = require('./culturalTaxonomy');
-const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS, FIRST_FIFTY_CONTEXT_REVIEW, SEMANTIC_CONCEPT_OVERRIDES } = require('../content/mexicoVividoWords');
+const { MEXICO_VIVIDO_WORDS, REMOVED_WORDS, FIRST_FIFTY_CONTEXT_REVIEW, SEMANTIC_CONCEPT_OVERRIDES, createCatalogEntry } = require('../content/mexicoVividoWords');
 
 const normalizePreservingEnye = (value) => value.toLocaleLowerCase('es-MX')
   .replace(/ñ/g, '\u0000').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0000/g, 'ñ').trim();
@@ -16,15 +16,35 @@ const requiredCollectionMinimums = {
   'albures-picaresca': 4,
 };
 
+const sharedGeneration = ['actual'];
+const adultFixture = createCatalogEntry({
+  word: 'fixture adulto', meaning: 'Entrada de prueba para el constructor.',
+  example: 'Esta entrada solo comprueba el metadato de clasificación.',
+  collectionId: 'albures-picaresca', pathId: 'historias-leyendas', placeId: 'todo-mexico',
+  difficulty: 3, generation: sharedGeneration, rating: 'adulto', icon: '😉', order: 9999,
+  conceptId: 'fixture-adulto',
+});
+const secondFixture = createCatalogEntry({ ...adultFixture, word: 'segunda fixture', conceptId: 'segunda-fixture', order: 10000, rating: 'familiar', generation: sharedGeneration });
+assert.equal(adultFixture.rating, 'adulto', 'el constructor debe conservar una clasificación adulta explícita');
+assert.notEqual(adultFixture.generation, sharedGeneration, 'el constructor debe clonar generaciones de entrada');
+assert.notEqual(adultFixture.generation, secondFixture.generation, 'dos entradas no deben compartir el mismo arreglo de generaciones');
+assert(Object.isFrozen(adultFixture) && Object.isFrozen(adultFixture.generation), 'entrada y generaciones deben ser inmutables');
+assert(Object.isFrozen(MEXICO_VIVIDO_WORDS), 'el catálogo publicado debe ser inmutable');
+
 assert(MEXICO_VIVIDO_WORDS.length >= 200, 'el catálogo debe publicar al menos 200 entradas');
 const words = MEXICO_VIVIDO_WORDS.map(({ word }) => normalizePreservingEnye(word));
 assert.strictEqual(new Set(words).size, words.length, 'las palabras normalizadas deben ser únicas');
 const concepts = MEXICO_VIVIDO_WORDS.map(({ conceptId }) => conceptId);
 assert(concepts.every(Boolean), 'cada entrada debe declarar un conceptId editorial');
-assert.strictEqual(new Set(concepts).size, concepts.length, 'no debe haber variantes del mismo concepto');
+assert.strictEqual(new Set(concepts).size, concepts.length, 'las equivalencias semánticas conocidas no se duplican');
 assert(Object.keys(SEMANTIC_CONCEPT_OVERRIDES).length >= 6, 'debe documentar equivalencias semánticas conocidas');
 for (const [variant, conceptId] of Object.entries(SEMANTIC_CONCEPT_OVERRIDES)) {
   assert(variant && conceptId, 'cada equivalencia conocida necesita variante y concepto');
+}
+for (const entry of MEXICO_VIVIDO_WORDS.filter(({ relatedConceptId }) => relatedConceptId)) {
+  const target = MEXICO_VIVIDO_WORDS.find(({ conceptId }) => conceptId === entry.relatedConceptId);
+  assert(target, `la relación conceptual de ${entry.word} debe apuntar a una entrada existente`);
+  assert.equal(target.relatedConceptId, entry.conceptId, `la relación entre ${entry.word} y ${target.word} debe ser recíproca`);
 }
 const orders = MEXICO_VIVIDO_WORDS.map(({ order }) => order);
 assert.deepStrictEqual(orders, [...orders].sort((a, b) => a - b), 'el catálogo debe estar ordenado');
@@ -44,7 +64,7 @@ for (const entry of MEXICO_VIVIDO_WORDS) {
   assert(entry.example.length >= 18 && /[ .,!¿?]/.test(entry.example), `ejemplo sin contexto natural: ${entry.word}`);
   if (entry.rating === 'adulto') {
     assert.strictEqual(entry.collectionId, 'albures-picaresca');
-    assert(entry.order > 150 && !['patio-recreo', 'casa-abuela'].includes(entry.pathId));
+    assert(entry.order > 150 && ['mexico-regional', 'oficios-artesanias', 'historias-leyendas', 'mexico-profundo'].includes(entry.pathId), 'el contenido adulto solo puede aparecer en caminos tardíos');
   }
 }
 

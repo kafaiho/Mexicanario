@@ -208,7 +208,7 @@ const groups = [
   ]],
   ['mexico-profundo', [
     ['pelota mixteca','Juego de pelota practicado por comunidades de Oaxaca y su diáspora.','Dos equipos disputaron pelota mixteca con guantes elaborados para la modalidad.','ciencia-inventos-deporte','oaxaca','🥎',3,G,'Tradición deportiva viva con distintas modalidades.'],
-    ['ulama','Juego de pelota de raíz mesoamericana que permanece vivo en el noroeste de México.','El documental mostró una partida de ulama guiada por sus jugadores tradicionales.','ciencia-inventos-deporte','todo-mexico','🏐',3,G,'Se practica especialmente en Sinaloa; se usa todo-mexico porque la taxonomía aún no incluye ese estado.'],
+    ['ulama','Juego de pelota de raíz mesoamericana que permanece vivo en el noroeste de México.','El documental mostró una partida de ulama guiada por sus jugadores tradicionales.','ciencia-inventos-deporte','sinaloa','🏐',3,G,'Tradición deportiva viva practicada especialmente en comunidades de Sinaloa.'],
     ['juego de pelota mesoamericano','Conjunto de prácticas rituales y deportivas con variantes entre sociedades mesoamericanas.','El museo comparó canchas y reglas del juego de pelota mesoamericano en distintas épocas.','ciencia-inventos-deporte','todo-mexico','⚽',3,['tradicional'],'No existió una sola modalidad; las reglas y significados variaron por región y periodo.'],
     ['televisión a color','Campo tecnológico al que el ingeniero mexicano Guillermo González Camarena aportó sistemas propios.','El museo explicó con documentos el sistema de televisión a color de González Camarena.','ciencia-inventos-deporte','todo-mexico','📺',3,G,'González Camarena obtuvo en México la patente 40235 para su sistema tricromático secuencial de campos en 1940; no fue el único desarrollo mundial de televisión a color.'],
     ['náhuatl','Conjunto de variantes lingüísticas de la familia yuto-nahua habladas en México.','La biblioteca recibió libros escritos en varias formas de náhuatl.','pueblos-originarios-lenguas','todo-mexico','🗣️',3,G,'Lengua o agrupación de variantes de la familia yuto-nahua.'],
@@ -216,8 +216,8 @@ const groups = [
     ['zapoteco','Conjunto diverso de lenguas de la familia otomangue.','La radio comunitaria transmite noticias en una variante de zapoteco.','pueblos-originarios-lenguas','oaxaca','🗣️',3,G,'Agrupación lingüística de la familia otomangue.'],
     ['tsotsil','Lengua maya hablada principalmente en Chiapas.','La señal del museo incluyó una traducción al tsotsil local.','pueblos-originarios-lenguas','chiapas','🗣️',3,G,'Lengua de la familia maya.'],
     ['tseltal','Lengua maya hablada principalmente en Chiapas.','Varias familias escucharon el programa de radio en tseltal.','pueblos-originarios-lenguas','chiapas','🗣️',3,G,'Lengua de la familia maya.'],
-    ['chontal de Tabasco','Nombre de una lengua maya hablada en Tabasco.','El archivo conserva grabaciones autorizadas en chontal de Tabasco.','pueblos-originarios-lenguas','tabasco','🗣️',3,G,'Lengua maya; sus hablantes también emplean la autodenominación yokot’an.'],
-    ['yokot’an','Autodenominación relacionada con el pueblo y la lengua chontal de Tabasco.','La escritora presentó un poemario bilingüe en yokot’an y español.','pueblos-originarios-lenguas','tabasco','🗣️',3,G,'Autodenominación en la lengua conocida como chontal de Tabasco.'],
+    ['chontal de Tabasco','Nombre de una lengua maya hablada en Tabasco.','El archivo conserva grabaciones autorizadas en chontal de Tabasco.','pueblos-originarios-lenguas','tabasco','🗣️',3,G,'Lengua maya; sus hablantes también emplean la autodenominación yokot’an.',{ relatedConceptId: 'yokotan' }],
+    ['yokot’an','Autodenominación relacionada con el pueblo y la lengua chontal de Tabasco.','La escritora presentó un poemario bilingüe en yokot’an y español.','pueblos-originarios-lenguas','tabasco','🗣️',3,G,'Autodenominación en la lengua conocida como chontal de Tabasco.',{ relatedConceptId: 'chontal-de-tabasco' }],
     ['wixárika','Autodenominación vinculada con el pueblo conocido también como huichol.','Un artista wixárika explicó la historia de su obra con sus propias palabras.','pueblos-originarios-lenguas','jalisco','🗣️',3,G,'Autodenominación del pueblo y su lengua.'],
     ['me’phaa','Autodenominación del pueblo y las lenguas conocidas también como tlapanecas.','La escuela produjo materiales con docentes hablantes de me’phaa.','pueblos-originarios-lenguas','guerrero','🗣️',3,G,'Autodenominación usada por comunidades de Guerrero.'],
     ['quelite','Nombre general de diversas plantas tiernas comestibles.','Recolectaron quelites conocidos localmente y los cocinaron con cuidado.','naturaleza-mexico','todo-mexico','🌿',2,G,'Del náhuatl quilitl.'],
@@ -242,21 +242,29 @@ const SEMANTIC_CONCEPT_OVERRIDES = {
   laqueado: 'maque-artesanal', maque: 'maque-artesanal',
   escondidas: 'juego-escondidas', escondidillas: 'juego-escondidas',
   chiquihuite: 'chiquihuite', chiquiguite: 'chiquihuite',
+  'yokot-an': 'yokotan',
 };
 const conceptKey = (word) => {
   const normalized = normalizeConceptVariant(word);
   return SEMANTIC_CONCEPT_OVERRIDES[normalized] || normalized;
 };
-const MEXICO_VIVIDO_WORDS = groups.flatMap(([pathId, entries]) => entries.map((entry) => {
-  const [word, meaning, example, collectionId, placeId, icon, difficulty = 2, generation = G, sourceNote] = entry;
+
+function createCatalogEntry(input) {
+  const generation = Object.freeze([...(input.generation || G)]);
+  return Object.freeze({ ...input, rating: input.rating || 'familiar', generation });
+}
+
+const MEXICO_VIVIDO_WORDS = Object.freeze(groups.flatMap(([pathId, entries]) => entries.map((entry) => {
+  const [word, meaning, example, collectionId, placeId, icon, difficulty = 2, generation = G, sourceNote, options = {}] = entry;
   order += 1;
-  return {
+  return createCatalogEntry({
     word, meaning, example, collectionId, pathId, placeId, difficulty, generation,
-    rating: 'familiar', icon, order, conceptId: conceptKey(word),
+    rating: options.rating, icon, order, conceptId: conceptKey(word),
     ...(SPORTS.has(word) ? { topic: 'deporte' } : {}),
     ...(sourceNote ? { sourceNote } : {}),
-  };
-}));
+    ...options,
+  });
+})));
 
 const REMOVED_WORDS = [
   { word: 'cadena de tías', reason: 'Formulación retirada para no asociar una práctica digital familiar con un género específico.' },
@@ -318,4 +326,4 @@ const FIRST_FIFTY_CONTEXT_REVIEW = {
   'Cine de Oro': review('medios', 'Periodo histórico central para la memoria cinematográfica popular de México.'),
 };
 
-module.exports = { MEXICO_VIVIDO_WORDS, REMOVED_WORDS, FIRST_FIFTY_CONTEXT_REVIEW, SEMANTIC_CONCEPT_OVERRIDES };
+module.exports = { MEXICO_VIVIDO_WORDS, REMOVED_WORDS, FIRST_FIFTY_CONTEXT_REVIEW, SEMANTIC_CONCEPT_OVERRIDES, createCatalogEntry };

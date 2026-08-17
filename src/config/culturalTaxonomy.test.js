@@ -7,7 +7,7 @@ const {
   normalizeCulturalKey,
   resolvePlace,
 } = require('./culturalTaxonomy.js');
-const { MACRO_REGIONS, getRegionMeta, getMacroKey, LEGACY_REGIONS } = require('./regionConfig.js');
+const { MACRO_REGIONS, PLACE_REGIONS, getRegionMeta, getMacroKey, LEGACY_REGIONS } = require('./regionConfig.js');
 
 const expectedPathIds = [
   'patio-recreo', 'casa-abuela', 'calle-barrio', 'mercado-antojitos',
@@ -25,6 +25,10 @@ const expectedCollectionIds = [
 
 assert.deepEqual(CULTURAL_PATHS.map(({ id }) => id), expectedPathIds);
 assert.deepEqual(COLLECTIONS.map(({ id }) => id), expectedCollectionIds);
+assert.equal(PLACES.length, 20);
+assert.equal(PLACE_REGIONS.length, 20);
+assert.equal(resolvePlace('Sinaloa').id, 'sinaloa');
+assert.equal(getMacroKey('Sinaloa'), 'norte');
 
 for (const records of [CULTURAL_PATHS, COLLECTIONS, PLACES]) {
   assert.equal(new Set(records.map(({ id }) => id)).size, records.length, 'IDs must be unique');
@@ -89,7 +93,8 @@ for (const [key, rawRegions] of Object.entries(legacyGroups)) {
   for (const raw of rawRegions) {
     assert.equal(getMacroKey(raw), key, `${raw} must preserve its legacy group`);
     assert.equal(getRegionMeta(raw).key, key);
-    assert.equal(resolvePlace(raw).id, 'unclassified', `${raw} must not become an explicit place`);
+    if (raw === 'Sinaloa') assert.equal(resolvePlace(raw).id, 'sinaloa');
+    else assert.equal(resolvePlace(raw).id, 'unclassified', `${raw} must not become an explicit place`);
   }
 }
 

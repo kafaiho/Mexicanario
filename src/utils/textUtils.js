@@ -22,7 +22,7 @@ export const normalizeWordForDisplay = (word) => {
  * Normalizes text by removing accents and converting to uppercase.
  * Preserves Ñ because it is a distinct Spanish letter, not an accented N.
  * @param {string} text - The text to normalize
- * @returns {string} - Normalized text without accents
+ * @returns {string} - Uppercase text without diacritics, except that Ñ is preserved
  * 
  * Examples:
  * - "México" → "MEXICO"
@@ -54,15 +54,14 @@ export const normalizeText = (text) => {
     .replace(/[ÉÈËÊ]/g, 'E')
     .replace(/[ÍÌÏÎ]/g, 'I')
     .replace(/[ÓÒÖÔ]/g, 'O')
-    .replace(/[ÚÙÜÛ]/g, 'U')
-    .replace(/Ñ/g, 'N');
+    .replace(/[ÚÙÜÛ]/g, 'U');
 };
 
 /**
- * Compares two words flexibly, ignoring accents and case
+ * Compares two words flexibly, ignoring accents and case while preserving Ñ
  * @param {string} word1 - First word to compare
  * @param {string} word2 - Second word to compare
- * @returns {boolean} - True if words match (ignoring accents and case)
+ * @returns {boolean} - True if words match (ignoring accents and case, but not Ñ/N)
  */
 export const compareWordsFlexibly = (word1, word2) => {
   if (!word1 || !word2) return false;

@@ -48,6 +48,17 @@ const comparisonTests = [
   { word1: null, word2: "Hola", shouldMatch: false },
 ];
 
+const fallbackTests = [
+  {
+    name: "preserves Ñ when String.normalize is unavailable",
+    normalizeImplementation: undefined,
+  },
+  {
+    name: "preserves Ñ when String.normalize throws",
+    normalizeImplementation: () => { throw new Error("normalize unavailable"); },
+  },
+];
+
 console.log("=== Accent Flexibility Test Results ===\n");
 
 let failureCount = 0;
@@ -67,6 +78,21 @@ comparisonTests.forEach((test, index) => {
   const passed = result === test.shouldMatch;
   if (!passed) failureCount += 1;
   console.log(`   ${passed ? '✅' : '❌'} Test ${index + 1}: "${test.word1}" vs "${test.word2}" → ${result} (should be: ${test.shouldMatch})`);
+});
+
+console.log("\n3. Normalization Fallback Tests:");
+fallbackTests.forEach((test, index) => {
+  const originalNormalize = String.prototype.normalize;
+  try {
+    String.prototype.normalize = test.normalizeImplementation;
+    const normalized = normalizeText("Mañana");
+    const comparison = compareWordsFlexibly("nino", "Niño");
+    const passed = normalized === "MAÑANA" && comparison === false;
+    if (!passed) failureCount += 1;
+    console.log(`   ${passed ? '✅' : '❌'} Test ${index + 1}: ${test.name}`);
+  } finally {
+    String.prototype.normalize = originalNormalize;
+  }
 });
 
 console.log("\n=== Game Examples ===");

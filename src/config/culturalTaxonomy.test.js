@@ -7,6 +7,7 @@ const {
   normalizeCulturalKey,
   resolvePlace,
 } = require('./culturalTaxonomy.js');
+const { getRegionMeta, getMacroKey, LEGACY_REGIONS } = require('./regionConfig.js');
 
 const expectedPathIds = [
   'patio-recreo', 'casa-abuela', 'calle-barrio', 'mercado-antojitos',
@@ -25,6 +26,11 @@ const expectedCollectionIds = [
 assert.deepEqual(CULTURAL_PATHS.map(({ id }) => id), expectedPathIds);
 assert.deepEqual(COLLECTIONS.map(({ id }) => id), expectedCollectionIds);
 
+for (const records of [CULTURAL_PATHS, COLLECTIONS, PLACES]) {
+  assert.equal(new Set(records.map(({ id }) => id)).size, records.length, 'IDs must be unique');
+  assert.equal(new Set(records.map(({ name }) => name)).size, records.length, 'names must be unique');
+}
+
 for (const record of [...CULTURAL_PATHS, ...COLLECTIONS]) {
   for (const field of ['id', 'name', 'icon', 'color', 'description']) {
     assert.equal(typeof record[field], 'string', `${record.id}.${field} must be a string`);
@@ -33,7 +39,7 @@ for (const record of [...CULTURAL_PATHS, ...COLLECTIONS]) {
 }
 
 for (const place of PLACES) {
-  assert.ok(Array.isArray(place.aliases), `${place.id}.aliases must be an array`);
+  assert.ok(Array.isArray(place.aliases) && place.aliases.length > 0, `${place.id}.aliases must not be empty`);
   assert.equal(resolvePlace(place.id).id, place.id);
   for (const alias of place.aliases) assert.equal(resolvePlace(alias).id, place.id);
 }
@@ -47,5 +53,22 @@ assert.notEqual(resolvePlace('Quintana Roo').demonym, 'Yucateco');
 assert.notEqual(resolvePlace('Monterrey').id, resolvePlace('Nuevo León').id);
 assert.notEqual(resolvePlace('Guadalajara').id, resolvePlace('Jalisco').id);
 assert.equal(resolvePlace('región imaginaria').id, 'unclassified');
+assert.notEqual(resolvePlace('cdmx').icon, '🌮');
+
+const legacyGroups = {
+  norte: ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas'],
+  centro: ['Centro', 'Estado de México', 'Morelos', 'Hidalgo', 'Tlaxcala'],
+  bajio: ['Bajío', 'Guanajuato', 'Querétaro', 'Aguascalientes', 'San Luis Potosí'],
+  sur: ['Sur'],
+  pacifico: ['Pacífico', 'Costas'],
+};
+assert.ok(Array.isArray(LEGACY_REGIONS));
+for (const [key, rawRegions] of Object.entries(legacyGroups)) {
+  for (const raw of rawRegions) {
+    assert.equal(getMacroKey(raw), key, `${raw} must preserve its legacy group`);
+    assert.equal(getRegionMeta(raw).key, key);
+    assert.equal(resolvePlace(raw).id, 'unclassified', `${raw} must not become an explicit place`);
+  }
+}
 
 console.log('culturalTaxonomy: all assertions passed');

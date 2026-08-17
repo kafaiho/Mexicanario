@@ -22,8 +22,26 @@ export default defineSchema({
     example: v.string(),
     region: v.string(),
     category: v.optional(v.string()), // Added for the Colección screen
-    difficulty: v.optional(v.number()), // 1=Fácil 2=Medio 3=Difícil (optional per-word override)
+    // Kept numeric for legacy writers; culturalValidation enforces the 1 | 2 | 3 domain.
+    difficulty: v.optional(v.number()),
     pack: v.optional(v.string()),       // content pack ID (e.g. "insultos", "suegra") for adult packs
+    collectionId: v.optional(v.string()),
+    pathId: v.optional(v.string()),
+    placeId: v.optional(v.string()),
+    generation: v.optional(v.array(v.union(
+      v.literal("tradicional"),
+      v.literal("80s"),
+      v.literal("90s"),
+      v.literal("2000s"),
+      v.literal("actual"),
+    ))),
+    rating: v.optional(v.union(v.literal("familiar"), v.literal("adulto"))),
+    icon: v.optional(v.string()),
+    editorialOrder: v.optional(v.number()),
+    sourceNote: v.optional(v.string()),
+    relatedConceptId: v.optional(v.string()),
+    conceptId: v.optional(v.string()),
+    isRetired: v.optional(v.boolean()),
   }),
 
   // Levels table to store level configurations

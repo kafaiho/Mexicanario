@@ -6,8 +6,22 @@ const testModules = [
   'src/config/culturalContent.test.js',
 ];
 
+const typescriptTestModules = [
+  'convex/culturalValidation.test.ts',
+];
+
 for (const testModule of testModules) {
   const result = spawnSync(process.execPath, [testModule], {
+    stdio: 'inherit',
+  });
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+for (const testModule of typescriptTestModules) {
+  const result = spawnSync(process.execPath, ['--no-warnings', '--experimental-strip-types', testModule], {
     stdio: 'inherit',
   });
 

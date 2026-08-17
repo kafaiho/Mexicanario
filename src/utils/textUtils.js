@@ -19,14 +19,15 @@ export const normalizeWordForDisplay = (word) => {
 };
 
 /**
- * Normalizes text by removing accents and converting to uppercase
+ * Normalizes text by removing accents and converting to uppercase.
+ * Preserves Ñ because it is a distinct Spanish letter, not an accented N.
  * @param {string} text - The text to normalize
  * @returns {string} - Normalized text without accents
  * 
  * Examples:
  * - "México" → "MEXICO"
- * - "Español" → "ESPANOL" 
- * - "Niño" → "NINO"
+ * - "Español" → "ESPAÑOL"
+ * - "Niño" → "NIÑO"
  * - "Canción" → "CANCION"
  */
 export const normalizeText = (text) => {

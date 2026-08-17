@@ -80,7 +80,11 @@ const S = {
   tacoIcon: width * 0.042,
 };
 
-const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }, ref) {
+/**
+ * @param {{ navigation?: any, showHomeButton?: boolean }} props
+ * @param {React.ForwardedRef<any>} ref
+ */
+function TopBar({ navigation, showHomeButton = false }, ref) {
   const coinPillRef    = useRef(null);
   const diamondPillRef = useRef(null);
   const bounceScale    = useSharedValue(1);
@@ -391,9 +395,11 @@ const TopBar = forwardRef(function TopBar({ navigation, showHomeButton = false }
       )}
     </>
   );
-});
+}
 
-export default TopBar;
+const ForwardedTopBar = forwardRef(TopBar);
+
+export default ForwardedTopBar;
 
 const styles = StyleSheet.create({
   container: {

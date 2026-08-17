@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
+import { paginationOptsValidator, type PaginationResult } from "convex/server";
 import { internalQuery } from "./_generated/server.js";
 import {
   CULTURAL_COLLECTION_IDS,
@@ -24,11 +24,6 @@ type CulturalWordInput = {
 type ValidationOptions = { requireCulturalMetadata?: boolean };
 type AuditOptions = ValidationOptions & { limit?: number };
 type StoredCulturalWord = CulturalWordInput & { _id: unknown; word: unknown };
-type CulturalAuditPageInput = {
-  page: StoredCulturalWord[];
-  continueCursor: string;
-  isDone: boolean;
-};
 
 const paths = new Set<unknown>(CULTURAL_PATH_IDS);
 const collections = new Set<unknown>(CULTURAL_COLLECTION_IDS);
@@ -122,14 +117,18 @@ export function buildCulturalAudit(
 }
 
 export function buildCulturalAuditPage(
-  result: CulturalAuditPageInput,
+  result: PaginationResult<StoredCulturalWord>,
   options: AuditOptions = {},
 ) {
   return {
     ...buildCulturalAudit(result.page, options),
     continueCursor: result.continueCursor,
     isDone: result.isDone,
-    pageStatus: result.isDone ? "complete" : "has_more",
+    splitCursor: result.splitCursor,
+    pageStatus: result.pageStatus,
+    auditStatus: result.pageStatus === "SplitRequired"
+      ? "split_required"
+      : result.isDone ? "complete" : "has_more",
   };
 }
 

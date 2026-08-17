@@ -110,6 +110,8 @@ assert.deepEqual(buildCulturalAuditPage({
   page: [validStoredWord, invalidStoredWord],
   continueCursor: "next-page",
   isDone: false,
+  splitCursor: null,
+  pageStatus: null,
 }), {
   pageTotal: 2,
   audited: 2,
@@ -124,7 +126,34 @@ assert.deepEqual(buildCulturalAuditPage({
   truncated: false,
   continueCursor: "next-page",
   isDone: false,
-  pageStatus: "has_more",
+  splitCursor: null,
+  pageStatus: null,
+  auditStatus: "has_more",
+});
+
+assert.deepEqual(buildCulturalAuditPage({
+  page: [invalidStoredWord],
+  continueCursor: "large-page-end",
+  isDone: false,
+  splitCursor: "large-page-middle",
+  pageStatus: "SplitRequired",
+}), {
+  pageTotal: 1,
+  audited: 1,
+  valid: 0,
+  invalid: 1,
+  issues: [{
+    wordId: "invalid-id",
+    word: "inválida",
+    errors: ["collectionId desconocido o ausente"],
+  }],
+  issueCount: 1,
+  truncated: false,
+  continueCursor: "large-page-end",
+  isDone: false,
+  splitCursor: "large-page-middle",
+  pageStatus: "SplitRequired",
+  auditStatus: "split_required",
 });
 
 console.log("culturalValidation: all assertions passed");

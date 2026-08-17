@@ -53,7 +53,12 @@ export default defineSchema({
       coins: v.number(),
       diamonds: v.number(),
     }),
-  }),
+  }).index("by_level_number", ["levelNumber"]).index("by_word", ["wordId"]),
+
+  migrationState: defineTable({
+    key: v.string(),
+    nextLevelNumber: v.number(),
+  }).index("by_key", ["key"]),
 
   // Users table to store player information
   users: defineTable({
@@ -63,6 +68,7 @@ export default defineSchema({
     country: v.string(),
     avatar: v.string(),
     currentLevel: v.optional(v.number()),
+    culturalOrderVersion: v.optional(v.number()), // undefined/1 = legacy; 2 = editorial
     tacos: v.optional(v.number()),             // palabras adivinadas de verdad (≠ jumpToLevel)
     createdAt: v.number(),
     // ── Mascota fields ──────────────────────────────────────────────────

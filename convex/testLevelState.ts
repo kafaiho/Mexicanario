@@ -18,7 +18,7 @@ export const testLevelState = query({
         const allLevels = await ctx.db.query("levels").collect();
         const allWords = await ctx.db.query("words").collect();
 
-        const ordered = getOrderedLevels(allLevels, allWords, user._id.toString());
+        const ordered = getOrderedLevels(allLevels, allWords, user._id.toString(), user.culturalOrderVersion ?? 1);
 
         // Check for duplicate levelNumbers
         const levelNumCount: Record<number, number> = {};

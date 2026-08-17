@@ -110,7 +110,7 @@ export const getCurrentLevel = query({
     const allWords = await ctx.db.query("words").collect();
 
     // Order: first 50 = easy words (same for everyone), rest = seeded per user
-    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user.culturalOrderVersion ?? 1);
     const maxLevel = ordered.length;
 
     // Clamp currentLevel to the available range

@@ -33,16 +33,18 @@ export const getCurrentLevel = query({
     // Determine user's position (1-based) in the ordered level sequence
     let position = 1;
     let isDefaultLevel = true;
+    let orderingVersion = 1;
     if (args.userId) {
       const user = await ctx.db.get(args.userId);
       if (user) {
         position = user.currentLevel || 1;
         isDefaultLevel = false;
+        orderingVersion = user.culturalOrderVersion ?? 1;
       }
     }
 
     // Order levels per-user so creator/priority words appear first
-    const ordered = getOrderedLevels(allLevels, allWords, args.userId?.toString() ?? "");
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId?.toString() ?? "", orderingVersion);
     if (ordered.length === 0) return DEFAULT_RESPONSE;
 
     const idx = Math.min(position - 1, ordered.length - 1);
@@ -72,7 +74,7 @@ export const checkLevelUp = mutation({
 
     const allLevels = await ctx.db.query("levels").collect();
     const allWords = await ctx.db.query("words").collect();
-    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user.culturalOrderVersion ?? 1);
     const totalLevels = ordered.length || 1;
 
     if (currentLevel < totalLevels) {
@@ -107,7 +109,7 @@ export const completeLevel = mutation({
 
     const allLevels = await ctx.db.query("levels").collect();
     const allWords = await ctx.db.query("words").collect();
-    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user.culturalOrderVersion ?? 1);
     const totalLevels = ordered.length || 1;
 
     // Get the reward for this position in the ordered sequence
@@ -161,9 +163,10 @@ export const getAllLevels = query({
   handler: async (ctx, { userId }) => {
     const rawLevels = await ctx.db.query("levels").collect();
     const rawWords = await ctx.db.query("words").collect();
+    const user = userId ? await ctx.db.get(userId) : null;
 
     // Use same ordering logic as gameplay so map matches the game exactly
-    const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "");
+    const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "", user?.culturalOrderVersion ?? 1);
 
     const wordMap = new Map(rawWords.map((w) => [w._id.toString(), w]));
     return ordered.map((lvl) => {

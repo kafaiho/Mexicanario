@@ -71,25 +71,29 @@ type WordDoc = { _id: any; word: string; region: string; difficulty?: number; ca
  * @param words    All word documents from DB
  * @param userId   String ID of the user (for seeded shuffle). Pass "" for a
  *                 canonical / display order (no shuffle on hard levels).
+ * @param orderingVersion 1 preserves historical positions exactly. Existing
+ * users must not move to 2 until a dedicated progress migration maps their
+ * completed word IDs; version 2 enables editorial order and hides retired words.
  */
 export function getOrderedLevels(
   levels: LevelDoc[],
   words: WordDoc[],
   userId: string,
+  orderingVersion = 1,
 ): LevelDoc[] {
   const wordMap = new Map(words.map((w) => [w._id.toString(), w]));
-  const activeLevels = levels.filter((level) => {
+  const activeLevels = orderingVersion === 2 ? levels.filter((level) => {
     const word = level.wordId ? wordMap.get(level.wordId.toString()) : undefined;
     return word && word.isRetired !== true;
-  });
-  const editorial = activeLevels.filter((level) => {
+  }) : levels;
+  const editorial = orderingVersion === 2 ? activeLevels.filter((level) => {
     const order = wordMap.get(level.wordId.toString())?.editorialOrder;
     return Number.isInteger(order) && (order as number) > 0;
   }).sort((a, b) => {
     const aw = wordMap.get(a.wordId.toString())!;
     const bw = wordMap.get(b.wordId.toString())!;
     return (aw.editorialOrder! - bw.editorialOrder!) || (a.levelNumber - b.levelNumber) || a.wordId.toString().localeCompare(b.wordId.toString());
-  });
+  }) : [];
   const editorialIds = new Set(editorial.map((level) => level._id.toString()));
 
   const easyLevels: LevelDoc[] = [];

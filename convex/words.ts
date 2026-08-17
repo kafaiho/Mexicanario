@@ -21,7 +21,7 @@ export const getWordsWithProgress = query({
     const allWords = await ctx.db.query("words").collect();
 
     // Use the same ordering as gameplay for accurate unlock status
-    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString());
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user?.culturalOrderVersion ?? 1);
     const done = completedWordIds(ordered, currentLevel);
 
     return allWords.map((w) => ({

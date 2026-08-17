@@ -13,6 +13,7 @@ export const createAnonymousUser = mutation({
       country: "Venezuela",
       avatar: "🌮",
       currentLevel: 1, // Start at level 1
+      culturalOrderVersion: 2,
       createdAt: Date.now(),
     });
 

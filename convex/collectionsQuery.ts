@@ -196,7 +196,7 @@ export const getCollectionsWithProgress = query({
 
     // Use the same ordering as gameplay so "completed" status matches exactly
     const userId = args.userId?.toString() ?? "";
-    const ordered = getOrderedLevels(allLevels, allWords, userId);
+    const ordered = getOrderedLevels(allLevels, allWords, userId, (user as any)?.culturalOrderVersion ?? 1);
     const done    = completedWordIds(ordered, userCurrentLevel);
 
     const wordMap = new Map(allWords.map((w) => [w._id.toString(), w]));
@@ -283,7 +283,7 @@ export const getRegionsWithProgress = query({
     const allWords  = await ctx.db.query("words").collect();
 
     const userId = args.userId?.toString() ?? "";
-    const ordered = getOrderedLevels(allLevels, allWords, userId);
+    const ordered = getOrderedLevels(allLevels, allWords, userId, (user as any)?.culturalOrderVersion ?? 1);
     const done    = completedWordIds(ordered, userCurrentLevel);
 
     const wordMap = new Map(allWords.map((w) => [w._id.toString(), w]));

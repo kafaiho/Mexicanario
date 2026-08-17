@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, hasMissingNormalizedKeys, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
+import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, hasMissingNormalizedKeys, needsLevelRepair, nextPreviewRanges, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
 
 const catalog = [{ word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", order: 7, conceptId: "nino-heroe" }];
 
@@ -100,5 +100,20 @@ accumulatePreviewInventory(inventory, [{ _id: "p3", word: "Niño héroe", normal
 const duplicatePreview = planFromPreviewInventory(inventory, previewOperations);
 assert.equal(duplicatePreview.conflicts, 1, "duplicados entre páginas son conflicto");
 assert.ok(inventory.size <= previewKeys.size, "el inventario nunca supera las claves operativas");
+
+assert.deepEqual(nextPreviewRanges({ cursor: null, endCursor: null }, {
+  pageStatus: "SplitRequired", splitCursor: "mid", continueCursor: "partial", isDone: false,
+}), [{ cursor: null, endCursor: "mid" }, { cursor: "mid", endCursor: null }], "split raíz conserva el extremo abierto");
+assert.deepEqual(nextPreviewRanges({ cursor: "mid", endCursor: "root-end" }, {
+  pageStatus: "SplitRequired", splitCursor: "nested", continueCursor: "partial-2", isDone: false,
+}), [{ cursor: "mid", endCursor: "nested" }, { cursor: "nested", endCursor: "root-end" }], "split anidado conserva el extremo original");
+assert.deepEqual(nextPreviewRanges({ cursor: "nested", endCursor: "root-end" }, {
+  pageStatus: null, splitCursor: null, continueCursor: "next", isDone: false,
+}), [{ cursor: "next", endCursor: "root-end" }]);
+assert.equal(needsLevelRepair("insert", false), false, "una inserción crea palabra y nivel atómicamente");
+assert.equal(needsLevelRepair("patch", false), true, "palabra huérfana requiere reparación");
+assert.equal(needsLevelRepair("unchanged", false), true);
+assert.equal(needsLevelRepair("conflict", false), false, "conflictos no crean niveles");
+assert.equal(needsLevelRepair("unchanged", true), false, "segunda pasada no duplica nivel");
 
 console.log("migrateMexicoVivido: helpers puros válidos");

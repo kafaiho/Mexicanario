@@ -172,6 +172,30 @@ export function catalogOperationDecision(operation: CatalogOperation, matches: r
   return { kind: "patch" as const, _id: existing._id, patch };
 }
 
+export function needsLevelRepair(decision: string, hasLevel: boolean): boolean {
+  return !hasLevel && (decision === "patch" || decision === "unchanged");
+}
+
+async function allocateLevelNumber(ctx: any): Promise<number> {
+  const key = "mexico_vivido_level_allocator";
+  const state = await ctx.db.query("migrationState").withIndex("by_key", (q: any) => q.eq("key", key)).unique();
+  if (state) {
+    let allocated = state.nextLevelNumber;
+    while (await ctx.db.query("levels").withIndex("by_level_number", (q: any) => q.eq("levelNumber", allocated)).first()) allocated += 1;
+    await ctx.db.patch(state._id, { nextLevelNumber: allocated + 1 });
+    return allocated;
+  }
+  const highest = await ctx.db.query("levels").withIndex("by_level_number").order("desc").first();
+  const allocated = (highest?.levelNumber ?? 0) + 1;
+  await ctx.db.insert("migrationState", { key, nextLevelNumber: allocated + 1 });
+  return allocated;
+}
+
+async function insertLevelForWord(ctx: any, wordId: any) {
+  const levelNumber = await allocateLevelNumber(ctx);
+  await ctx.db.insert("levels", { levelNumber, wordId, reward: { coins: 2, diamonds: 0 } });
+}
+
 type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };
 export type PreviewInventory = Map<string, PreviewInventoryEntry>;
 
@@ -266,6 +290,14 @@ export const scanWordsForPreview = internalQuery({
 
 type PreviewRequest = { cursor: string | null; endCursor: string | null };
 
+export function nextPreviewRanges(request: PreviewRequest, page: Pick<BackfillPage, "pageStatus" | "splitCursor" | "continueCursor" | "isDone">): PreviewRequest[] {
+  if (page.pageStatus === "SplitRequired") {
+    if (!page.splitCursor) throw new Error("SplitRequired sin splitCursor");
+    return [{ cursor: request.cursor, endCursor: page.splitCursor }, { cursor: page.splitCursor, endCursor: request.endCursor }];
+  }
+  return page.isDone ? [] : [{ cursor: page.continueCursor, endCursor: request.endCursor }];
+}
+
 export const previewMexicoVividoMigration = internalAction({
   args: { pageSize: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -278,17 +310,9 @@ export const previewMexicoVividoMigration = internalAction({
       const page: BackfillPage = await ctx.runQuery((internal as any).migrations.migrateMexicoVivido.scanWordsForPreview, {
         paginationOpts: { cursor: request.cursor, endCursor: request.endCursor, numItems: pageSize },
       });
-      if (page.pageStatus === "SplitRequired" && page.splitCursor) {
-        queue.unshift(
-          { cursor: request.cursor, endCursor: page.splitCursor },
-          { cursor: page.splitCursor, endCursor: page.continueCursor },
-        );
-        if (!request.endCursor && !page.isDone) queue.push({ cursor: page.continueCursor, endCursor: null });
-        continue;
-      }
-      if (page.pageStatus === "SplitRequired") throw new Error("SplitRequired sin splitCursor");
+      if (page.pageStatus === "SplitRequired") { queue.unshift(...nextPreviewRanges(request, page)); continue; }
       accumulatePreviewPage(inventory, page, operationKeys);
-      if (!page.isDone) queue.unshift({ cursor: page.continueCursor, endCursor: request.endCursor });
+      queue.unshift(...nextPreviewRanges(request, page));
     }
     return {
       status: "ok" as const,
@@ -316,10 +340,10 @@ export const migrateCatalogBatch = internalMutation({
       return {
         status: "keys_not_ready" as const, dryRun: args.dryRun,
         cursor: sliced.cursor, nextCursor: sliced.cursor, isDone: false,
-        patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, details: [],
+        patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0, details: [],
       };
     }
-    const counts = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0 };
+    const counts = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0 };
     const details: Array<{ word: string; result: string }> = [];
     for (const operation of sliced.operations) {
       const key = normalizeWordKey(operation.entry.word);
@@ -327,6 +351,14 @@ export const migrateCatalogBatch = internalMutation({
         .withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", key))
         .take(3);
       const decision = catalogOperationDecision(operation, matches);
+      let orphanWordId: any = null;
+      if (operation.kind === "retain" && matches.length === 1 && decision.kind !== "conflict") {
+        const existingLevel = await ctx.db.query("levels").withIndex("by_word", (q) => q.eq("wordId", matches[0]._id)).first();
+        if (needsLevelRepair(decision.kind, Boolean(existingLevel))) {
+          counts.levelRepairs += 1;
+          orphanWordId = matches[0]._id;
+        }
+      }
       if (decision.kind === "conflict") counts.conflicts += 1;
       else if (decision.kind === "unchanged") counts.unchanged += 1;
       else if (decision.kind === "patch") {
@@ -334,11 +366,15 @@ export const migrateCatalogBatch = internalMutation({
         if (!args.dryRun) await ctx.db.patch(decision._id, decision.patch);
       } else if (decision.kind === "insert") {
         counts.inserted += 1;
-        if (!args.dryRun) await ctx.db.insert("words", decision.document as any);
+        if (!args.dryRun) {
+          const wordId = await ctx.db.insert("words", decision.document as any);
+          await insertLevelForWord(ctx, wordId);
+        }
       } else if (decision.kind === "retire") {
         counts.retired += 1;
         if (!args.dryRun) await ctx.db.patch(decision._id, { isRetired: true });
       }
+      if (!args.dryRun && orphanWordId) await insertLevelForWord(ctx, orphanWordId);
       if (details.length < 20 && decision.kind !== "unchanged") details.push({ word: operation.entry.word, result: decision.kind });
     }
     return { status: "ok" as const, dryRun: args.dryRun, cursor: sliced.cursor, nextCursor: sliced.nextCursor, isDone: sliced.isDone, ...counts, details };

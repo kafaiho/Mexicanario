@@ -9,6 +9,8 @@ import { insertNewLevel } from "../levelWrites";
  * Run Phase A until isDone (respecting splitCursor/pageStatus), then run Phase B
  * from cursor 0 until isDone. If Phase B returns keys_not_ready, restart Phase A;
  * a writer inserted a legacy row without normalizedWordKey.
+ * previewMexicoVividoMigration is mandatory preflight: catalog batches intentionally
+ * report unclassified:null because their indexed reads never scan unrelated words.
  */
 
 type ExistingWord = { _id: any; word: string; [key: string]: unknown };
@@ -199,7 +201,17 @@ async function insertLevelForWord(ctx: any, wordId: any) {
 }
 
 type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };
-export type PreviewInventory = Map<string, PreviewInventoryEntry>;
+export type PreviewInventory = {
+  byKey: Map<string, PreviewInventoryEntry>;
+  unclassifiedCount: number;
+  unclassifiedSamples: Array<{ _id: any; word: string; normalizedKey: string }>;
+  unclassifiedTruncated: boolean;
+  sampleLimit: number;
+};
+
+export function createPreviewInventory(sampleLimit = 50): PreviewInventory {
+  return { byKey: new Map(), unclassifiedCount: 0, unclassifiedSamples: [], unclassifiedTruncated: false, sampleLimit: Math.max(0, Math.floor(sampleLimit)) };
+}
 
 function compactPreviewWord(word: ExistingWord, normalizedWordKey: string): ExistingWord {
   const compact: ExistingWord = { _id: word._id, word: word.word, normalizedWordKey };
@@ -216,11 +228,16 @@ export function accumulatePreviewInventory(
 ) {
   for (const word of words) {
     const key = normalizeWordKey(word.word);
-    if (!operationKeys.has(key)) continue;
-    const entry = inventory.get(key) ?? { count: 0, docs: [] };
+    if (!operationKeys.has(key)) {
+      inventory.unclassifiedCount += 1;
+      if (inventory.unclassifiedSamples.length < inventory.sampleLimit) inventory.unclassifiedSamples.push({ _id: word._id, word: word.word, normalizedKey: key });
+      else inventory.unclassifiedTruncated = true;
+      continue;
+    }
+    const entry = inventory.byKey.get(key) ?? { count: 0, docs: [] };
     entry.count += 1;
     if (entry.docs.length < 2) entry.docs.push(compactPreviewWord(word, key));
-    inventory.set(key, entry);
+    inventory.byKey.set(key, entry);
   }
   return inventory;
 }
@@ -240,7 +257,7 @@ export function planFromPreviewInventory(inventory: PreviewInventory, operations
   const details: Array<{ word: string; result: string; ids?: any[] }> = [];
   for (const operation of operations) {
     const key = normalizeWordKey(operation.entry.word);
-    const found = inventory.get(key);
+    const found = inventory.byKey.get(key);
     const matches = found?.docs ?? [];
     const decision = found && found.count >= 2 ? { kind: "conflict" as const } : catalogOperationDecision(operation, matches);
     if (decision.kind === "conflict") counts.conflicts += 1;
@@ -305,7 +322,7 @@ export const previewMexicoVividoMigration = internalAction({
   handler: async (ctx, args) => {
     const pageSize = normalizeBackfillLimit(args.pageSize);
     const operationKeys = new Set(CATALOG_OPERATIONS.map((operation) => normalizeWordKey(operation.entry.word)));
-    const inventory: PreviewInventory = new Map();
+    const inventory = createPreviewInventory();
     const queue: PreviewRequest[] = [{ cursor: null, endCursor: null }];
     while (queue.length) {
       const request = queue.shift()!;
@@ -319,11 +336,14 @@ export const previewMexicoVividoMigration = internalAction({
     return {
       status: "ok" as const,
       ...planFromPreviewInventory(inventory, CATALOG_OPERATIONS),
+      unclassified: inventory.unclassifiedCount,
+      unclassifiedSamples: inventory.unclassifiedSamples,
+      unclassifiedTruncated: inventory.unclassifiedTruncated,
       dryRun: true,
       writes: 0,
       snapshotConsistent: false,
       note: "Las consultas paginadas no comparten una transacción; escrituras administrativas concurrentes pueden cambiar el resultado.",
-      inventoryKeys: inventory.size,
+      inventoryKeys: inventory.byKey.size,
       maximumInventoryKeys: operationKeys.size,
     };
   },
@@ -342,7 +362,8 @@ export const migrateCatalogBatch = internalMutation({
       return {
         status: "keys_not_ready" as const, dryRun: args.dryRun,
         cursor: sliced.cursor, nextCursor: sliced.cursor, isDone: false,
-        patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0, details: [],
+        patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0,
+        unclassified: null, requiresPreviewForUnclassified: true, details: [],
       };
     }
     const counts = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0 };
@@ -391,6 +412,9 @@ export const migrateCatalogBatch = internalMutation({
       if (!args.dryRun && orphanWordId) await insertLevelForWord(ctx, orphanWordId);
       if (details.length < 20 && decision.kind !== "unchanged") details.push({ word: operation.entry.word, result: decision.kind });
     }
-    return { status: "ok" as const, dryRun: args.dryRun, cursor: sliced.cursor, nextCursor: sliced.nextCursor, isDone: sliced.isDone, ...counts, details };
+    return {
+      status: "ok" as const, dryRun: args.dryRun, cursor: sliced.cursor, nextCursor: sliced.nextCursor, isDone: sliced.isDone,
+      ...counts, unclassified: null, requiresPreviewForUnclassified: true, details,
+    };
   },
 });

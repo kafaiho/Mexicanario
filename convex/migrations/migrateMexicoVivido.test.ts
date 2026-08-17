@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, hasMissingNormalizedKeys, needsLevelRepair, nextPreviewRanges, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
+import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, createPreviewInventory, hasMissingNormalizedKeys, needsLevelRepair, nextPreviewRanges, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
 
 const catalog = [{ word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", order: 7, conceptId: "nino-heroe" }];
 
@@ -84,12 +84,12 @@ const previewOperations = [
   { kind: "remove" as const, entry: { word: "rayuela" } },
 ];
 const previewKeys = new Set(previewOperations.map((op) => normalizeWordKey(op.entry.word)));
-const inventory = new Map();
+const inventory = createPreviewInventory(2);
 assert.equal(accumulatePreviewPage(inventory, {
   page: [{ _id: "discarded", word: "Niño héroe" }], pageStatus: "SplitRequired",
   splitCursor: "mid", continueCursor: "end", isDone: false,
 }, previewKeys), false);
-assert.equal(inventory.size, 0, "el preview descarta por completo páginas incompletas");
+assert.equal(inventory.byKey.size, 0, "el preview descarta por completo páginas incompletas");
 accumulatePreviewInventory(inventory, [{ _id: "p1", ...applied[0] }], previewKeys);
 accumulatePreviewInventory(inventory, [{ _id: "p2", word: "Rayuela", normalizedWordKey: "rayuela", isRetired: false }], previewKeys);
 const preview = planFromPreviewInventory(inventory, previewOperations);
@@ -99,7 +99,12 @@ assert.equal(preview.retired, 1);
 accumulatePreviewInventory(inventory, [{ _id: "p3", word: "Niño héroe", normalizedWordKey: "niño heroe" }], previewKeys);
 const duplicatePreview = planFromPreviewInventory(inventory, previewOperations);
 assert.equal(duplicatePreview.conflicts, 1, "duplicados entre páginas son conflicto");
-assert.ok(inventory.size <= previewKeys.size, "el inventario nunca supera las claves operativas");
+accumulatePreviewInventory(inventory, [{ _id: "u1", word: "extra uno" }, { _id: "u2", word: "extra dos" }], previewKeys);
+accumulatePreviewInventory(inventory, [{ _id: "u3", word: "extra tres" }], previewKeys);
+assert.equal(inventory.unclassifiedCount, 3);
+assert.equal(inventory.unclassifiedSamples.length, 2);
+assert.equal(inventory.unclassifiedTruncated, true);
+assert.ok(inventory.byKey.size <= previewKeys.size, "el inventario nunca supera las claves operativas");
 
 assert.deepEqual(nextPreviewRanges({ cursor: null, endCursor: null }, {
   pageStatus: "SplitRequired", splitCursor: "mid", continueCursor: "partial", isDone: false,

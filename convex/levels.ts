@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getOrderedLevels } from "./levelOrdering";
+import { insertNewLevel } from "./levelWrites";
 
 /** Strip accents/tildes so words are guessable without special keys */
 function normalizeWord(str: string): string {
@@ -374,7 +375,7 @@ export const createLevelsForAllWords = mutation({
       const coins = baseCoins + (levelNumber - 1) * 25; // 50, 75, 100, 125...
       const diamonds = baseDiamonds + Math.floor((levelNumber - 1) / 5); // 1, 1, 1, 1, 1, 2, 2, 2...
 
-      const levelId = await ctx.db.insert("levels", {
+      const levelId = await insertNewLevel(ctx, {
         levelNumber,
         wordId: word._id,
         reward: {
@@ -485,7 +486,7 @@ export const addMissingLevels = mutation({
       const coins = 2 + Math.floor((nextLevelNumber - 1) / 100);
       const diamonds = Math.floor((nextLevelNumber - 1) / 200);
 
-      await ctx.db.insert("levels", {
+      await insertNewLevel(ctx, {
         levelNumber: nextLevelNumber,
         wordId: word._id,
         reward: { coins, diamonds },

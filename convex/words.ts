@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { completedWordIds, getOrderedLevels } from "./levelOrdering";
+import { insertNewLevel } from "./levelWrites";
 
 // Get all words
 export const getAllWords = query({
@@ -785,7 +786,7 @@ export const addMexicanSlangLevels = mutation({
       const coins = 50 + (levelNumber - 1) * 25; // 50, 75, 100, 125, etc.
       const diamonds = Math.floor((levelNumber - 1) / 5) + 1; // 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, etc.
 
-      const levelId = await ctx.db.insert("levels", {
+      const levelId = await insertNewLevel(ctx, {
         levelNumber: levelNumber,
         wordId: word._id,
         reward: { coins, diamonds },
@@ -835,7 +836,7 @@ export const seedWordsAndLevels = mutation({
       const coins = 50 + (levelNumber - 1) * 25; // 50, 75, 100, 125, etc.
       const diamonds = Math.floor((levelNumber - 1) / 5) + 1; // 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, etc.
 
-      const levelId = await ctx.db.insert("levels", {
+      const levelId = await insertNewLevel(ctx, {
         levelNumber: levelNumber,
         wordId: wordResult.id,
         reward: { coins, diamonds },
@@ -921,7 +922,7 @@ export const seedMexicanLevels = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1103,7 +1104,7 @@ export const seedLevels5to22 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1218,7 +1219,7 @@ export const seedLevels23to31 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1301,7 +1302,7 @@ export const seedLevels52to56 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1384,7 +1385,7 @@ export const seedLevels47to51 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1467,7 +1468,7 @@ export const seedLevels42to46 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1550,7 +1551,7 @@ export const seedLevels37to41 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1633,7 +1634,7 @@ export const seedLevels32to36 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1712,7 +1713,7 @@ export const seedLevels57to61 = mutation({
       const wordId = await ctx.db.insert("words", data);
       const coins = 50 + (nextLevel - 1) * 10;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 5);
-      await ctx.db.insert("levels", { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
+      await insertNewLevel(ctx, { levelNumber: nextLevel, wordId, reward: { coins, diamonds } });
       inserted.push({ level: nextLevel, word: data.word });
       nextLevel++;
     }
@@ -1747,7 +1748,7 @@ export const createMissingLevels = mutation({
     for (const word of missing) {
       const coins = 50 + Math.floor((nextLevel - 1) / 10) * 25;
       const diamonds = 1 + Math.floor((nextLevel - 1) / 50);
-      await ctx.db.insert("levels", {
+      await insertNewLevel(ctx, {
         levelNumber: nextLevel,
         wordId: word._id,
         reward: { coins, diamonds },

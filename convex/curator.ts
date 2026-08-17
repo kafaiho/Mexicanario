@@ -23,6 +23,7 @@
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { action, mutation, query } from "./_generated/server";
+import { insertNewLevel } from "./levelWrites";
 
 // ─── Módulo 1: Descubridor de Tendencias MX via Gemini ───────────────────────
 // En lugar de scraping (APIs de Google/Twitter bloqueadas desde servidores),
@@ -306,7 +307,7 @@ export const approveCandidate = mutation({
       ? Math.max(...allLevels.map(l => l.levelNumber)) + 1
       : 1;
 
-    await ctx.db.insert("levels", {
+    await insertNewLevel(ctx, {
       levelNumber: nextLevel,
       wordId,
       reward: {

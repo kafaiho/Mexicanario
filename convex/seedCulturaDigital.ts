@@ -1,4 +1,5 @@
 import { mutation } from "./_generated/server";
+import { insertNewLevel } from "./levelWrites";
 
 /**
  * Verified cultura digital + futbolistas mexicanos word list.
@@ -346,7 +347,7 @@ export const seedCulturaDigital = mutation({
       const diamonds = Math.floor((nextLevel - 1) / 5) + 1;
 
       // Insertar nivel
-      await ctx.db.insert("levels", {
+      await insertNewLevel(ctx, {
         levelNumber: nextLevel,
         wordId,
         reward: { coins, diamonds },

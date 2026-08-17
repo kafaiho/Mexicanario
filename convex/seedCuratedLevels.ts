@@ -1,4 +1,5 @@
 import { mutation } from "./_generated/server";
+import { insertNewLevel } from "./levelWrites";
 
 /**
  * Curated word list for the structured levels shown in the app design.
@@ -118,7 +119,7 @@ export const seedCuratedLevels = mutation({
             const diamonds = Math.floor((nextLevel - 1) / 200);
 
             // Insert level
-            await ctx.db.insert("levels", {
+            await insertNewLevel(ctx, {
                 levelNumber: nextLevel,
                 wordId,
                 reward: { coins, diamonds },

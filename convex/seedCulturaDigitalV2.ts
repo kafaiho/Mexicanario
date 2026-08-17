@@ -1,4 +1,5 @@
 import { mutation } from "./_generated/server";
+import { insertNewLevel } from "./levelWrites";
 
 /**
  * Expande las categorías de Cultura Digital con 19 palabras adicionales.
@@ -156,7 +157,7 @@ export const seedCulturaDigitalV2 = mutation({
         difficulty: entry.difficulty,
       });
 
-      await ctx.db.insert("levels", {
+      await insertNewLevel(ctx, {
         levelNumber: nextLevel,
         wordId,
         reward: {

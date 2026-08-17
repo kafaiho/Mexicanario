@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { MEXICO_VIVIDO_WORDS, REMOVED_WORDS } from "./mexicoVividoCatalog.generated";
+import { insertNewLevel } from "../levelWrites";
 
 /**
  * Run Phase A until isDone (respecting splitCursor/pageStatus), then run Phase B
@@ -194,7 +195,7 @@ async function allocateLevelNumber(ctx: any): Promise<number> {
 async function insertLevelForWord(ctx: any, wordId: any) {
   const levelNumber = await allocateLevelNumber(ctx);
   // Repairs are v2-only: exposing an orphan in v1 would shift returning users.
-  await ctx.db.insert("levels", { levelNumber, wordId, reward: { coins: 2, diamonds: 0 }, introducedOrderVersion: 2 });
+  await insertNewLevel(ctx, { levelNumber, wordId, reward: { coins: 2, diamonds: 0 } });
 }
 
 type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };

@@ -11,6 +11,7 @@ const typescriptTestModules = [
   'convex/migrations/migrateMexicoVivido.test.ts',
   'convex/migrations/mexicoVividoCatalogParity.test.ts',
   'convex/levelOrdering.test.ts',
+  'convex/levelWrites.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

@@ -58,6 +58,9 @@ for (const [collectionId, minimum] of Object.entries(requiredCollectionMinimums)
   assert(MEXICO_VIVIDO_WORDS.filter((entry) => entry.collectionId === collectionId).length >= minimum, `${collectionId} necesita ${minimum} entradas`);
 }
 assert(MEXICO_VIVIDO_WORDS.filter((entry) => entry.collectionId === 'ciencia-inventos-deporte' && entry.topic === 'deporte').length >= 3, 'ciencia e inventos necesita al menos tres deportes');
+for (const entry of MEXICO_VIVIDO_WORDS.filter(({ collectionId }) => collectionId === 'mexico-digital')) {
+  assert(!/\btías?\b/i.test(`${entry.word} ${entry.meaning} ${entry.example}`), `evita estereotipos de género en experiencia digital: ${entry.word}`);
+}
 for (const entry of MEXICO_VIVIDO_WORDS.slice(0, 50)) {
   assert.strictEqual(entry.rating, 'familiar');
   assert(entry.difficulty <= 2, `inicio demasiado difícil: ${entry.word}`);

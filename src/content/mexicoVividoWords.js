@@ -69,8 +69,8 @@ const groups = [
     ['picardía verbal','Humor ingenioso que juega con las palabras sin necesidad de ser explícito.','La conversación tuvo picardía verbal, pero siempre respetó a quienes participaban.','albures-picaresca','todo-mexico','😏',3,G],
     ['cibercafé','Local que ofrece computadoras y conexión a internet por tiempo.','En los dos mil íbamos al cibercafé del barrio para imprimir la tarea.','mexico-digital','todo-mexico','🖥️',2,['90s','2000s','actual']],
     ['poner saldo','Comprar crédito para usar una línea móvil de prepago.','Pasé a la tiendita a poner saldo antes de llamar a mi mamá.','mexico-digital','todo-mexico','📱',2,['2000s','actual']],
-    ['cadena de tías','Mensaje digital reenviado entre familiares, a menudo con saludos o consejos.','La cadena de tías deseaba bonito martes con flores y una taza de café.','mexico-digital','todo-mexico','🌹',2,['2000s','actual']],
-    ['sticker de buenos días','Imagen de saludo matutino que circula en conversaciones digitales.','Mi tía mandó un sticker de buenos días antes de preguntar por la comida.','mexico-digital','todo-mexico','🌞',2,['2000s','actual']],
+    ['cadena de buenos días','Mensaje digital de saludo que se reenvía entre familiares, amistades o vecinos.','La cadena de buenos días llegó al grupo vecinal con flores y una taza de café.','mexico-digital','todo-mexico','🌹',2,['2000s','actual']],
+    ['sticker de buenos días','Imagen de saludo matutino que circula en conversaciones digitales.','El grupo familiar recibió un sticker de buenos días antes de organizar la comida.','mexico-digital','todo-mexico','🌞',2,['2000s','actual']],
     ['grupo de la familia','Conversación digital de parientes usada para saludarse y organizar reuniones.','En el grupo de la familia acordamos quién llevaría tortillas y quién el guisado.','mexico-digital','todo-mexico','👨‍👩‍👧‍👦',2,['2000s','actual']],
   ]],
   ['mercado-antojitos', [
@@ -259,6 +259,7 @@ const MEXICO_VIVIDO_WORDS = groups.flatMap(([pathId, entries]) => entries.map((e
 }));
 
 const REMOVED_WORDS = [
+  { word: 'cadena de tías', reason: 'Formulación retirada para no asociar una práctica digital familiar con un género específico.' },
   { word: 'rayuela', reason: 'Duplicaba el concepto de avioncito; se conservó la variante mexicana del juego.' },
   { word: 'laqueado', reason: 'Duplicaba el concepto artesanal de maque; se sustituyó por telar de cintura.' },
   { word: 'costa', reason: 'Región demasiado genérica; se sustituyó por lugares canónicos concretos.' },

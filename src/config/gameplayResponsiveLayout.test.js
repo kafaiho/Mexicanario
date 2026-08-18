@@ -3,7 +3,7 @@ const { getGameplayResponsiveLayout } = require("./gameplayResponsiveLayout");
 
 const fixtures = [
   { width: 320, height: 568, expectedMode: "compact", expectedColumns: 1 },
-  { width: 360, height: 800, expectedMode: "phone", expectedColumns: 1 },
+  { width: 360, height: 800, expectedMode: "compact", expectedColumns: 1 },
   { width: 390, height: 844, expectedMode: "phone", expectedColumns: 1 },
   { width: 768, height: 1024, expectedMode: "tablet", expectedColumns: 1 },
   { width: 1024, height: 768, expectedMode: "landscape", expectedColumns: 2 },
@@ -18,6 +18,9 @@ for (const fixture of fixtures) {
   const availableWidth = fixture.width - 16;
 
   assert.equal(layout.mode, fixture.expectedMode, `${fixture.width}x${fixture.height}: mode`);
+  assert.equal(layout.isLandscape, fixture.width > fixture.height, `${fixture.width}x${fixture.height}: orientation`);
+  assert.equal(layout.safeWidth, availableWidth, `${fixture.width}x${fixture.height}: safe width`);
+  assert.equal(layout.availableWidth, layout.safeWidth, "availableWidth is the safe-width compatibility alias");
   assert.equal(layout.columns, fixture.expectedColumns, `${fixture.width}x${fixture.height}: columns`);
   assert.ok(layout.keyboardWidth <= availableWidth, `${fixture.width}: keyboard stays inside safe width`);
   assert.ok(layout.controlsWidth <= availableWidth, `${fixture.width}: controls stay inside safe width`);
@@ -30,6 +33,12 @@ for (const fixture of fixtures) {
     `${fixture.width}: seven keys plus two special keys fit`,
   );
   assert.ok(layout.keyHeight >= 36, `${fixture.width}: keys remain tappable`);
+  assert.ok(layout.outerGap >= 0 && layout.keyboardPadding >= 0, "published spacing remains non-negative");
+  assert.equal(
+    layout.keyboardHeight,
+    layout.keyboardPadding * 2 + layout.keyHeight * 3 + layout.keyGap * 2,
+    `${fixture.width}: keyboard height has one shared formula`,
+  );
 
   if (fixture.expectedMode === "tablet") {
     assert.ok(layout.contentMaxWidth <= 680, "tablet content stays comfortably centered");
@@ -57,5 +66,18 @@ const reducedHeight = getGameplayResponsiveLayout({
 });
 assert.equal(regularHeight.mode, "phone", "full usable height keeps phone mode");
 assert.equal(reducedHeight.mode, "compact", "vertical insets can select compact mode by usable height");
+
+const reducedWidth = getGameplayResponsiveLayout({
+  width: 390,
+  height: 844,
+  insets: { left: 32, right: 32 },
+});
+assert.equal(reducedWidth.safeWidth, 326);
+assert.equal(reducedWidth.mode, "compact", "horizontal breakpoints use usable width");
+assert.equal(
+  getGameplayResponsiveLayout({ width: 360, height: 800, insets: {} }).mode,
+  "phone",
+  "the 360 safe-width boundary remains phone mode",
+);
 
 console.log("gameplayResponsiveLayout: five responsive fixtures fit safely");

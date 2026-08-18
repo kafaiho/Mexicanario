@@ -11,6 +11,7 @@ const testModules = [
   'src/config/achievementCollections.test.js',
   'src/config/difficultyPresentation.test.js',
   'src/config/gameplayResponsiveLayout.test.js',
+  'src/hooks/useKeyboardLayout.contract.test.js',
 ];
 
 const typescriptTestModules = [

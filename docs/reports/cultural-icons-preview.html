@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QA · Atlas culturales</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #25150e; color: #fff4dc; font: 14px system-ui, sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { margin: 0 0 20px; color: #dfc6a6; }
+  main { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+  .phone { width: var(--viewport); padding: 14px; border: 2px solid #6e462d; border-radius: 24px; background: #fff0d2; color: #542e1b; }
+  .label { margin-bottom: 10px; font-weight: 800; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .card { min-width: 0; padding: 8px 4px; border: 1px solid #d5a977; border-radius: 13px; background: #fff9ea; text-align: center; font-size: 10px; font-weight: 750; }
+  .crop { margin: 0 auto 6px; overflow: hidden; background-color: #f1ddbd; background-repeat: no-repeat; }
+  .collection { width: 51px; height: 64px; border-radius: 9px; background-image: url('../../assets/images/cultural/collections-atlas.png'); background-size: 500% 400%; background-position: var(--x) var(--y); }
+  .banner { display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 10px; border-radius: 14px; background: #2a9d8f; color: white; }
+  .path { flex: 0 0 auto; width: 35px; height: 58px; margin: 0; border-radius: 8px; background-image: url('../../assets/images/cultural/paths-atlas.png'); background-size: 500% 200%; background-position: var(--x) var(--y); }
+  .banner strong { display: block; font-size: 11px; letter-spacing: .5px; }
+  .banner small { display: block; margin-top: 2px; color: #e6fffa; font-size: 9px; }
+  .checker { background-color: #eee; background-image: linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%); background-size: 12px 12px; background-position: 0 0,0 6px,6px -6px,-6px 0; }
+</style>
+<h1>Recortes culturales · evidencia responsive</h1>
+<p>Simulación geométrica del componente, no captura de Expo. Colecciones 0.8:1; caminos 0.6:1.</p>
+<main>
+  <section class="phone" style="--viewport:320px">
+    <div class="label">Viewport 320 px</div>
+    <div class="cards">
+      <div class="card"><div class="crop collection checker" style="--x:0%;--y:0%"></div>Juegos</div>
+      <div class="card"><div class="crop collection checker" style="--x:50%;--y:33.333%"></div>Música</div>
+      <div class="card"><div class="crop collection checker" style="--x:75%;--y:100%"></div>México digital</div>
+    </div>
+    <div class="banner"><div class="crop path checker" style="--x:0%;--y:0%"></div><div><strong>PATIO Y RECREO</strong><small>Juegos, escuela y recuerdos</small></div></div>
+    <div class="banner"><div class="crop path checker" style="--x:100%;--y:100%"></div><div><strong>MÉXICO PROFUNDO</strong><small>Lenguas, raíces y diversidad</small></div></div>
+  </section>
+  <section class="phone" style="--viewport:390px">
+    <div class="label">Viewport 390 px</div>
+    <div class="cards">
+      <div class="card"><div class="crop collection checker" style="--x:0%;--y:0%"></div>Juegos</div>
+      <div class="card"><div class="crop collection checker" style="--x:50%;--y:33.333%"></div>Música</div>
+      <div class="card"><div class="crop collection checker" style="--x:75%;--y:100%"></div>México digital</div>
+    </div>
+    <div class="banner"><div class="crop path checker" style="--x:0%;--y:0%"></div><div><strong>PATIO Y RECREO</strong><small>Juegos, escuela y recuerdos</small></div></div>
+    <div class="banner"><div class="crop path checker" style="--x:100%;--y:100%"></div><div><strong>MÉXICO PROFUNDO</strong><small>Lenguas, raíces y diversidad</small></div></div>
+  </section>
+</main>
+</html>

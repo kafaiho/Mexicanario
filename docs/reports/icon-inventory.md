@@ -1,7 +1,7 @@
 # Inventario de iconografía cultural
 
-**Alcance:** 10 caminos, 19 colecciones y 20 lugares de la taxonomía `México vivido`.  
-**Implementación final:** dos atlas aprobados cubren las 29 superficies publicadas: `assets/images/cultural/collections-atlas.png` (1254×1254, cuadrícula 5×4, 19 celdas utilizadas, transparencia real) y `assets/images/cultural/paths-atlas.png` (1536×1024, cuadrícula 5×2, 10 celdas). El atlas de caminos conserva su fondo atmosférico por celda; la interfaz no depende de transparencia en él.  
+**Alcance:** 10 caminos, 19 colecciones y 20 lugares de la taxonomía `México vivido`.
+**Implementación final:** dos atlas transparentes cubren las 29 superficies publicadas: `assets/images/cultural/collections-atlas.png` (1254×1254, cuadrícula 5×4, 19 celdas utilizadas, alfa 0 en las esquinas transparentes) y `assets/images/cultural/paths-atlas.png` (1536×1024, cuadrícula 5×2, 10 celdas, alfa 0 en las cuatro esquinas).
 **Render actual:** `ColeccionScreen` muestra el atlas en tarjetas canónicas y cabeceras de modal. `MapScreen` muestra el atlas únicamente para caminos culturales v2; el banner neutral heredado conserva emoji. Los lugares siguen usando emoji porque no tienen ni necesitan bitmaps.
 
 ## Criterio de decisión
@@ -9,13 +9,13 @@
 - **reuse:** el objeto principal comunica directamente la colección nueva y la imagen no contiene texto/marca problemática.
 - **generate:** falta el concepto o el recurso existente es parcial, genérico, equívoco o contiene texto/marca.
 - **emoji-only:** la superficie actual no renderiza bitmap. Se conserva un emoji canónico y no se genera una imagen que la app no utilizará.
-- Los bitmaps nuevos deben ser 1024×1024, WebP o PNG, composición legible a 72–96 px, sin texto ni marcas. El diseño aprobado pide fondo transparente; los recursos actuales no lo cumplen. Si se exige consistencia total, los nueve reutilizables deben regenerarse en una fase posterior.
+- Los atlas finales son PNG RGBA transparentes, sin texto ni marcas, y sus sujetos conservan lectura clara a tamaño de tarjeta.
 
 ## Caminos (10)
 
 Las diez ilustraciones quedaron reunidas, en el orden de la taxonomía, dentro de `paths-atlas.png`. La columna/fila se resuelve mediante mapping estático y el emoji sigue siendo fallback.
 
-| ID / archivo propuesto | Emoji | Match actual | Acción | Sujeto del prompt |
+| ID / celda final | Emoji | Match inicial | Decisión inicial | Sujeto usado para generar el atlas |
 |---|---:|---|---|---|
 | `paths/patio-recreo.webp` | 🪀 | no asset | generate | trompo de madera, balero y dos canicas, energía de recreo |
 | `paths/casa-abuela.webp` | 🏡 | no asset | generate | molinillo de madera junto a taza de chocolate y mantel tejido |
@@ -30,7 +30,7 @@ Las diez ilustraciones quedaron reunidas, en el orden de la taxonomía, dentro d
 
 ## Colecciones (19)
 
-| ID / archivo final | Asset existente | Match | Acción | Nota o sujeto requerido |
+| ID / celda final | Asset legacy evaluado | Match inicial | Decisión inicial | Nota o sujeto usado |
 |---|---|---:|---|---|
 | `juegos-ninez.webp` | `juegos.webp` | sí | reuse | trompo y carta de lotería; buena lectura pequeña, aunque sin alpha |
 | `dulces-antojitos.webp` | ninguno | no | generate | mazapán sin marca, palanqueta, cocada y alegría en canastita |
@@ -103,3 +103,9 @@ El ciclo TDD se observó RED por ausencia de `culturalAssets.js` y GREEN despué
 - **29 celdas visuales publicadas:** 19 colecciones + 10 caminos.
 - **0 bitmaps de lugar:** los 20 lugares conservan emojis canónicos.
 - **Estilo aplicado:** ilustración popular mexicana cálida y táctil, composición legible en miniatura, objetos culturales concretos, sin texto, marcas, banderas decorativas ni sombrero/taco como símbolo universal.
+
+## Evidencia responsive
+
+`CulturalAtlasIcon` interpreta `size` como alto. A 58 px, un camino mide `58 × 0.6 = 34.8 px` de ancho; una colección de 64 px mide `64 × 0.8 = 51.2 px`. El atlas completo se escala a `size × rows` de alto y conserva `atlasAspect`, por lo que el recorte no deforma la imagen.
+
+`docs/reports/cultural-icons-preview.html` reproduce la misma geometría y posiciones CSS en marcos de 320 y 390 px. Es una previsualización aislada, no una captura de la app Expo.

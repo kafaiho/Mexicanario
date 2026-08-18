@@ -22,6 +22,7 @@ import { tapMedium } from "../services/haptics";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { normalizeText } from "../utils/textUtils";
+const { getCollectionPresentation } = require("../config/collectionPresentation.js");
 
 const BROWN = "#8B4513";
 const ORANGE = "#FF6B35";
@@ -286,6 +287,8 @@ const CollectionCard = React.memo(function CollectionCard({ category, index, onP
         )}
       </View>
       <Text style={[styles.cardTitle, isLocked && { color: "#A0714F" }]} numberOfLines={2}>{category.name}</Text>
+      <Text style={styles.cardDescription} numberOfLines={2}>{category.description}</Text>
+      {__DEV__ && category.needsReview ? <Text style={styles.reviewText}>Revisión editorial</Text> : null}
       {isLocked ? (
         <Text style={styles.lockText}>{"🔒 Nivel " + (category.unlockLevel ?? "?")}</Text>
       ) : (
@@ -320,6 +323,11 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
     api.collectionsQuery.getCollectionsWithProgress,
     userId ? { userId } : "skip",
   );
+  const presentedCollections = useMemo(() => (collectionData ?? []).map((group: any) => ({
+    ...group,
+    ...getCollectionPresentation(group.id),
+    needsReview: group.needsReview || getCollectionPresentation(group.id).needsReview,
+  })), [collectionData]);
 
   const onCardPress = (category) => {
     tapMedium();
@@ -460,8 +468,8 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.gridContainer}>
-          {collectionData.map((category, index) => (
-            <CollectionCard key={category.name} category={category} index={index} onPress={onCardPress} />
+          {presentedCollections.map((category: any, index: number) => (
+            <CollectionCard key={category.id} category={category} index={index} onPress={onCardPress} />
           ))}
         </View>
       </ScrollView>
@@ -675,6 +683,20 @@ const styles = StyleSheet.create({
     fontSize: width * 0.035,
     color: BROWN,
     marginBottom: 4,
+    textAlign: "center",
+  },
+  cardDescription: {
+    fontFamily: FONTS.body,
+    fontSize: width * 0.023,
+    color: "#7A4020",
+    textAlign: "center",
+    paddingHorizontal: 3,
+    marginBottom: 2,
+  },
+  reviewText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: width * 0.021,
+    color: "#8A5A00",
     textAlign: "center",
   },
   progressText: {

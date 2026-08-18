@@ -4,6 +4,9 @@ const testModules = [
   'src/utils/textUtils.test.js',
   'src/config/culturalTaxonomy.test.js',
   'src/config/culturalContent.test.js',
+  'src/config/regionConfig.test.js',
+  'src/config/collectionPresentation.test.js',
+  'src/config/achievementProgress.test.js',
 ];
 
 const typescriptTestModules = [
@@ -17,6 +20,7 @@ const typescriptTestModules = [
   'src/config/culturalPathSelection.test.ts',
   'convex/failedWords.test.ts',
   'convex/friendsPresentation.test.ts',
+  'convex/collectionGrouping.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

@@ -51,7 +51,18 @@ function getMacroKey(rawRegion) {
   return getRegionMeta(rawRegion).key;
 }
 
+function getPlaceKindLabel(kind) {
+  return ({
+    city: 'Ciudad',
+    state: 'Estado',
+    'cultural-region': 'Región cultural',
+    'legacy-region': 'Región heredada',
+    country: 'Todo México',
+    unclassified: 'Por clasificar',
+  })[kind] || 'Por clasificar';
+}
+
 // Nombre conservado para consumidores introducidos durante la migración.
 const LEGACY_REGIONS = MACRO_REGIONS;
 
-module.exports = { MACRO_REGIONS, PLACE_REGIONS, LEGACY_REGIONS, getRegionMeta, getMacroKey };
+module.exports = { MACRO_REGIONS, PLACE_REGIONS, LEGACY_REGIONS, getRegionMeta, getMacroKey, getPlaceKindLabel };

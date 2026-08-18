@@ -24,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import useCoinFly from "../hooks/useCoinFly";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
+const { sumPlaceProgress } = require('../config/achievementProgress.js');
 
 const { width, height } = Dimensions.get("window");
 const STORAGE_KEY = "mx_claimed_achievements";
@@ -96,20 +97,20 @@ export default function AchievementsScreen() {
     const completedCats = (collections ?? []).filter(
       (c) => c.total > 0 && c.completed >= c.total
     ).length;
-    const comidaDone   = (collections ?? []).find((c) => c.name === "Comida Mexicana")?.completed ?? 0;
-    const comidaTotal  = (collections ?? []).find((c) => c.name === "Comida Mexicana")?.total ?? 1;
-    const musicaDone   = (collections ?? []).find((c) => c.name === "Música y Artistas")?.completed ?? 0;
-    const musicaTotal  = (collections ?? []).find((c) => c.name === "Música y Artistas")?.total ?? 1;
-    const historiaDone = (collections ?? []).find((c) => c.name === "Historia de México")?.completed ?? 0;
-    const historiaTotal= (collections ?? []).find((c) => c.name === "Historia de México")?.total ?? 1;
-    const digitalDone  = (collections ?? []).find((c) => c.name === "Mundo Digital")?.completed ?? 0;
-    const digitalTotal = (collections ?? []).find((c) => c.name === "Mundo Digital")?.total ?? 1;
+    const comidaDone   = (collections ?? []).find((c) => c.id === "cocina-bebidas")?.completed ?? 0;
+    const comidaTotal  = (collections ?? []).find((c) => c.id === "cocina-bebidas")?.total ?? 1;
+    const musicaDone   = (collections ?? []).find((c) => c.id === "musica-mexicana")?.completed ?? 0;
+    const musicaTotal  = (collections ?? []).find((c) => c.id === "musica-mexicana")?.total ?? 1;
+    const historiaDone = (collections ?? []).find((c) => c.id === "historia-personajes")?.completed ?? 0;
+    const historiaTotal= (collections ?? []).find((c) => c.id === "historia-personajes")?.total ?? 1;
+    const digitalDone  = (collections ?? []).find((c) => c.id === "mexico-digital")?.completed ?? 0;
+    const digitalTotal = (collections ?? []).find((c) => c.id === "mexico-digital")?.total ?? 1;
 
     // Regiones
-    const cdmxR    = (regions ?? []).find((r) => r.key === "cdmx");
-    const norteR   = (regions ?? []).find((r) => r.key === "norte");
-    const jarochoR = (regions ?? []).find((r) => r.key === "veracruz");
-    const tapatioR = (regions ?? []).find((r) => r.key === "jalisco");
+    const cdmxR    = sumPlaceProgress(regions, ["cdmx"]);
+    const norteR   = sumPlaceProgress(regions, ["monterrey", "nuevo-leon", "sinaloa"]);
+    const jarochoR = sumPlaceProgress(regions, ["veracruz"]);
+    const tapatioR = sumPlaceProgress(regions, ["guadalajara", "jalisco"]);
 
     const mk = (current, target) => ({
       current: Math.min(current, target),

@@ -1,6 +1,6 @@
 # Diseño de dificultad «Oleaje mexicano»
 
-**Fecha:** 2026-08-17  
+**Fecha:** 2026-08-17
 **Estado:** Aprobado
 
 ## Objetivo
@@ -62,4 +62,3 @@ Cada décima posición debe preferir una palabra de dificultad superior, una voz
 - Primeros 50 niveles familiares y sin dificultad 3.
 - Reto cultural en cada posición múltiplo de diez.
 - Fallback estable cuando un grupo de dificultad se agota.
-

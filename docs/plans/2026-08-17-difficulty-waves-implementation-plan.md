@@ -54,4 +54,3 @@ git diff --check
 ```
 
 Then perform specification review followed by code-quality review. Do not deploy or migrate production data.
-

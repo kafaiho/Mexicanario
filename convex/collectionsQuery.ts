@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { groupCollections, groupPlaces } from "./collectionGrouping";
 import { completedWordIds, getOrderedLevels } from "./levelOrdering";
+import { buildCulturalLibrary, buildCulturalProgressSummary } from "./culturalLibrary";
 
 async function orderedCatalog(ctx: any, userId?: any) {
   const user = userId ? await ctx.db.get(userId) : null;
@@ -12,6 +13,29 @@ async function orderedCatalog(ctx: any, userId?: any) {
   const ordered = getOrderedLevels(allLevels, allWords, userId?.toString() ?? "", orderVersion);
   return { allWords, ordered, currentLevel, completed: completedWordIds(ordered, currentLevel) };
 }
+
+async function rawCatalog(ctx: any, userId?: any) {
+  const user = userId ? await ctx.db.get(userId) : null;
+  const levels = await ctx.db.query("levels").collect();
+  const words = await ctx.db.query("words").collect();
+  return { levels, words, userId: userId?.toString() ?? "", currentLevel: (user as any)?.currentLevel ?? 1, culturalOrderVersion: (user as any)?.culturalOrderVersion ?? 1 };
+}
+
+export const getCulturalLibraryWithProgress = query({
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const data = await rawCatalog(ctx, args.userId);
+    return buildCulturalLibrary(data.levels, data.words, data.userId, data.currentLevel, data.culturalOrderVersion);
+  },
+});
+
+export const getCulturalProgressSummary = query({
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const data = await rawCatalog(ctx, args.userId);
+    return buildCulturalProgressSummary(data.levels, data.words, data.userId, data.currentLevel, data.culturalOrderVersion);
+  },
+});
 
 export const getCollectionData = query({
   args: {},

@@ -8,6 +8,7 @@ import {
   Image,
   ImageBackground,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,7 +23,7 @@ import { tapMedium } from "../services/haptics";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { normalizeText } from "../utils/textUtils";
-const { getCollectionPresentation, presentPlaceGroup } = require("../config/collectionPresentation.js");
+const { getCollectionPresentation, presentPlaceGroup, getDisplayedWordIcon } = require("../config/collectionPresentation.js");
 
 const BROWN = "#8B4513";
 const ORANGE = "#FF6B35";
@@ -320,14 +321,12 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
   const user = useQuery(api.users.getUser, userId ? { userId: userId } : "skip");
 
   // Get collection data with progress tied to the level ordering system
-  const collectionData = useQuery(
-    api.collectionsQuery.getCollectionsWithProgress,
+  const culturalLibrary = useQuery(
+    api.collectionsQuery.getCulturalLibraryWithProgress,
     userId ? { userId } : "skip",
   );
-  const placeData = useQuery(
-    api.collectionsQuery.getRegionsWithProgress,
-    userId ? { userId } : "skip",
-  );
+  const collectionData = culturalLibrary?.collections;
+  const placeData = culturalLibrary?.places;
   const presentedCollections = useMemo(() => (collectionData ?? []).map((group: any) => ({
     ...group,
     ...getCollectionPresentation(group.id),
@@ -470,13 +469,13 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
         <Text style={styles.headerTitle}>México vivido</Text>
       </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'collections' && styles.tabActive]} onPress={() => setActiveTab('collections')}>
+      <View style={styles.tabs} accessibilityLabel="Secciones de la biblioteca cultural">
+        <Pressable accessibilityRole="tab" accessibilityLabel="Mostrar colecciones culturales" accessibilityState={{ selected: activeTab === 'collections' }} style={[styles.tab, activeTab === 'collections' && styles.tabActive]} onPress={() => setActiveTab('collections')}>
           <Text style={[styles.tabText, activeTab === 'collections' && styles.tabTextActive]}>Colecciones</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'places' && styles.tabActive]} onPress={() => setActiveTab('places')}>
+        </Pressable>
+        <Pressable accessibilityRole="tab" accessibilityLabel="Mostrar lugares de México" accessibilityState={{ selected: activeTab === 'places' }} style={[styles.tab, activeTab === 'places' && styles.tabActive]} onPress={() => setActiveTab('places')}>
           <Text style={[styles.tabText, activeTab === 'places' && styles.tabTextActive]}>Lugares</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Collection Grid */}
@@ -558,7 +557,7 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
                                 </View>
                                 <View style={[styles.collectedInner, { backgroundColor: bgColor }]}>
                                   <Text style={{ fontSize: width * 0.1 }}>
-                                    {getWordEmoji(lvl.word) ?? selectedCategory?.icon}
+                                    {getDisplayedWordIcon(lvl, selectedCategory?.icon, getWordEmoji(lvl.word))}
                                   </Text>
                                 </View>
                                 <View style={styles.collectedLabelContainer}>

@@ -37,6 +37,7 @@ assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].ic
 assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].collectionId, "juegos-ninez");
 assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].placeName, "Todo México");
 assert.equal(collections.find((item) => item.id === "cocina-bebidas")?.completed, 1, "legacy category falls back to a canonical collection id");
+assert.equal(collections.find((item) => item.id === "cocina-bebidas")?.words[0].icon, "", "missing editorial icon remains available for legacy client fallback");
 assert.equal(collections.find((item) => item.id === "unclassified")?.needsReview, true, "unknown collection is reviewable, not silently reassigned");
 
 const places = groupPlaces(levels, words, new Set(["w1"]));

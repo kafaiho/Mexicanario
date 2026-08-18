@@ -25,6 +25,7 @@ import useCoinFly from "../hooks/useCoinFly";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 const { sumPlaceProgress } = require('../config/achievementProgress.js');
+const { getAchievementCollectionDescription } = require('../config/achievementCollections.js');
 
 const { width, height } = Dimensions.get("window");
 const STORAGE_KEY = "mx_claimed_achievements";
@@ -63,14 +64,12 @@ export default function AchievementsScreen() {
 
   // ── Real user data from Convex ──────────────────────────────────────────────
   const user = useQuery(api.users.getUser, userId ? { userId } : "skip");
-  const collections = useQuery(
-    api.collectionsQuery.getCollectionsWithProgress,
+  const culturalProgress = useQuery(
+    api.collectionsQuery.getCulturalProgressSummary,
     userId ? { userId } : "skip"
   );
-  const regions = useQuery(
-    api.collectionsQuery.getRegionsWithProgress,
-    userId ? { userId } : "skip"
-  );
+  const collections = culturalProgress?.collections;
+  const regions = culturalProgress?.places;
 
   // ── Coin animation ─────────────────────────────────────────────────────────
   const topBarRef = useRef(null);
@@ -383,7 +382,7 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "🌮",
         name: "Al pastor, como siempre",
-        description: "Completa la colección de Comida Mexicana",
+        description: getAchievementCollectionDescription("cocina-bebidas"),
         current: comidaDone,
         target: comidaTotal,
         completed: comidaTotal > 0 && comidaDone >= comidaTotal,
@@ -394,7 +393,7 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "🎺",
         name: "Corazón de mariachi",
-        description: "Completa la colección de Música y Artistas",
+        description: getAchievementCollectionDescription("musica-mexicana"),
         current: musicaDone,
         target: musicaTotal,
         completed: musicaTotal > 0 && musicaDone >= musicaTotal,
@@ -405,7 +404,7 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "📜",
         name: "Historia viva",
-        description: "Completa la colección de Historia de México",
+        description: getAchievementCollectionDescription("historia-personajes"),
         current: historiaDone,
         target: historiaTotal,
         completed: historiaTotal > 0 && historiaDone >= historiaTotal,
@@ -416,7 +415,7 @@ export default function AchievementsScreen() {
         category: "Por Categoría",
         icon: "📱",
         name: "Siempre en tendencia",
-        description: "Completa la colección de Mundo Digital",
+        description: getAchievementCollectionDescription("mexico-digital"),
         current: digitalDone,
         target: digitalTotal,
         completed: digitalTotal > 0 && digitalDone >= digitalTotal,

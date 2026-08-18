@@ -78,7 +78,7 @@ function resolvedPlace(word: CollectionWord) {
   return PLACE_BY_LEGACY_KEY.get(normalizePlaceKey(word.region ?? "")) ?? "unclassified";
 }
 
-function payload(level: CollectionLevel, word: CollectionWord, completed: Set<string>, collectionId: string, fallbackIcon: string, placeKindOverride?: PlaceKind) {
+function payload(level: CollectionLevel, word: CollectionWord, completed: Set<string>, collectionId: string, placeKindOverride?: PlaceKind) {
   const placeId = resolvedPlace(word);
   const place = PLACE_META.get(placeId) ?? PLACE_META.get("unclassified")!;
   return {
@@ -88,7 +88,7 @@ function payload(level: CollectionLevel, word: CollectionWord, completed: Set<st
     collectionId,
     pathId: word.pathId ?? "unclassified",
     placeId,
-    icon: word.icon ?? fallbackIcon,
+    icon: word.icon ?? "",
     placeName: place.name,
     placeKind: placeKindOverride ?? place.kind,
     legacyRegion: word.legacyRegion ?? (!word.placeId ? word.region ?? "" : ""),
@@ -97,49 +97,50 @@ function payload(level: CollectionLevel, word: CollectionWord, completed: Set<st
   };
 }
 
-export function groupCollections(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>, currentLevel: number) {
+export function groupCulturalLibrary(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>, currentLevel: number, includeWords = true) {
   const byWord = wordMap(words);
-  const groups = new Map<string, any>();
+  const collectionGroups = new Map<string, any>();
+  const placeGroups = new Map<string, any>();
   levels.forEach((level, position) => {
     const word = byWord.get(level.wordId.toString());
     if (!word) return;
-    const id = collectionFor(word);
-    let group = groups.get(id);
-    if (!group) {
-      const meta = COLLECTION_META.get(id) ?? UNCLASSIFIED_COLLECTION;
-      group = { ...meta, id, total: 0, completed: 0, unlockLevel: position + 1, isUnlocked: currentLevel >= position + 1, needsReview: id === "unclassified", words: [] };
-      groups.set(id, group);
+    const collectionId = collectionFor(word);
+    let collectionGroup = collectionGroups.get(collectionId);
+    if (!collectionGroup) {
+      const meta = COLLECTION_META.get(collectionId) ?? UNCLASSIFIED_COLLECTION;
+      collectionGroup = { ...meta, id: collectionId, total: 0, completed: 0, unlockLevel: position + 1, isUnlocked: currentLevel >= position + 1, needsReview: collectionId === "unclassified", ...(includeWords ? { words: [] } : {}) };
+      collectionGroups.set(collectionId, collectionGroup);
     }
     const isCompleted = completed.has(word._id.toString());
-    group.words.push(payload(level, word, completed, id, group.icon));
-    group.total++;
-    if (isCompleted) group.completed++;
-  });
-  return [...groups.values()].sort((a, b) => Number(b.isUnlocked) - Number(a.isUnlocked) || (b.completed / b.total) - (a.completed / a.total) || a.unlockLevel - b.unlockLevel || a.id.localeCompare(b.id));
-}
+    if (includeWords) collectionGroup.words.push(payload(level, word, completed, collectionId));
+    collectionGroup.total++;
+    if (isCompleted) collectionGroup.completed++;
 
-export function groupPlaces(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>) {
-  const byWord = wordMap(words);
-  const groups = new Map<string, any>();
-  for (const level of levels) {
-    const word = byWord.get(level.wordId.toString());
-    if (!word) continue;
     const canonical = !!word.placeId;
     const resolvedId = resolvedPlace(word);
     const isLegacy = !canonical && resolvedId !== "unclassified";
-    const id = isLegacy ? `legacy:${resolvedId}` : resolvedId;
+    const placeGroupId = isLegacy ? `legacy:${resolvedId}` : resolvedId;
     const baseKind = PLACE_KIND[resolvedId] ?? "unclassified";
     const kind = isLegacy ? "legacy-region" : baseKind;
-    let group = groups.get(id);
-    if (!group) {
+    let placeGroup = placeGroups.get(placeGroupId);
+    if (!placeGroup) {
       const meta = PLACE_META.get(resolvedId) ?? PLACE_META.get("unclassified")!;
-      group = { key: id, id, placeId: resolvedId, name: isLegacy ? word.region ?? meta.name : meta.name, demonym: meta.demonym, icon: meta.icon, color: meta.color, kind, isLegacyGroup: isLegacy, isUnclassified: resolvedId === "unclassified", needsReview: resolvedId === "unclassified", legacyName: !canonical ? word.region ?? "" : "", total: 0, completed: 0, words: [] };
-      groups.set(id, group);
+      placeGroup = { key: placeGroupId, id: placeGroupId, placeId: resolvedId, name: isLegacy ? word.region ?? meta.name : meta.name, demonym: meta.demonym, icon: meta.icon, color: meta.color, kind, isLegacyGroup: isLegacy, isUnclassified: resolvedId === "unclassified", needsReview: resolvedId === "unclassified", legacyName: !canonical ? word.region ?? "" : "", total: 0, completed: 0, ...(includeWords ? { words: [] } : {}) };
+      placeGroups.set(placeGroupId, placeGroup);
     }
-    const isCompleted = completed.has(word._id.toString());
-    group.words.push(payload(level, word, completed, collectionFor(word), word.icon ?? group.icon, kind));
-    group.total++;
-    if (isCompleted) group.completed++;
-  }
-  return [...groups.values()].sort((a, b) => (b.completed / b.total) - (a.completed / a.total) || a.id.localeCompare(b.id));
+    if (includeWords) placeGroup.words.push(payload(level, word, completed, collectionId, kind));
+    placeGroup.total++;
+    if (isCompleted) placeGroup.completed++;
+  });
+  const collections = [...collectionGroups.values()].sort((a, b) => Number(b.isUnlocked) - Number(a.isUnlocked) || (b.completed / b.total) - (a.completed / a.total) || a.unlockLevel - b.unlockLevel || a.id.localeCompare(b.id));
+  const places = [...placeGroups.values()].sort((a, b) => (b.completed / b.total) - (a.completed / a.total) || a.id.localeCompare(b.id));
+  return { collections, places };
+}
+
+export function groupCollections(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>, currentLevel: number) {
+  return groupCulturalLibrary(levels, words, completed, currentLevel).collections;
+}
+
+export function groupPlaces(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>) {
+  return groupCulturalLibrary(levels, words, completed, 1).places;
 }

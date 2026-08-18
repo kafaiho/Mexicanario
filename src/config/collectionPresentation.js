@@ -35,4 +35,8 @@ function presentPlaceGroup(group) {
   };
 }
 
-module.exports = { getCollectionPresentation, getPlacePresentation, presentPlaceGroup };
+function getDisplayedWordIcon(wordPayload, collectionIcon, legacyIcon) {
+  return wordPayload?.icon || legacyIcon || collectionIcon || '📚';
+}
+
+module.exports = { getCollectionPresentation, getPlacePresentation, presentPlaceGroup, getDisplayedWordIcon };

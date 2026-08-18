@@ -20,8 +20,17 @@ assert.ok(
     > difficultyScore({ word: "expresión muy larga", difficulty: 2, placeId: "oaxaca" }, 80),
   "la dificultad editorial explícita debe dominar los factores contextuales",
 );
+assert.equal(
+  difficultyScore({ word: "mole", difficulty: 2, placeId: "todo-mexico", pathId: "patio-recreo" }, 40),
+  difficultyScore({ word: "mole", difficulty: 2, placeId: "oaxaca", pathId: "mexico-profundo" }, 180),
+  "la región, el camino y la posición no deben hacer una palabra más difícil",
+);
 
 const planned = planDifficultyWaves(catalog, "persona-real", 2);
+const placeVariant = catalog.slice(0, 10).map((item, index) => ({ ...item, placeId: index % 2 ? "oaxaca" : "todo-mexico" }));
+const placeVariantChanged = placeVariant.map((item) => ({ ...item, placeId: item.placeId === "oaxaca" ? "todo-mexico" : "oaxaca" }));
+const rolesById = (items: ReturnType<typeof planDifficultyWaves<typeof placeVariant[number]>>) => new Map(items.map((item) => [item.id, item.difficultyRole]));
+assert.deepEqual(rolesById(planDifficultyWaves(placeVariant, "region-neutral", 2)), rolesById(planDifficultyWaves(placeVariantChanged, "region-neutral", 2)));
 const counts = planned.reduce<Record<string, number>>((result, item) => {
   result[item.difficultyRole] = (result[item.difficultyRole] ?? 0) + 1;
   return result;
@@ -39,11 +48,12 @@ for (const challenge of challenges) {
 }
 
 assert.ok(planned.slice(0, 50).every((item) => item.difficulty !== 3 && item.rating === "familiar"));
-const average = (items: typeof planned) => items.reduce((sum, item) => sum + difficultyScore(item, item.editorialOrder), 0) / items.length;
-const earlyAverage = average(planned.slice(0, 50));
-const middleAverage = average(planned.slice(50, 130));
-const lateAverage = average(planned.slice(130));
-assert.ok(earlyAverage <= middleAverage && middleAverage <= lateAverage, `${earlyAverage} <= ${middleAverage} <= ${lateAverage}`);
+const averageDifficulty = (items: typeof planned) => items.reduce((sum, item) => sum + item.difficulty, 0) / items.length;
+const averageLinguistic = (items: typeof planned) => items.reduce((sum, item) => sum + difficultyScore({ ...item, difficulty: 1 }, 1), 0) / items.length;
+const difficultyAverages = [planned.slice(0, 50), planned.slice(50, 130), planned.slice(130)].map(averageDifficulty);
+const linguisticAverages = [planned.slice(0, 50), planned.slice(50, 130), planned.slice(130)].map(averageLinguistic);
+assert.ok(difficultyAverages[0] <= difficultyAverages[1] && difficultyAverages[1] <= difficultyAverages[2], difficultyAverages.join(" <= "));
+assert.ok(linguisticAverages.every(Number.isFinite), "la complejidad lingüística cruda debe quedar diagnosticada por tramo");
 
 const same = planDifficultyWaves(catalog, "persona-real", 2);
 const another = planDifficultyWaves(catalog, "otra-persona", 2);
@@ -62,4 +72,4 @@ assert.equal(new Set(partial.map((item) => item.id)).size, 13);
 assert.ok(partial.every((item) => item.difficultyRole === item.difficultyBand));
 assert.ok(partial.filter((item) => item.isChallenge).every((item) => item.difficultyRole === "surprise"));
 
-console.log(`difficultyWaves real: ${counts.expected}/${counts.rest}/${counts.surprise}, ${challenges.length} retos, ${planned.filter((item) => item.deviation).length} desviaciones`);
+console.log(`difficultyWaves real: ${counts.expected}/${counts.rest}/${counts.surprise}, ${challenges.length} retos, ${planned.filter((item) => item.deviation).length} desviaciones; dificultad ${difficultyAverages.map((value) => value.toFixed(2)).join("/")}; lingüística ${linguisticAverages.map((value) => value.toFixed(2)).join("/")}`);

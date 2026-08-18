@@ -28,7 +28,6 @@ const TEMPLATE_B: DifficultyRole[] = [
   "expected", "rest", "expected", "surprise", "expected",
   "expected", "rest", "expected", "expected", "surprise",
 ];
-const LATE_PATHS = new Set(["mexico-regional", "oficios-artesanias", "historias-leyendas", "mexico-profundo"]);
 
 function hash(value: string): number {
   let result = 0x811c9dc5;
@@ -56,21 +55,18 @@ export function expectedDifficulty(editorialPosition: number): Difficulty {
 }
 
 /**
- * Composite score used only for relative ranking inside a bounded segment.
- * Explicit difficulty dominates (100-point gaps). Length, multiword, regional
- * context and late cultural paths add modest nuance without overriding it.
+ * Content-only score used for relative ranking inside a bounded segment.
+ * Explicit difficulty dominates (100-point gaps); letter and token counts add
+ * linguistic nuance. Region, cultural path and editorial position never score.
  */
-export function difficultyScore(item: DifficultyWaveInput, editorialPosition: number): number {
+export function difficultyScore(item: DifficultyWaveInput, _editorialPosition: number): number {
   const difficulty = normalizedDifficulty(item.difficulty);
   const letters = (item.word ?? "").normalize("NFD").replace(/[^a-zA-ZñÑ]/g, "").length;
   const tokens = (item.word ?? "").trim().split(/\s+/).filter(Boolean).length;
-  const phase = editorialPosition <= 50 ? 0 : editorialPosition <= 130 ? 25 : 50;
-  const explicit = (difficulty - 1) * 100 + (editorialPosition > 130 && difficulty === 3 ? 10 : 0);
+  const explicit = (difficulty - 1) * 100;
   const length = Math.min(letters, 30) / 30 * 12;
   const multiword = Math.min(Math.max(tokens - 1, 0), 3) * 4;
-  const regional = item.placeId && item.placeId !== "todo-mexico" ? 6 : 0;
-  const lateContext = item.pathId && LATE_PATHS.has(item.pathId) ? 4 : 0;
-  return explicit + phase + length + multiword + regional + lateContext;
+  return explicit + length + multiword;
 }
 
 type Indexed<T> = { item: T; originalIndex: number; score: number };

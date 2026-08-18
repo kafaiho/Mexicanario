@@ -9,7 +9,7 @@
 - **reuse:** el objeto principal comunica directamente la colección nueva y la imagen no contiene texto/marca problemática.
 - **generate:** falta el concepto o el recurso existente es parcial, genérico, equívoco o contiene texto/marca.
 - **emoji-only:** la superficie actual no renderiza bitmap. Se conserva un emoji canónico y no se genera una imagen que la app no utilizará.
-- Los atlas finales son PNG RGBA transparentes, sin texto ni marcas, y sus sujetos conservan lectura clara a tamaño de tarjeta.
+- El atlas final es PNG RGBA transparente, sin texto ni marcas, y sus sujetos conservan lectura clara a tamaño de tarjeta.
 
 ## Caminos (10)
 

@@ -54,7 +54,7 @@ function ZoneBanner({ zone }) {
           asset={asset}
           size={58}
           borderRadius={9}
-          accessibilityLabel={`Ilustración del camino ${zone.name}`}
+          decorative
           style={styles.zoneBannerAtlas}
         />
       ) : <Text style={styles.zoneBannerEmoji}>{zone.emoji}</Text>}

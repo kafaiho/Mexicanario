@@ -446,7 +446,7 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
                     asset={getCulturalAsset('collection', selectedCategory?.id)}
                     size={52}
                     borderRadius={8}
-                    accessibilityLabel={`Ilustración de ${selectedCategory?.name}`}
+                    decorative
                   />
                 ) : <Text style={styles.modalHeadingEmoji}>{selectedCategory?.icon}</Text>}
                 <Text style={styles.modalTitle}>{selectedCategory?.name}</Text>

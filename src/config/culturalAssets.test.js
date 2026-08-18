@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { CULTURAL_PATHS, COLLECTIONS, PLACES } = require('./culturalTaxonomy.js');
 const {
   CULTURAL_PATH_ASSETS,
@@ -60,3 +62,10 @@ for (const [pathId, collectionId] of Object.entries(expectedPathCollectionCells)
 }
 
 console.log('cultural assets cover every published path and collection');
+
+for (const screen of ['../screens/ColeccionScreen.tsx', '../screens/MapScreen.jsx']) {
+  const source = fs.readFileSync(path.join(__dirname, screen), 'utf8');
+  const atlasUsages = [...source.matchAll(/<CulturalAtlasIcon\b[\s\S]*?\/>/g)].map(([usage]) => usage);
+  assert.ok(atlasUsages.length > 0, `${screen} must render a cultural atlas icon`);
+  assert.ok(atlasUsages.every((usage) => /\bdecorative\b/.test(usage)), `${screen} atlas icons adjacent to text must be decorative`);
+}

@@ -64,7 +64,7 @@ function normWord(s: string): string {
 
 type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any; introducedOrderVersion?: number };
 type OrderedLevelDoc = LevelDoc & { position?: number; requestedRole?: DifficultyRole; difficultyRole?: DifficultyRole; difficultyBand?: DifficultyRole; isChallenge?: boolean; deviation?: boolean; originalIndex?: number };
-type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; pathId?: string; rating?: string; isRetired?: boolean; legacyWord?: string; legacyRegion?: string; legacyDifficulty?: number };
+type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; pathId?: string; placeId?: string; rating?: string; isRetired?: boolean; legacyWord?: string; legacyRegion?: string; legacyDifficulty?: number };
 
 /**
  *   positions 1-STARTER_COUNT → easy words sorted by length (same for all users)
@@ -177,12 +177,14 @@ export function getOrderedLevels(
     const word = wordMap.get(level.wordId.toString());
     return {
       ...level,
+      word: word?.word,
       difficulty: word?.difficulty,
       editorialOrder: word?.editorialOrder,
       pathId: word?.pathId,
+      placeId: word?.placeId,
       rating: word?.rating,
     };
-  }), userId, orderingVersion).map(({ difficulty: _difficulty, editorialOrder: _editorialOrder, pathId: _pathId, rating: _rating, ...level }) => level);
+  }), userId, orderingVersion).map(({ word: _word, difficulty: _difficulty, editorialOrder: _editorialOrder, pathId: _pathId, placeId: _placeId, rating: _rating, ...level }) => level);
 }
 
 /**

@@ -1,102 +1,65 @@
 import assert from "node:assert/strict";
-import { planDifficultyWaves } from "./difficultyWaves";
+import { MEXICO_VIVIDO_WORDS } from "./migrations/mexicoVividoCatalog.generated";
+import { difficultyScore, expectedDifficulty, planDifficultyWaves } from "./difficultyWaves";
 
-type Fixture = {
-  id: string;
-  difficulty: 1 | 2 | 3;
-  rating: "familiar" | "adulto";
-  pathId: string;
-  editorialOrder: number;
-};
+const catalog = MEXICO_VIVIDO_WORDS.map((entry) => ({
+  id: entry.conceptId,
+  word: entry.word,
+  difficulty: entry.difficulty,
+  rating: entry.rating,
+  pathId: entry.pathId,
+  placeId: entry.placeId,
+  editorialOrder: entry.order,
+}));
 
-const fixture = (count: number, pathId = "mercado-antojitos", offset = 50): Fixture[] =>
-  Array.from({ length: count }, (_, index) => ({
-    id: `${pathId}-${index}`,
-    difficulty: ([2, 2, 1, 2, 1, 2, 2, 1, 2, 3, 2, 1, 2, 3, 2, 2, 1, 2, 2, 3] as const)[index % 20],
-    rating: "familiar",
-    pathId,
-    editorialOrder: offset + index + 1,
-  }));
+assert.equal(expectedDifficulty(50), 1);
+assert.equal(expectedDifficulty(51), 2);
+assert.equal(expectedDifficulty(131), 2);
+assert.ok(
+  difficultyScore({ word: "sol", difficulty: 3, placeId: "todo-mexico" }, 80)
+    > difficultyScore({ word: "expresión muy larga", difficulty: 2, placeId: "oaxaca" }, 80),
+  "la dificultad editorial explícita debe dominar los factores contextuales",
+);
 
-{
-  const planned = planDifficultyWaves(fixture(20), "usuaria-a", 2);
-  const counts = planned.reduce<Record<string, number>>((result, item) => {
-    result[item.difficultyRole] = (result[item.difficultyRole] ?? 0) + 1;
-    return result;
-  }, {});
-  assert.deepEqual(counts, { expected: 12, rest: 5, surprise: 3 });
-  assert.deepEqual(planned.filter((item) => item.isChallenge).map((item) => item.position), [10, 20]);
-  assert.ok(planned.filter((item) => item.isChallenge).every((item) => item.difficultyBand === "surprise"));
+const planned = planDifficultyWaves(catalog, "persona-real", 2);
+const counts = planned.reduce<Record<string, number>>((result, item) => {
+  result[item.difficultyRole] = (result[item.difficultyRole] ?? 0) + 1;
+  return result;
+}, {});
+assert.deepEqual(counts, { expected: 124, rest: 52, surprise: 30 });
+assert.equal(planned.filter((item) => item.deviation).length, 0, "el catálogo real no necesita fallback");
+
+const challenges = planned.filter((item) => item.isChallenge);
+assert.deepEqual(challenges.map((item) => item.position), Array.from({ length: 20 }, (_, index) => (index + 1) * 10));
+assert.ok(challenges.every((item) => item.difficultyRole === "surprise" && item.difficultyBand === "surprise"));
+for (const challenge of challenges) {
+  const blockStart = Math.floor((challenge.position - 1) / 10) * 10;
+  const comparable = planned.slice(blockStart, blockStart + 10).filter((item) => item.pathId === challenge.pathId);
+  assert.ok(comparable.every((item) => difficultyScore(challenge, challenge.editorialOrder) >= difficultyScore(item, item.editorialOrder)));
 }
 
-{
-  const input = fixture(20);
-  const first = planDifficultyWaves(input, "misma-persona", 2);
-  const again = planDifficultyWaves(input, "misma-persona", 2);
-  const another = planDifficultyWaves(input, "otra-persona", 2);
-  assert.deepEqual(first, again, "la semilla debe ser estable");
-  assert.notDeepEqual(first.map((item) => item.id), another.map((item) => item.id), "dos usuarios deben obtener variedad cuando hay candidatos");
-}
+assert.ok(planned.slice(0, 50).every((item) => item.difficulty !== 3 && item.rating === "familiar"));
+const average = (items: typeof planned) => items.reduce((sum, item) => sum + difficultyScore(item, item.editorialOrder), 0) / items.length;
+const earlyAverage = average(planned.slice(0, 50));
+const middleAverage = average(planned.slice(50, 130));
+const lateAverage = average(planned.slice(130));
+assert.ok(earlyAverage <= middleAverage && middleAverage <= lateAverage, `${earlyAverage} <= ${middleAverage} <= ${lateAverage}`);
 
-{
-  const early: Fixture[] = fixture(50, "patio-recreo", 0).map((item, index) => ({
-    ...item,
-    difficulty: index % 10 === 9 ? 2 : 1,
-  }));
-  const planned = planDifficultyWaves(early, "infancia", 2);
-  assert.ok(planned.every((item) => item.difficulty !== 3));
-  assert.ok(planned.every((item) => item.rating === "familiar"));
-  assert.ok(planned.filter((item) => item.requestedRole === "expected").every((item) => item.difficulty === 1));
-}
+const same = planDifficultyWaves(catalog, "persona-real", 2);
+const another = planDifficultyWaves(catalog, "otra-persona", 2);
+assert.deepEqual(planned, same);
+assert.notDeepEqual(planned.map((item) => item.id), another.map((item) => item.id));
+assert.deepEqual(planned.map((item) => item.difficultyRole), another.map((item) => item.difficultyRole));
 
-{
-  const boundary: Fixture[] = Array.from({ length: 10 }, (_, index) => ({
-    id: `frontera-${index}`,
-    difficulty: index < 5 ? 1 : 3,
-    rating: index < 5 ? "familiar" : "adulto",
-    pathId: "calle-barrio",
-    editorialOrder: 46 + index,
-  }));
-  const planned = planDifficultyWaves(boundary, "seguridad-frontera", 2);
-  assert.ok(planned.slice(0, 5).every((item) => item.difficulty !== 3 && item.rating === "familiar"));
-}
+const originalIndex = new Map(catalog.map((item, index) => [item.id, index]));
+assert.ok(planned.every((item, index) => Math.abs(index - originalIndex.get(item.id)!) <= 9));
+assert.equal(new Set(planned.map((item) => item.id)).size, catalog.length);
+assert.deepEqual([...new Set(planned.map((item) => item.pathId))], [...new Set(catalog.map((item) => item.pathId))]);
 
-{
-  const input = [...fixture(20, "patio-recreo"), ...fixture(20, "casa-abuela", 70)];
-  const originalIndex = new Map(input.map((item, index) => [item.id, index]));
-  const planned = planDifficultyWaves(input, "caminante", 2);
-  assert.deepEqual([...new Set(planned.map((item) => item.pathId))], ["patio-recreo", "casa-abuela"]);
-  assert.ok(planned.every((item, index) => Math.abs(index - originalIndex.get(item.id)!) <= 9));
-  assert.equal(new Set(planned.map((item) => item.id)).size, input.length);
-}
+const partial = planDifficultyWaves(catalog.slice(0, 13), "parcial", 2);
+assert.equal(partial.length, 13);
+assert.equal(new Set(partial.map((item) => item.id)).size, 13);
+assert.ok(partial.every((item) => item.difficultyRole === item.difficultyBand));
+assert.ok(partial.filter((item) => item.isChallenge).every((item) => item.difficultyRole === "surprise"));
 
-{
-  const uneven = [...fixture(15, "patio-recreo"), ...fixture(15, "casa-abuela", 65)];
-  const planned = planDifficultyWaves(uneven, "caminos-disparejos", 2);
-  assert.deepEqual(planned.filter((item) => item.isChallenge).map((item) => item.position), [10, 20, 30]);
-  assert.deepEqual([...new Set(planned.map((item) => item.pathId))], ["patio-recreo", "casa-abuela"]);
-}
-
-{
-  const [legacyMetadata] = planDifficultyWaves([{
-    id: "sin-camino",
-    difficulty: 3 as const,
-    rating: "familiar",
-    editorialOrder: 60,
-  }], "auditoria", 2);
-  assert.equal(legacyMetadata.difficultyRole, "surprise");
-  assert.equal(legacyMetadata.deviation, true);
-}
-
-{
-  const scarce = fixture(13, "feria-verbena").map((item) => ({ ...item, difficulty: 2 as const }));
-  const first = planDifficultyWaves(scarce, "sin-cubetas", 2);
-  const again = planDifficultyWaves(scarce, "sin-cubetas", 2);
-  assert.deepEqual(first, again, "la ventana parcial debe ser estable");
-  assert.equal(first.length, scarce.length);
-  assert.equal(new Set(first.map((item) => item.id)).size, scarce.length);
-  assert.ok(first.some((item) => item.deviation && item.requestedRole !== item.difficultyRole));
-  assert.equal(first[9].difficultyBand, "surprise", "el reto conserva su banda aunque reporte fallback real");
-}
-
-console.log("difficultyWaves: proporción, retos, seguridad, límites y fallback válidos");
+console.log(`difficultyWaves real: ${counts.expected}/${counts.rest}/${counts.surprise}, ${challenges.length} retos, ${planned.filter((item) => item.deviation).length} desviaciones`);

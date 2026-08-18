@@ -21,4 +21,18 @@ function getPlacePresentation(id, kind, legacyName) {
   return { id: 'unclassified', name: 'Por clasificar', icon: '📍', color: '#757575', kind: 'unclassified', kindLabel: getPlaceKindLabel('unclassified'), needsReview: true };
 }
 
-module.exports = { getCollectionPresentation, getPlacePresentation };
+function presentPlaceGroup(group) {
+  const presentation = getPlacePresentation(group.placeId || group.id, group.kind, group.legacyName);
+  return {
+    ...group,
+    ...presentation,
+    id: group.id,
+    placeId: group.placeId || presentation.id,
+    name: group.isLegacyGroup && group.legacyName ? group.legacyName : presentation.name,
+    kind: group.kind || presentation.kind,
+    kindLabel: getPlaceKindLabel(group.kind || presentation.kind),
+    needsReview: Boolean(group.needsReview || presentation.needsReview),
+  };
+}
+
+module.exports = { getCollectionPresentation, getPlacePresentation, presentPlaceGroup };

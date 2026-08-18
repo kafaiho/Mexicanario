@@ -61,7 +61,7 @@ const PLACES = [
   place('sinaloa', 'Sinaloa', 'state', 'Sinaloense', '🥁', '#0277BD', ['Sinaloa']),
   place('nayarit', 'Nayarit', 'state', 'Nayarita', '🌊', '#0277BD', ['Estado de Nayarit']),
   place('huasteca', 'La Huasteca', 'cultural-region', 'Huasteco', '🎻', '#00838F', ['Huasteca', 'Región Huasteca', 'Region Huasteca']),
-  place('unclassified', 'Sin clasificar', 'unclassified', 'Sin clasificar', '📍', '#757575', ['Desconocido', 'Sin región', 'Sin region']),
+  place('unclassified', 'Por clasificar', 'unclassified', 'Por clasificar', '📍', '#757575', ['Desconocido', 'Sin región', 'Sin region']),
 ];
 
 function normalizeCulturalKey(value) {

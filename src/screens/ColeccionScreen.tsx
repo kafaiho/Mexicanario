@@ -22,7 +22,7 @@ import { tapMedium } from "../services/haptics";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { normalizeText } from "../utils/textUtils";
-const { getCollectionPresentation } = require("../config/collectionPresentation.js");
+const { getCollectionPresentation, presentPlaceGroup } = require("../config/collectionPresentation.js");
 
 const BROWN = "#8B4513";
 const ORANGE = "#FF6B35";
@@ -288,7 +288,7 @@ const CollectionCard = React.memo(function CollectionCard({ category, index, onP
       </View>
       <Text style={[styles.cardTitle, isLocked && { color: "#A0714F" }]} numberOfLines={2}>{category.name}</Text>
       <Text style={styles.cardDescription} numberOfLines={2}>{category.description}</Text>
-      {__DEV__ && category.needsReview ? <Text style={styles.reviewText}>Revisión editorial</Text> : null}
+      {__DEV__ && category.needsReview ? <Text style={styles.reviewText}>Por clasificar</Text> : null}
       {isLocked ? (
         <Text style={styles.lockText}>{"🔒 Nivel " + (category.unlockLevel ?? "?")}</Text>
       ) : (
@@ -314,6 +314,7 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showLotteryModal, setShowLotteryModal] = useState(false);
   const [loadingError, setLoadingError] = useState(false);
+  const [activeTab, setActiveTab] = useState<'collections' | 'places'>('collections');
 
   // Get user to see currentLevel
   const user = useQuery(api.users.getUser, userId ? { userId: userId } : "skip");
@@ -323,11 +324,19 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
     api.collectionsQuery.getCollectionsWithProgress,
     userId ? { userId } : "skip",
   );
+  const placeData = useQuery(
+    api.collectionsQuery.getRegionsWithProgress,
+    userId ? { userId } : "skip",
+  );
   const presentedCollections = useMemo(() => (collectionData ?? []).map((group: any) => ({
     ...group,
     ...getCollectionPresentation(group.id),
-    needsReview: group.needsReview || getCollectionPresentation(group.id).needsReview,
+    needsReview: Boolean(group.needsReview || getCollectionPresentation(group.id).needsReview),
   })), [collectionData]);
+  const presentedPlaces = useMemo(() => (placeData ?? []).map((group: any) => {
+    const presented = presentPlaceGroup(group);
+    return { ...presented, description: presented.kindLabel, isUnlocked: true };
+  }), [placeData]);
 
   const onCardPress = (category) => {
     tapMedium();
@@ -413,7 +422,7 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
 
   React.useEffect(() => {
     let timeoutId;
-    if (!collectionData || !user) {
+    if (!collectionData || !placeData || !user) {
       timeoutId = setTimeout(() => {
         setLoadingError(true);
       }, 8000); // 8 seconds timeout
@@ -421,9 +430,9 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
       setLoadingError(false);
     }
     return () => clearTimeout(timeoutId);
-  }, [collectionData, user]);
+  }, [collectionData, placeData, user]);
 
-  if (!collectionData || !user) {
+  if (!collectionData || !placeData || !user) {
     return (
       <ImageBackground source={require("../../assets/images/bg.webp")} style={[styles.container, { alignItems: "center", justifyContent: "center" }]} resizeMode="cover">
         {loadingError ? (
@@ -458,7 +467,16 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
 
       {/* Header */}
       <View style={[styles.header, { marginTop: HEADER_TOP }]}>
-        <Text style={styles.headerTitle}>Colección</Text>
+        <Text style={styles.headerTitle}>México vivido</Text>
+      </View>
+
+      <View style={styles.tabs}>
+        <TouchableOpacity style={[styles.tab, activeTab === 'collections' && styles.tabActive]} onPress={() => setActiveTab('collections')}>
+          <Text style={[styles.tabText, activeTab === 'collections' && styles.tabTextActive]}>Colecciones</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'places' && styles.tabActive]} onPress={() => setActiveTab('places')}>
+          <Text style={[styles.tabText, activeTab === 'places' && styles.tabTextActive]}>Lugares</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Collection Grid */}
@@ -468,7 +486,7 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.gridContainer}>
-          {presentedCollections.map((category: any, index: number) => (
+          {(activeTab === 'collections' ? presentedCollections : presentedPlaces).map((category: any, index: number) => (
             <CollectionCard key={category.id} category={category} index={index} onPress={onCardPress} />
           ))}
         </View>
@@ -684,6 +702,31 @@ const styles = StyleSheet.create({
     color: BROWN,
     marginBottom: 4,
     textAlign: "center",
+  },
+  tabs: {
+    flexDirection: 'row',
+    marginHorizontal: width * 0.04,
+    marginBottom: 10,
+    padding: 4,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,228,181,0.9)',
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  tabActive: {
+    backgroundColor: AMBER,
+  },
+  tabText: {
+    fontFamily: FONTS.bodyBold,
+    color: BROWN,
+    fontSize: width * 0.035,
+  },
+  tabTextActive: {
+    color: WHEAT,
   },
   cardDescription: {
     fontFamily: FONTS.body,

@@ -1,3 +1,5 @@
+import { CULTURAL_COLLECTIONS, CULTURAL_COLLECTION_IDS, CULTURAL_PLACES } from "./culturalTaxonomy";
+
 export type CollectionWord = {
   _id: any;
   word: string;
@@ -5,21 +7,20 @@ export type CollectionWord = {
   region?: string;
   category?: string;
   collectionId?: string;
+  pathId?: string;
   placeId?: string;
+  icon?: string;
   legacyRegion?: string;
 };
 
 export type CollectionLevel = { wordId: any; levelNumber: number };
 
-export const COLLECTION_IDS = [
-  "juegos-ninez", "dulces-antojitos", "cocina-bebidas", "dichos-casa",
-  "escuela-mexicana", "vida-barrio", "tele-cultura-popular", "musica-mexicana",
-  "fiestas-tradiciones", "naturaleza-mexico", "pueblos-originarios-lenguas",
-  "oficios-artesanias", "regiones-hablas", "historia-personajes", "lugares-mexico",
-  "leyendas-relatos", "ciencia-inventos-deporte", "mexico-digital", "albures-picaresca",
-] as const;
+export const COLLECTION_IDS = CULTURAL_COLLECTION_IDS;
 
 const COLLECTION_SET = new Set<string>(COLLECTION_IDS);
+const COLLECTION_META = new Map(CULTURAL_COLLECTIONS.map((item) => [item.id, item]));
+const PLACE_META = new Map(CULTURAL_PLACES.map((item) => [item.id, item]));
+const UNCLASSIFIED_COLLECTION = { id: "unclassified", name: "Por clasificar", icon: "📚", color: "#757575", description: "Contenido pendiente de revisión editorial." };
 const LEGACY_COLLECTIONS: Record<string, string> = {
   Juegos: "juegos-ninez", "Juegos y Niñez": "juegos-ninez",
   Dulces: "dulces-antojitos",
@@ -42,21 +43,14 @@ const LEGACY_COLLECTIONS: Record<string, string> = {
 };
 
 type PlaceKind = "country" | "city" | "state" | "cultural-region" | "legacy-region" | "unclassified";
-const PLACE_KIND: Record<string, PlaceKind> = {
-  "todo-mexico": "country", cdmx: "city", guadalajara: "city", jalisco: "state",
-  monterrey: "city", "nuevo-leon": "state", veracruz: "state", oaxaca: "state",
-  puebla: "state", michoacan: "state", guerrero: "state", chiapas: "state",
-  yucatan: "state", campeche: "state", "quintana-roo": "state", tabasco: "state",
-  sinaloa: "state", nayarit: "state", huasteca: "cultural-region", unclassified: "unclassified",
-};
-const LEGACY_PLACE: Record<string, string> = {
-  "Todo México": "todo-mexico", Nacional: "todo-mexico", México: "todo-mexico",
-  CDMX: "cdmx", "Ciudad de México": "cdmx", Jalisco: "jalisco", Guadalajara: "guadalajara",
-  Monterrey: "monterrey", "Nuevo León": "nuevo-leon", Veracruz: "veracruz", Oaxaca: "oaxaca",
-  Puebla: "puebla", Michoacán: "michoacan", Guerrero: "guerrero", Chiapas: "chiapas",
-  Yucatán: "yucatan", Campeche: "campeche", "Quintana Roo": "quintana-roo", Tabasco: "tabasco",
-  Sinaloa: "sinaloa", Nayarit: "nayarit", Huasteca: "huasteca", "La Huasteca": "huasteca",
-};
+const PLACE_KIND = Object.fromEntries(CULTURAL_PLACES.map((item) => [item.id, item.kind])) as Record<string, PlaceKind>;
+function normalizePlaceKey(value: string) {
+  return value.trim().toLocaleLowerCase("es-MX").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+}
+const PLACE_BY_LEGACY_KEY = new Map<string, string>();
+for (const place of CULTURAL_PLACES) {
+  for (const value of [place.id, place.name, ...place.aliases]) PLACE_BY_LEGACY_KEY.set(normalizePlaceKey(value), place.id);
+}
 
 function wordMap(words: CollectionWord[]) {
   return new Map(words.map((word) => [word._id.toString(), word]));
@@ -65,6 +59,30 @@ function wordMap(words: CollectionWord[]) {
 function collectionFor(word: CollectionWord) {
   if (word.collectionId) return COLLECTION_SET.has(word.collectionId) ? word.collectionId : "unclassified";
   return word.category ? LEGACY_COLLECTIONS[word.category] ?? "unclassified" : "unclassified";
+}
+
+function resolvedPlace(word: CollectionWord) {
+  if (word.placeId) return PLACE_META.has(word.placeId) ? word.placeId : "unclassified";
+  return PLACE_BY_LEGACY_KEY.get(normalizePlaceKey(word.region ?? "")) ?? "unclassified";
+}
+
+function payload(level: CollectionLevel, word: CollectionWord, completed: Set<string>, collectionId: string, fallbackIcon: string, placeKindOverride?: PlaceKind) {
+  const placeId = resolvedPlace(word);
+  const place = PLACE_META.get(placeId) ?? PLACE_META.get("unclassified")!;
+  return {
+    levelNumber: level.levelNumber,
+    word: word.word,
+    meaning: word.meaning,
+    collectionId,
+    pathId: word.pathId ?? "unclassified",
+    placeId,
+    icon: word.icon ?? fallbackIcon,
+    placeName: place.name,
+    placeKind: placeKindOverride ?? place.kind,
+    legacyRegion: word.legacyRegion ?? (!word.placeId ? word.region ?? "" : ""),
+    region: word.region ?? "",
+    isCompleted: completed.has(word._id.toString()),
+  };
 }
 
 export function groupCollections(levels: CollectionLevel[], words: CollectionWord[], completed: Set<string>, currentLevel: number) {
@@ -76,11 +94,12 @@ export function groupCollections(levels: CollectionLevel[], words: CollectionWor
     const id = collectionFor(word);
     let group = groups.get(id);
     if (!group) {
-      group = { id, total: 0, completed: 0, unlockLevel: position + 1, isUnlocked: currentLevel >= position + 1, needsReview: id === "unclassified", words: [] };
+      const meta = COLLECTION_META.get(id) ?? UNCLASSIFIED_COLLECTION;
+      group = { ...meta, id, total: 0, completed: 0, unlockLevel: position + 1, isUnlocked: currentLevel >= position + 1, needsReview: id === "unclassified", words: [] };
       groups.set(id, group);
     }
     const isCompleted = completed.has(word._id.toString());
-    group.words.push({ levelNumber: level.levelNumber, word: word.word, meaning: word.meaning, placeId: word.placeId, region: word.region, legacyRegion: word.legacyRegion, isCompleted });
+    group.words.push(payload(level, word, completed, id, group.icon));
     group.total++;
     if (isCompleted) group.completed++;
   });
@@ -94,18 +113,19 @@ export function groupPlaces(levels: CollectionLevel[], words: CollectionWord[], 
     const word = byWord.get(level.wordId.toString());
     if (!word) continue;
     const canonical = !!word.placeId;
-    const resolvedId = canonical && PLACE_KIND[word.placeId!] ? word.placeId! : canonical ? "unclassified" : LEGACY_PLACE[word.region ?? ""] ?? "unclassified";
+    const resolvedId = resolvedPlace(word);
     const isLegacy = !canonical && resolvedId !== "unclassified";
     const id = isLegacy ? `legacy:${resolvedId}` : resolvedId;
     const baseKind = PLACE_KIND[resolvedId] ?? "unclassified";
     const kind = isLegacy ? "legacy-region" : baseKind;
     let group = groups.get(id);
     if (!group) {
-      group = { id, placeId: resolvedId, kind, isLegacyGroup: isLegacy, needsReview: resolvedId === "unclassified", legacyName: !canonical ? word.region : undefined, total: 0, completed: 0, words: [] };
+      const meta = PLACE_META.get(resolvedId) ?? PLACE_META.get("unclassified")!;
+      group = { key: id, id, placeId: resolvedId, name: isLegacy ? word.region ?? meta.name : meta.name, demonym: meta.demonym, icon: meta.icon, color: meta.color, kind, isLegacyGroup: isLegacy, isUnclassified: resolvedId === "unclassified", needsReview: resolvedId === "unclassified", legacyName: !canonical ? word.region ?? "" : "", total: 0, completed: 0, words: [] };
       groups.set(id, group);
     }
     const isCompleted = completed.has(word._id.toString());
-    group.words.push({ levelNumber: level.levelNumber, word: word.word, meaning: word.meaning, placeId: canonical ? word.placeId : undefined, region: word.region, legacyRegion: word.legacyRegion, isCompleted });
+    group.words.push(payload(level, word, completed, collectionFor(word), word.icon ?? group.icon, kind));
     group.total++;
     if (isCompleted) group.completed++;
   }

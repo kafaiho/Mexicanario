@@ -10,7 +10,7 @@ const level = (id: string, wordId: string, levelNumber: number) => ({
 });
 
 const words = [
-  { _id: "w1", word: "Balero", meaning: "Juguete", region: "Nacional", category: "Juegos", collectionId: "juegos-ninez", placeId: "todo-mexico", editorialOrder: 3 },
+  { _id: "w1", word: "Balero", meaning: "Juguete", region: "Nacional", category: "Juegos", collectionId: "juegos-ninez", pathId: "patio-recreo", placeId: "todo-mexico", icon: "🪀", editorialOrder: 3 },
   { _id: "w2", word: "Caballito", meaning: "Juego", region: "Infantil", category: "Juegos", collectionId: "juegos-ninez", placeId: "sinaloa", editorialOrder: 8 },
   { _id: "w3", word: "Torta ahogada", meaning: "Platillo", region: "Jalisco", category: "Comida" },
   { _id: "w4", word: "Son huasteco", meaning: "Música", region: "Huasteca", category: "Música" },
@@ -23,18 +23,31 @@ const words = [
   { _id: "w11", word: "Nayarita", meaning: "De Nayarit", region: "Nayarit", category: "Regionalismos", placeId: "nayarit", collectionId: "regiones-hablas" },
   { _id: "w12", word: "Desubicado", meaning: "Revisión", region: "Planeta X", category: "Categoría X" },
   { _id: "w13", word: "Mariachi", meaning: "Música", region: "Jalisco", category: "Música", placeId: "jalisco", collectionId: "musica-mexicana" },
+  { _id: "w14", word: "Defeño", meaning: "De la capital", region: "DF", category: "Regionalismos" },
 ];
 const levels = words.map((word, index) => level(`l${index + 1}`, word._id, index + 1));
 
 const collections = groupCollections(levels, words, new Set(["w1", "w3"]), 4);
 assert.equal(collections.find((item) => item.id === "juegos-ninez")?.total, 2, "collectionId groups before legacy category");
 assert.equal(collections.find((item) => item.id === "juegos-ninez")?.unlockLevel, 1, "unlock is first occurrence in ordered gameplay");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.name, "Juegos de la Niñez");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.icon, "🪀");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].pathId, "patio-recreo");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].icon, "🪀");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].collectionId, "juegos-ninez");
+assert.equal(collections.find((item) => item.id === "juegos-ninez")?.words[0].placeName, "Todo México");
 assert.equal(collections.find((item) => item.id === "cocina-bebidas")?.completed, 1, "legacy category falls back to a canonical collection id");
 assert.equal(collections.find((item) => item.id === "unclassified")?.needsReview, true, "unknown collection is reviewable, not silently reassigned");
 
 const places = groupPlaces(levels, words, new Set(["w1"]));
 assert.equal(places.find((item) => item.id === "sinaloa")?.isLegacyGroup, false);
+assert.equal(places.find((item) => item.id === "sinaloa")?.name, "Sinaloa");
+assert.equal(places.find((item) => item.id === "sinaloa")?.key, "sinaloa");
+assert.equal(places.find((item) => item.id === "sinaloa")?.isUnclassified, false);
+assert.equal(places.find((item) => item.id === "sinaloa")?.words[0].placeKind, "state");
 assert.equal(places.find((item) => item.id === "legacy:huasteca")?.kind, "legacy-region", "unmigrated Huasteca remains an independent legacy group");
+assert.equal(places.find((item) => item.id === "legacy:cdmx")?.name, "DF", "client-recognized aliases resolve identically on the server");
+assert.equal(places.find((item) => item.id === "legacy:jalisco")?.words[0].placeKind, "legacy-region");
 assert.equal(places.find((item) => item.id === "legacy:jalisco")?.kind, "legacy-region", "legacy state remains explicit instead of a broad macro-region");
 assert.equal(places.find((item) => item.id === "jalisco")?.kind, "state", "canonical and legacy place groups never merge by input order");
 assert.equal(places.find((item) => item.id === "campeche")?.kind, "state");

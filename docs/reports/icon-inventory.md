@@ -1,7 +1,7 @@
 # Inventario de iconografía cultural
 
 **Alcance:** 10 caminos, 19 colecciones y 20 lugares de la taxonomía `México vivido`.
-**Implementación final:** dos atlas transparentes cubren las 29 superficies publicadas: `assets/images/cultural/collections-atlas.png` (1254×1254, cuadrícula 5×4, 19 celdas utilizadas, alfa 0 en las esquinas transparentes) y `assets/images/cultural/paths-atlas.png` (1536×1024, cuadrícula 5×2, 10 celdas, alfa 0 en las cuatro esquinas).
+**Implementación final:** un atlas transparente, `assets/images/cultural/collections-atlas.png` (1254×1254, cuadrícula 5×4), aporta 19 celdas distintas y cubre 29 asociaciones canónicas: las 19 colecciones más 10 reutilizaciones semánticas deliberadas para los caminos. Las generaciones de caminos descartadas no se conservan en el repositorio.
 **Render actual:** `ColeccionScreen` muestra el atlas en tarjetas canónicas y cabeceras de modal. `MapScreen` muestra el atlas únicamente para caminos culturales v2; el banner neutral heredado conserva emoji. Los lugares siguen usando emoji porque no tienen ni necesitan bitmaps.
 
 ## Criterio de decisión
@@ -13,20 +13,20 @@
 
 ## Caminos (10)
 
-Las diez ilustraciones quedaron reunidas, en el orden de la taxonomía, dentro de `paths-atlas.png`. La columna/fila se resuelve mediante mapping estático y el emoji sigue siendo fallback.
+Cada camino reutiliza una celda única y semánticamente equivalente del atlas limpio. La columna/fila se resuelve mediante mapping estático y el emoji sigue siendo fallback.
 
 | ID / celda final | Emoji | Match inicial | Decisión inicial | Sujeto usado para generar el atlas |
 |---|---:|---|---|---|
-| `paths/patio-recreo.webp` | 🪀 | no asset | generate | trompo de madera, balero y dos canicas, energía de recreo |
-| `paths/casa-abuela.webp` | 🏡 | no asset | generate | molinillo de madera junto a taza de chocolate y mantel tejido |
-| `paths/calle-barrio.webp` | ⚽ | no asset | generate | carrito de pregonero/tianguis barrial y balón de calle |
-| `paths/mercado-antojitos.webp` | 🌮 | no asset | generate | canasta de mercado con elote, chile, pan dulce y jarrito |
-| `paths/feria-verbena.webp` | 🎡 | no asset | generate | rueda de feria pequeña, papel picado y luces de verbena |
-| `paths/musica-une.webp` | 🎺 | no asset | generate | jarana, trompeta y acordeón entrelazados, sin privilegiar un solo género |
-| `paths/mexico-regional.webp` | 🗺️ | no asset | generate | mapa abstracto de México formado por motivos regionales diversos, sin bandera decorativa |
-| `paths/oficios-artesanias.webp` | 🧶 | no asset | generate | manos trabajando barro y telar, herramientas visibles |
-| `paths/historias-leyendas.webp` | 🕯️ | no asset | generate | vela encendida iluminando libro abierto y siluetas narrativas |
-| `paths/mexico-profundo.webp` | 🌽 | no asset | generate | mazorca criolla, códice y hojas de biodiversidad, tratamiento respetuoso |
+| `patio-recreo` → `juegos-ninez` r0c0 | 🪀 | exacto | reuse | juegos tradicionales de recreo |
+| `casa-abuela` → `dichos-casa` r0c3 | 🏡 | directo | reuse | memoria oral y dichos familiares |
+| `calle-barrio` → `vida-barrio` r1c0 | ⚽ | exacto | reuse | vida cotidiana del barrio |
+| `mercado-antojitos` → `cocina-bebidas` r0c2 | 🌮 | directo | reuse | cocina, bebidas y mercado |
+| `feria-verbena` → `fiestas-tradiciones` r1c3 | 🎡 | exacto | reuse | fiesta popular y tradición |
+| `musica-une` → `musica-mexicana` r1c2 | 🎺 | exacto | reuse | música mexicana diversa |
+| `mexico-regional` → `regiones-hablas` r2c2 | 🗺️ | exacto | reuse | regiones y voces locales |
+| `oficios-artesanias` → `oficios-artesanias` r2c1 | 🧶 | exacto | reuse | manos, oficio y artesanía |
+| `historias-leyendas` → `leyendas-relatos` r3c0 | 🕯️ | exacto | reuse | relatos y atmósfera legendaria |
+| `mexico-profundo` → `pueblos-originarios-lenguas` r2c0 | 🌽 | directo | reuse | lenguas, raíces y saberes |
 
 ## Colecciones (19)
 
@@ -99,13 +99,13 @@ El ciclo TDD se observó RED por ausencia de `culturalAssets.js` y GREEN despué
 
 ## Entrega final de bitmaps
 
-- **2 archivos físicos:** un atlas de colecciones y un atlas de caminos.
-- **29 celdas visuales publicadas:** 19 colecciones + 10 caminos.
+- **1 archivo físico transparente:** el atlas limpio de colecciones.
+- **19 celdas visuales distintas y 29 asociaciones:** 19 colecciones + 10 caminos con reutilización semántica única.
 - **0 bitmaps de lugar:** los 20 lugares conservan emojis canónicos.
 - **Estilo aplicado:** ilustración popular mexicana cálida y táctil, composición legible en miniatura, objetos culturales concretos, sin texto, marcas, banderas decorativas ni sombrero/taco como símbolo universal.
 
 ## Evidencia responsive
 
-`CulturalAtlasIcon` interpreta `size` como alto. A 58 px, un camino mide `58 × 0.6 = 34.8 px` de ancho; una colección de 64 px mide `64 × 0.8 = 51.2 px`. El atlas completo se escala a `size × rows` de alto y conserva `atlasAspect`, por lo que el recorte no deforma la imagen.
+`CulturalAtlasIcon` interpreta `size` como alto. Tanto caminos como colecciones usan celdas 0.8:1: a 58 px un camino mide `58 × 0.8 = 46.4 px`; una colección de 64 px mide `64 × 0.8 = 51.2 px`. El atlas completo se escala a `size × 4` de alto y conserva aspecto 1:1, por lo que el recorte no deforma la imagen.
 
 `docs/reports/cultural-icons-preview.html` reproduce la misma geometría y posiciones CSS en marcos de 320 y 390 px. Es una previsualización aislada, no una captura de la app Expo.

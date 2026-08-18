@@ -27,7 +27,7 @@ function assertAtlasCoverage(records, mapping, expected) {
 }
 
 assertAtlasCoverage(CULTURAL_PATHS, CULTURAL_PATH_ASSETS, {
-  kind: 'path', rows: 2, cols: 5, atlasAspect: 1.5, cellAspect: 0.6,
+  kind: 'path', rows: 4, cols: 5, atlasAspect: 1, cellAspect: 0.8,
 });
 assertAtlasCoverage(COLLECTIONS, COLLECTION_ASSETS, {
   kind: 'collection', rows: 4, cols: 5, atlasAspect: 1, cellAspect: 0.8,
@@ -39,5 +39,24 @@ assert.equal(getCulturalAsset('place', 'cdmx'), null);
 assert.equal(getCulturalAsset('unknown', 'patio-recreo'), null);
 assert.ok(PLACES.every(({ icon }) => icon), 'every place needs an emoji fallback');
 assert.ok(PLACES.every(({ id }) => getCulturalAsset('place', id) === null), 'places intentionally have no bitmap assets');
+
+const expectedPathCollectionCells = {
+  'patio-recreo': 'juegos-ninez',
+  'casa-abuela': 'dichos-casa',
+  'calle-barrio': 'vida-barrio',
+  'mercado-antojitos': 'cocina-bebidas',
+  'feria-verbena': 'fiestas-tradiciones',
+  'musica-une': 'musica-mexicana',
+  'mexico-regional': 'regiones-hablas',
+  'oficios-artesanias': 'oficios-artesanias',
+  'historias-leyendas': 'leyendas-relatos',
+  'mexico-profundo': 'pueblos-originarios-lenguas',
+};
+for (const [pathId, collectionId] of Object.entries(expectedPathCollectionCells)) {
+  const pathAsset = CULTURAL_PATH_ASSETS[pathId];
+  const collectionAsset = COLLECTION_ASSETS[collectionId];
+  assert.strictEqual(pathAsset.source, collectionAsset.source, `${pathId} must use the clean collection atlas`);
+  assert.deepEqual([pathAsset.row, pathAsset.col], [collectionAsset.row, collectionAsset.col], `${pathId} must reuse ${collectionId}`);
+}
 
 console.log('cultural assets cover every published path and collection');

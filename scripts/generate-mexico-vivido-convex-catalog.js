@@ -18,7 +18,8 @@ const output = [
 
 if (process.argv.includes('--check')) {
   const existing = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-  if (existing !== output) {
+  const normalizedExisting = existing.replace(/\r\n/g, '\n');
+  if (normalizedExisting !== output) {
     console.error('El catálogo Convex está desactualizado. Ejecuta: node scripts/generate-mexico-vivido-convex-catalog.js');
     process.exit(1);
   }

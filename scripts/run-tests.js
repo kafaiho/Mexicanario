@@ -10,6 +10,7 @@ const testModules = [
   'src/config/achievementProgress.test.js',
   'src/config/achievementCollections.test.js',
   'src/config/difficultyPresentation.test.js',
+  'src/config/gameplayResponsiveLayout.test.js',
 ];
 
 const typescriptTestModules = [

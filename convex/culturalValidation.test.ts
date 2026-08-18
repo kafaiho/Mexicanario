@@ -77,11 +77,13 @@ const validStoredWord = { _id: "valid-id", ...validWord };
 const invalidStoredWord = { _id: "invalid-id", ...validWord, word: "inválida", collectionId: "inventada" };
 assert.deepEqual(buildCulturalAudit([
   { _id: "legacy-id", word: "legado" },
+  { _id: "retired-id", word: "legado retirado", difficulty: 3, isRetired: true },
   validStoredWord,
   invalidStoredWord,
 ]), {
-  pageTotal: 3,
+  pageTotal: 4,
   audited: 2,
+  skippedRetired: 1,
   valid: 1,
   invalid: 1,
   issues: [{
@@ -100,6 +102,7 @@ const cappedAudit = buildCulturalAudit([
 ], { limit: 2 });
 assert.equal(cappedAudit.pageTotal, 3);
 assert.equal(cappedAudit.audited, 3);
+assert.equal(cappedAudit.skippedRetired, 0);
 assert.equal(cappedAudit.valid, 0);
 assert.equal(cappedAudit.invalid, 3);
 assert.equal(cappedAudit.issueCount, 3);
@@ -115,6 +118,7 @@ assert.deepEqual(buildCulturalAuditPage({
 }), {
   pageTotal: 2,
   audited: 2,
+  skippedRetired: 0,
   valid: 1,
   invalid: 1,
   issues: [{
@@ -140,6 +144,7 @@ assert.deepEqual(buildCulturalAuditPage({
 }), {
   pageTotal: 1,
   audited: 1,
+  skippedRetired: 0,
   valid: 0,
   invalid: 1,
   issues: [{

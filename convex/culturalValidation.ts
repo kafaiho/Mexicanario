@@ -19,10 +19,11 @@ type CulturalWordInput = {
   rating?: unknown;
   icon?: unknown;
   editorialOrder?: unknown;
+  isRetired?: unknown;
 };
 
 type ValidationOptions = { requireCulturalMetadata?: boolean };
-type AuditOptions = ValidationOptions & { limit?: number };
+type AuditOptions = ValidationOptions & { limit?: number; includeRetired?: boolean };
 type StoredCulturalWord = CulturalWordInput & { _id: unknown; word: unknown };
 
 const paths = new Set<unknown>(CULTURAL_PATH_IDS);
@@ -90,8 +91,13 @@ export function buildCulturalAudit(
   const limit = options.limit ?? 200;
   let audited = 0;
   let invalid = 0;
+  let skippedRetired = 0;
 
   for (const word of words) {
+    if (!options.includeRetired && word.isRetired === true) {
+      skippedRetired += 1;
+      continue;
+    }
     if (!options.requireCulturalMetadata && !hasCulturalMetadata(word)) continue;
     audited += 1;
     const errors = validateCulturalWord(word, {
@@ -108,6 +114,7 @@ export function buildCulturalAudit(
   return {
     pageTotal: words.length,
     audited,
+    skippedRetired,
     valid: audited - invalid,
     invalid,
     issues,
@@ -136,6 +143,7 @@ export const auditCulturalWords = internalQuery({
   args: {
     paginationOpts: paginationOptsValidator,
     requireCulturalMetadata: v.optional(v.boolean()),
+    includeRetired: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const pageResult = await ctx.db.query("words").paginate({
@@ -144,6 +152,7 @@ export const auditCulturalWords = internalQuery({
     });
     return buildCulturalAuditPage(pageResult, {
       requireCulturalMetadata: args.requireCulturalMetadata,
+      includeRetired: args.includeRetired,
     });
   },
 });

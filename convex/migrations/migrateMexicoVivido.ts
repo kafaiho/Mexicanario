@@ -148,6 +148,39 @@ const CATALOG_OPERATIONS: readonly CatalogOperation[] = [
   ...MEXICO_VIVIDO_WORDS.map((entry) => ({ kind: "retain" as const, entry })),
   ...REMOVED_WORDS.map((entry) => ({ kind: "remove" as const, entry })),
 ];
+const CATALOG_OPERATION_KEYS = new Set(
+  CATALOG_OPERATIONS.map((operation) => normalizeWordKey(operation.entry.word)),
+);
+
+function legacySnapshot(word: ExistingWord): Record<string, unknown> {
+  if (word.legacyWord !== undefined) return {};
+  return {
+    legacyWord: word.word,
+    ...(word.region === undefined ? {} : { legacyRegion: word.region }),
+    ...(word.difficulty === undefined ? {} : { legacyDifficulty: word.difficulty }),
+  };
+}
+
+export function planUnclassifiedRetirementPage(
+  words: readonly ExistingWord[],
+  operationKeys: ReadonlySet<string> = CATALOG_OPERATION_KEYS,
+) {
+  const operations: Array<{ _id: any; patch: Record<string, unknown> }> = [];
+  let alreadyRetired = 0;
+  let known = 0;
+  for (const word of words) {
+    if (operationKeys.has(normalizeWordKey(word.word))) {
+      known += 1;
+      continue;
+    }
+    if (word.isRetired === true) {
+      alreadyRetired += 1;
+      continue;
+    }
+    operations.push({ _id: word._id, patch: { isRetired: true, ...legacySnapshot(word) } });
+  }
+  return { operations, retired: operations.length, alreadyRetired, known };
+}
 
 export function sliceCatalogOperations<T>(operations: readonly T[], cursor: number, batchSize: number) {
   const safeCursor = Number.isFinite(cursor) ? Math.max(0, Math.min(operations.length, Math.floor(cursor))) : 0;
@@ -204,13 +237,14 @@ type PreviewInventoryEntry = { count: number; docs: ExistingWord[] };
 export type PreviewInventory = {
   byKey: Map<string, PreviewInventoryEntry>;
   unclassifiedCount: number;
+  retiredUnclassifiedCount: number;
   unclassifiedSamples: Array<{ _id: any; word: string; normalizedKey: string }>;
   unclassifiedTruncated: boolean;
   sampleLimit: number;
 };
 
 export function createPreviewInventory(sampleLimit = 50): PreviewInventory {
-  return { byKey: new Map(), unclassifiedCount: 0, unclassifiedSamples: [], unclassifiedTruncated: false, sampleLimit: Math.max(0, Math.floor(sampleLimit)) };
+  return { byKey: new Map(), unclassifiedCount: 0, retiredUnclassifiedCount: 0, unclassifiedSamples: [], unclassifiedTruncated: false, sampleLimit: Math.max(0, Math.floor(sampleLimit)) };
 }
 
 function compactPreviewWord(word: ExistingWord, normalizedWordKey: string): ExistingWord {
@@ -229,6 +263,10 @@ export function accumulatePreviewInventory(
   for (const word of words) {
     const key = normalizeWordKey(word.word);
     if (!operationKeys.has(key)) {
+      if (word.isRetired === true) {
+        inventory.retiredUnclassifiedCount += 1;
+        continue;
+      }
       inventory.unclassifiedCount += 1;
       if (inventory.unclassifiedSamples.length < inventory.sampleLimit) inventory.unclassifiedSamples.push({ _id: word._id, word: word.word, normalizedKey: key });
       else inventory.unclassifiedTruncated = true;
@@ -298,6 +336,64 @@ export const backfillNormalizedKeysBatch = internalMutation({
   },
 });
 
+export const retireUnclassifiedBatch = internalMutation({
+  args: { paginationOpts: paginationOptsValidator, dryRun: v.boolean() },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("words").paginate({
+      cursor: args.paginationOpts.cursor,
+      endCursor: args.paginationOpts.endCursor,
+      numItems: normalizeCatalogBatchSize(args.paginationOpts.numItems),
+    } as any);
+    const metadata = {
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+      splitCursor: page.splitCursor ?? null,
+      pageStatus: page.pageStatus ?? null,
+    };
+    if (page.pageStatus === "SplitRequired") {
+      return { status: "split_required" as const, retired: 0, alreadyRetired: 0, known: 0, writes: 0, ...metadata };
+    }
+    const plan = planUnclassifiedRetirementPage(page.page);
+    if (!args.dryRun) {
+      for (const operation of plan.operations) await ctx.db.patch(operation._id, operation.patch);
+    }
+    return {
+      status: "ok" as const,
+      retired: plan.retired,
+      alreadyRetired: plan.alreadyRetired,
+      known: plan.known,
+      writes: args.dryRun ? 0 : plan.retired,
+      ...metadata,
+    };
+  },
+});
+
+export const retireUnclassifiedLegacy = internalAction({
+  args: { dryRun: v.boolean(), pageSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const queue: PreviewRequest[] = [{ cursor: null, endCursor: null }];
+    const totals = { retired: 0, alreadyRetired: 0, known: 0, writes: 0, pages: 0 };
+    while (queue.length) {
+      const request = queue.shift()!;
+      const result: BackfillPage & { retired: number; alreadyRetired: number; known: number; writes: number } = await ctx.runMutation(
+        (internal as any).migrations.migrateMexicoVivido.retireUnclassifiedBatch,
+        { paginationOpts: { cursor: request.cursor, endCursor: request.endCursor, numItems: normalizeCatalogBatchSize(args.pageSize) }, dryRun: args.dryRun },
+      );
+      if (result.pageStatus === "SplitRequired") {
+        queue.unshift(...nextPreviewRanges(request, result));
+        continue;
+      }
+      totals.retired += result.retired;
+      totals.alreadyRetired += result.alreadyRetired;
+      totals.known += result.known;
+      totals.writes += result.writes;
+      totals.pages += 1;
+      queue.unshift(...nextPreviewRanges(request, result));
+    }
+    return { status: "ok" as const, dryRun: args.dryRun, ...totals };
+  },
+});
+
 export const scanWordsForPreview = internalQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => await ctx.db.query("words").paginate({
@@ -321,7 +417,7 @@ export const previewMexicoVividoMigration = internalAction({
   args: { pageSize: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const pageSize = normalizeBackfillLimit(args.pageSize);
-    const operationKeys = new Set(CATALOG_OPERATIONS.map((operation) => normalizeWordKey(operation.entry.word)));
+    const operationKeys = CATALOG_OPERATION_KEYS;
     const inventory = createPreviewInventory();
     const queue: PreviewRequest[] = [{ cursor: null, endCursor: null }];
     while (queue.length) {
@@ -337,6 +433,7 @@ export const previewMexicoVividoMigration = internalAction({
       status: "ok" as const,
       ...planFromPreviewInventory(inventory, CATALOG_OPERATIONS),
       unclassified: inventory.unclassifiedCount,
+      retiredUnclassified: inventory.retiredUnclassifiedCount,
       unclassifiedSamples: inventory.unclassifiedSamples,
       unclassifiedTruncated: inventory.unclassifiedTruncated,
       dryRun: true,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, createPreviewInventory, hasMissingNormalizedKeys, needsLevelRepair, nextPreviewRanges, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, sliceCatalogOperations } from "./migrateMexicoVivido";
+import { accumulatePreviewInventory, accumulatePreviewPage, catalogOperationDecision, createPreviewInventory, hasMissingNormalizedKeys, needsLevelRepair, nextPreviewRanges, normalizeBackfillLimit, normalizeCatalogBatchSize, normalizeWordKey, planBackfillPage, planBackfillResult, planFromPreviewInventory, planMexicoVividoMigration, planUnclassifiedRetirementPage, sliceCatalogOperations } from "./migrateMexicoVivido";
 
 const catalog = [{ word: "Niño héroe", meaning: "nuevo", example: "ejemplo", collectionId: "historia", pathId: "mexico-profundo", placeId: "nacional", difficulty: 1, generation: ["actual"], rating: "familiar", icon: "🇲🇽", order: 7, conceptId: "nino-heroe" }];
 
@@ -105,6 +105,28 @@ assert.equal(inventory.unclassifiedCount, 3);
 assert.equal(inventory.unclassifiedSamples.length, 2);
 assert.equal(inventory.unclassifiedTruncated, true);
 assert.ok(inventory.byKey.size <= previewKeys.size, "el inventario nunca supera las claves operativas");
+
+const retirement = planUnclassifiedRetirementPage([
+  { _id: "active", word: "Extra activa", region: "Norte", difficulty: 3 },
+  { _id: "retired", word: "Extra retirada", isRetired: true },
+  { _id: "known", word: "Niño héroe" },
+], previewKeys);
+assert.deepEqual(retirement.operations, [{
+  _id: "active",
+  patch: { isRetired: true, legacyWord: "Extra activa", legacyRegion: "Norte", legacyDifficulty: 3 },
+}]);
+assert.equal(retirement.retired, 1);
+assert.equal(retirement.alreadyRetired, 1);
+assert.equal(retirement.known, 1);
+const retirementSecondPass = planUnclassifiedRetirementPage([
+  { _id: "active", word: "Extra activa", region: "Norte", difficulty: 3, isRetired: true, legacyWord: "Extra activa", legacyRegion: "Norte", legacyDifficulty: 3 },
+], previewKeys);
+assert.equal(retirementSecondPass.operations.length, 0, "el retiro masivo es idempotente");
+
+const postRetirementInventory = createPreviewInventory();
+accumulatePreviewInventory(postRetirementInventory, [{ _id: "old", word: "Extra retirada", isRetired: true }], previewKeys);
+assert.equal(postRetirementInventory.unclassifiedCount, 0, "el preview final ignora legado ya retirado");
+assert.equal(postRetirementInventory.retiredUnclassifiedCount, 1);
 
 assert.deepEqual(nextPreviewRanges({ cursor: null, endCursor: null }, {
   pageStatus: "SplitRequired", splitCursor: "mid", continueCursor: "partial", isDone: false,

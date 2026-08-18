@@ -27,8 +27,12 @@ const LEGACY_COLLECTIONS: Record<string, string> = {
   Comida: "cocina-bebidas", Gastronomia: "cocina-bebidas", "Comida Mexicana": "cocina-bebidas", Bebida: "cocina-bebidas", Bebidas: "cocina-bebidas",
   Refranes: "dichos-casa", "Refranes y Dichos": "dichos-casa",
   Escuela: "escuela-mexicana",
-  Modismos: "vida-barrio", Expresiones: "vida-barrio", Jerga: "vida-barrio", Slang: "vida-barrio", Popular: "vida-barrio", "Tipos Sociales": "vida-barrio", "Verbos del Barrio": "vida-barrio", "Vida Cotidiana": "vida-barrio",
-  Telenovelas: "tele-cultura-popular", "Cultura Popular": "tele-cultura-popular",
+  // El antiguo contenedor mezclaba habla cotidiana y modismos; editorialmente
+  // pertenece a Vida de Barrio, mientras cada entrada migrada manda por collectionId.
+  Modismos: "vida-barrio", Expresiones: "vida-barrio", Jerga: "vida-barrio", Slang: "vida-barrio", Popular: "vida-barrio", "Tipos Sociales": "vida-barrio", "Verbos del Barrio": "vida-barrio", "Vida Cotidiana": "vida-barrio", "Expresiones y Modismos": "vida-barrio",
+  // Bucket histórico mixto: queda en cultura popular solo como compatibilidad;
+  // deporte y demás entradas ya migradas prevalecen mediante collectionId.
+  Telenovelas: "tele-cultura-popular", "Cultura Popular": "tele-cultura-popular", "Cultura Popular y Deportes": "tele-cultura-popular",
   Música: "musica-mexicana", Musica: "musica-mexicana", Artistas: "musica-mexicana", Músicos: "musica-mexicana", "Música y Artistas": "musica-mexicana", "Corridos Tumbados": "musica-mexicana",
   Tradiciones: "fiestas-tradiciones", "Tradiciones y Fiestas": "fiestas-tradiciones",
   Animales: "naturaleza-mexico", "Animales de México": "naturaleza-mexico", Plantas: "naturaleza-mexico", Flora: "naturaleza-mexico", "Flora Mexicana": "naturaleza-mexico", "Remedios Caseros": "naturaleza-mexico",
@@ -40,7 +44,15 @@ const LEGACY_COLLECTIONS: Record<string, string> = {
   Deportes: "ciencia-inventos-deporte", "Deportes Mexicanos": "ciencia-inventos-deporte", Futbolistas: "ciencia-inventos-deporte",
   Digital: "mexico-digital", Streamers: "mexico-digital", "Jerga Digital": "mexico-digital", "Cultura Digital": "mexico-digital", "Mundo Digital": "mexico-digital",
   Albures: "albures-picaresca", Picaresca: "albures-picaresca", "Albures y Picaresca": "albures-picaresca",
+  Tacos: "cocina-bebidas",
 };
+
+/** Inventario auditado de categorías históricas de seeds, parches y migraciones. */
+export const KNOWN_LEGACY_COLLECTION_NAMES = Object.freeze(Object.keys(LEGACY_COLLECTIONS));
+
+export function resolveLegacyCollectionName(name: string | undefined): string {
+  return name ? LEGACY_COLLECTIONS[name] ?? "unclassified" : "unclassified";
+}
 
 type PlaceKind = "country" | "city" | "state" | "cultural-region" | "legacy-region" | "unclassified";
 const PLACE_KIND = Object.fromEntries(CULTURAL_PLACES.map((item) => [item.id, item.kind])) as Record<string, PlaceKind>;
@@ -58,7 +70,7 @@ function wordMap(words: CollectionWord[]) {
 
 function collectionFor(word: CollectionWord) {
   if (word.collectionId) return COLLECTION_SET.has(word.collectionId) ? word.collectionId : "unclassified";
-  return word.category ? LEGACY_COLLECTIONS[word.category] ?? "unclassified" : "unclassified";
+  return resolveLegacyCollectionName(word.category);
 }
 
 function resolvedPlace(word: CollectionWord) {

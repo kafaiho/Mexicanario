@@ -22,6 +22,7 @@ const typescriptTestModules = [
   'convex/friendsPresentation.test.ts',
   'convex/collectionGrouping.test.ts',
   'convex/culturalTaxonomyParity.test.ts',
+  'convex/collectionLegacyAliases.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

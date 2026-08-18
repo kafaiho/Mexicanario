@@ -14,6 +14,7 @@ const legacy = getOrderedLevels(levels, words, "");
 assert.deepEqual(legacy.map((item) => item.wordId), ["legacy-b", "legacy-a", "ordered-b", "ordered-a", "retired"], "v1 reproduce el orden histórico exacto");
 assert.ok(legacy.some((item) => item.wordId === "retired"), "v1 conserva retiradas para no reinterpretar currentLevel");
 assert.deepEqual([...completedWordIds(legacy, 4)], ["legacy-b", "legacy-a", "ordered-b"]);
+assert.ok(legacy.every((item) => !("difficultyRole" in item)), "v1 no cambia ni agrega metadatos");
 
 const ordered = getOrderedLevels(levels, words, "", 2);
 assert.deepEqual(ordered.slice(0, 2).map((item) => item.wordId), ["ordered-a", "ordered-b"]);
@@ -49,3 +50,18 @@ assert.deepEqual(afterV1.map((item) => item.wordId), beforeIds);
 assert.deepEqual([...completedWordIds(afterV1, 2)], beforeDone);
 const afterV2 = getOrderedLevels(migratedLevels, migratedWords, "returning", 2);
 assert.deepEqual(afterV2.map((item) => item.wordId), ["new", "old-b"]);
+
+const waveWords = Array.from({ length: 20 }, (_, index) => ({
+  _id: `wave-${index}`,
+  word: `Palabra ${index}`,
+  region: "Todo México",
+  difficulty: ([2, 2, 1, 2, 1, 2, 2, 1, 2, 3, 2, 1, 2, 3, 2, 2, 1, 2, 2, 3] as const)[index],
+  editorialOrder: 51 + index,
+  pathId: "mercado-antojitos",
+  rating: "familiar",
+}));
+const waveLevels = waveWords.map((word, index) => level(word._id, index + 1));
+const waveOrdered = getOrderedLevels(waveLevels, waveWords, "persona", 2);
+assert.deepEqual(waveOrdered.filter((item) => item.isChallenge).map((item) => item.position), [10, 20]);
+assert.ok(waveOrdered.filter((item) => item.isChallenge).every((item) => item.difficultyBand === "surprise"));
+assert.equal(new Set(waveOrdered.map((item) => item.wordId)).size, 20);

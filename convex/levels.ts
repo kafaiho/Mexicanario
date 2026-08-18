@@ -64,6 +64,9 @@ export const getCurrentLevel = query({
       placeId: word?.placeId,
       editorialOrder: word?.editorialOrder,
       culturalOrderVersion: orderingVersion,
+      difficultyRole: lvl.difficultyRole,
+      difficultyBand: lvl.difficultyBand,
+      isChallenge: orderingVersion === 2 ? lvl.isChallenge : undefined,
       nextPathId: nextWord?.pathId,
       reward: lvl.reward,
       isLastLevel: position >= ordered.length,
@@ -188,6 +191,9 @@ export const getAllLevels = query({
         placeId: wordDoc?.placeId,
         editorialOrder: wordDoc?.editorialOrder,
         culturalOrderVersion,
+        difficultyRole: lvl.difficultyRole,
+        difficultyBand: lvl.difficultyBand,
+        isChallenge: culturalOrderVersion === 2 ? lvl.isChallenge : undefined,
       };
     });
   },

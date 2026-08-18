@@ -16,6 +16,7 @@ import DraggablePet from "../components/PetCompanion/DraggablePet";
 import CulturalAtlasIcon from "../components/CulturalAtlasIcon";
 import { buildCulturalMapItems } from "../config/culturalPathSelection";
 const { getCulturalAsset } = require("../config/culturalAssets.js");
+const { getChallengePresentation } = require("../config/difficultyPresentation.js");
 import { useAuth } from "../context/AuthContext";
 import { notifySuccess, tapMedium } from "../services/haptics";
 import { TABLET_MODE } from "../utils/tabletSetup";
@@ -124,6 +125,7 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
 
   const icon = isLocked ? "🔒" : isCompleted ? "✓" : "▶";
   const iconSize = nodeSize * (isCompleted ? 0.30 : 0.34);
+  const challenge = getChallengePresentation(level);
 
   // Popup: centrar bajo el nodo pero nunca salirse de pantalla
   const POPUP_W = screenW * (TABLET_MODE ? 0.44 : 0.76);
@@ -188,6 +190,8 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
           {/* Cara — se anima hacia abajo al presionar */}
           <Animated.View style={[styles.face3d, { transform: [{ translateY: pressY }] }]}>
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={challenge.visible ? `Nivel ${n}, ${challenge.label}` : `Nivel ${n}`}
               onPressIn={onPressIn}
               onPressOut={onPressOut}
               onPress={handlePress}
@@ -213,6 +217,7 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
                 lineHeight: nodeSize * 0.24,
                 marginTop: 1,
               }}>{n}</Text>
+              {challenge.visible && <Text style={styles.challengeStar}>{challenge.icon}</Text>}
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -232,6 +237,9 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
               <Text style={styles.popupWord} numberOfLines={1}>
                 {isLocked ? `🔒 Nivel ${n}` : isCurrent ? `🎮 Nivel ${n}` : level.word}
               </Text>
+              {challenge.visible && (
+                <Text style={styles.challengeLabel}>{challenge.icon} {challenge.label}</Text>
+              )}
               {!isLocked && !isCurrent && (
                 <Text style={styles.popupMeaning} numberOfLines={2}>
                   {level.meaning}
@@ -545,6 +553,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
+  },
+  challengeStar: {
+    position: "absolute",
+    top: 3,
+    right: 7,
+    fontSize: 13,
+  },
+  challengeLabel: {
+    color: AMBER,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    marginBottom: 6,
   },
 
   // ── Popup ──

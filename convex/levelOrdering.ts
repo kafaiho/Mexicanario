@@ -7,6 +7,8 @@
  * has completed, or in what order words will be served.
  */
 
+import { planDifficultyWaves, type DifficultyRole } from "./difficultyWaves";
+
 export const STARTER_COUNT = 50;
 
 export const EASY_REGIONS = new Set([
@@ -61,7 +63,8 @@ function normWord(s: string): string {
 // ─── Main ordering function ───────────────────────────────────────────────────
 
 type LevelDoc = { _id: any; wordId: any; levelNumber: number; reward: any; introducedOrderVersion?: number };
-type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; isRetired?: boolean; legacyWord?: string; legacyRegion?: string; legacyDifficulty?: number };
+type OrderedLevelDoc = LevelDoc & { position?: number; requestedRole?: DifficultyRole; difficultyRole?: DifficultyRole; difficultyBand?: DifficultyRole; isChallenge?: boolean; deviation?: boolean; originalIndex?: number };
+type WordDoc = { _id: any; word: string; region: string; difficulty?: number; category?: string; pack?: string; editorialOrder?: number; pathId?: string; rating?: string; isRetired?: boolean; legacyWord?: string; legacyRegion?: string; legacyDifficulty?: number };
 
 /**
  *   positions 1-STARTER_COUNT → easy words sorted by length (same for all users)
@@ -80,7 +83,7 @@ export function getOrderedLevels(
   words: WordDoc[],
   userId: string,
   orderingVersion = 1,
-): LevelDoc[] {
+): OrderedLevelDoc[] {
   const currentWordMap = new Map(words.map((w) => [w._id.toString(), w]));
   const wordMap = orderingVersion === 1
     ? new Map(words.map((w) => [w._id.toString(), w.legacyWord ? { ...w, word: w.legacyWord, region: w.legacyRegion ?? w.region, difficulty: w.legacyDifficulty } : w]))
@@ -168,7 +171,18 @@ export function getOrderedLevels(
     result.splice(Math.min(targetPos - 1, result.length), 0, pinned);
   }
 
-  return result;
+  if (orderingVersion !== 2) return result;
+
+  return planDifficultyWaves(result.map((level) => {
+    const word = wordMap.get(level.wordId.toString());
+    return {
+      ...level,
+      difficulty: word?.difficulty,
+      editorialOrder: word?.editorialOrder,
+      pathId: word?.pathId,
+      rating: word?.rating,
+    };
+  }), userId, orderingVersion).map(({ difficulty: _difficulty, editorialOrder: _editorialOrder, pathId: _pathId, rating: _rating, ...level }) => level);
 }
 
 /**

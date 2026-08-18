@@ -9,6 +9,7 @@ const testModules = [
   'src/config/collectionPresentation.test.js',
   'src/config/achievementProgress.test.js',
   'src/config/achievementCollections.test.js',
+  'src/config/difficultyPresentation.test.js',
 ];
 
 const typescriptTestModules = [
@@ -16,6 +17,7 @@ const typescriptTestModules = [
   'convex/migrations/migrateMexicoVivido.test.ts',
   'convex/migrations/mexicoVividoCatalogParity.test.ts',
   'convex/levelOrdering.test.ts',
+  'convex/difficultyWaves.test.ts',
   'convex/levelWrites.test.ts',
   'src/config/mexicoZones.test.ts',
   'src/config/culturalPresentation.test.ts',

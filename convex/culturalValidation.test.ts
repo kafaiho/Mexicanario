@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildCulturalAudit, buildCulturalAuditPage, validateCulturalWord } from "./culturalValidation.ts";
+import { buildCulturalAudit, buildCulturalAuditPage, validateCulturalWord } from "./culturalValidation";
 
 const validWord = {
   word: "balero",

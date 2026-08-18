@@ -7,7 +7,7 @@ import {
   CULTURAL_PATH_IDS,
   CULTURAL_PLACE_IDS,
   CULTURAL_RATINGS,
-} from "./culturalTaxonomy.ts";
+} from "./culturalTaxonomy";
 
 type CulturalWordInput = {
   [key: string]: unknown;

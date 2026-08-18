@@ -90,7 +90,7 @@ assert.equal(accumulatePreviewPage(inventory, {
   splitCursor: "mid", continueCursor: "end", isDone: false,
 }, previewKeys), false);
 assert.equal(inventory.byKey.size, 0, "el preview descarta por completo páginas incompletas");
-accumulatePreviewInventory(inventory, [{ _id: "p1", ...applied[0] }], previewKeys);
+  accumulatePreviewInventory(inventory, [{ ...applied[0], _id: "p1" }], previewKeys);
 accumulatePreviewInventory(inventory, [{ _id: "p2", word: "Rayuela", normalizedWordKey: "rayuela", isRetired: false }], previewKeys);
 const preview = planFromPreviewInventory(inventory, previewOperations);
 assert.equal(preview.inserted, 1, "solo la clave realmente ausente se inserta");

@@ -14,7 +14,7 @@ import { insertNewLevel } from "../levelWrites";
  */
 
 type ExistingWord = { _id: any; word: string; [key: string]: unknown };
-type CatalogWord = (typeof MEXICO_VIVIDO_WORDS)[number] | Record<string, unknown> & { word: string };
+type CatalogWord = Record<string, unknown> & { word: string };
 type RemovedWord = { word: string; reason?: string };
 
 const PATCH_FIELDS = ["word", "meaning", "example", "collectionId", "pathId", "placeId", "difficulty", "generation", "rating", "icon", "sourceNote", "relatedConceptId", "conceptId"] as const;

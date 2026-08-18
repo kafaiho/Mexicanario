@@ -464,13 +464,14 @@ export default function GameplayScreen({ navigation, route }) {
   const [challengeStartTime, setChallengeStartTime] = useState(null);
   const [challengeResult, setChallengeResult] = useState(null);
   const respondToChallengeMut = useMutation(api.friends.respondToChallenge);
+  const { userId, user } = useAuth();
 
   // Map repaso mode — replaying a completed level from the map (no progress change)
   const reviewLevelParam = route?.params?.reviewLevel ?? null;
   const [isMapReview, setIsMapReview] = useState(!!reviewLevelParam);
   const mapReviewData = useQuery(
     api.levels.getLevelByNumber,
-    reviewLevelParam ? { levelNumber: reviewLevelParam } : "skip"
+    reviewLevelParam && userId ? { levelNumber: reviewLevelParam, userId } : "skip"
   );
 
   // Cultural path completion — only set from exact consecutive backend metadata.
@@ -492,7 +493,6 @@ export default function GameplayScreen({ navigation, route }) {
   const [revealedKeys, setRevealedKeys] = useState(null); // null=inactive, Set<string>=keyboard filter active (🔓 hint)
 
   // Auth and game hooks
-  const { userId, user } = useAuth();
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
   const updateUserCurrency = useMutation(api.users.updateUserCurrency);
   const completeLevelMutation = useMutation(api.levels.completeLevel);

@@ -18,6 +18,7 @@ const typescriptTestModules = [
   'convex/migrations/mexicoVividoCatalogParity.test.ts',
   'convex/levelOrdering.test.ts',
   'convex/difficultyWaves.test.ts',
+  'convex/difficultyMetadataContract.test.ts',
   'convex/levelWrites.test.ts',
   'src/config/mexicoZones.test.ts',
   'src/config/culturalPresentation.test.ts',

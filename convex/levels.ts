@@ -67,6 +67,7 @@ export const getCurrentLevel = query({
       difficultyRole: lvl.difficultyRole,
       difficultyBand: lvl.difficultyBand,
       isChallenge: orderingVersion === 2 ? lvl.isChallenge : undefined,
+      difficultyDeviation: orderingVersion === 2 ? lvl.deviation : undefined,
       nextPathId: nextWord?.pathId,
       reward: lvl.reward,
       isLastLevel: position >= ordered.length,
@@ -194,6 +195,7 @@ export const getAllLevels = query({
         difficultyRole: lvl.difficultyRole,
         difficultyBand: lvl.difficultyBand,
         isChallenge: culturalOrderVersion === 2 ? lvl.isChallenge : undefined,
+        difficultyDeviation: culturalOrderVersion === 2 ? lvl.deviation : undefined,
       };
     });
   },
@@ -202,7 +204,7 @@ export const getAllLevels = query({
 
 // Fetch a single level's word data by levelNumber (used for map repaso)
 export const getLevelByNumber = query({
-  args: { levelNumber: v.number() },
+  args: { levelNumber: v.number(), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const lvl = await ctx.db
       .query("levels")
@@ -210,6 +212,30 @@ export const getLevelByNumber = query({
       .first();
     if (!lvl) return null;
     const wordDoc = lvl.wordId ? await ctx.db.get(lvl.wordId) : null;
+    let orderedLevel: ReturnType<typeof getOrderedLevels>[number] | undefined;
+    let culturalOrderVersion: number | null = null;
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        culturalOrderVersion = user.culturalOrderVersion ?? 1;
+        const allLevels = await ctx.db.query("levels").collect();
+        const allWords = await ctx.db.query("words").collect();
+        const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), culturalOrderVersion);
+        orderedLevel = ordered.find((candidate) => candidate._id.toString() === lvl._id.toString());
+      }
+    }
+    const difficultyMetadata = orderedLevel ? {
+      difficultyRole: orderedLevel.difficultyRole ?? null,
+      difficultyBand: orderedLevel.difficultyBand ?? null,
+      isChallenge: orderedLevel.isChallenge ?? false,
+      difficultyDeviation: orderedLevel.deviation ?? null,
+    } : {
+      // Without a valid user there is no seeded sequence; never infer metadata from DB levelNumber.
+      difficultyRole: null,
+      difficultyBand: null,
+      isChallenge: false,
+      difficultyDeviation: null,
+    };
     return {
       level: lvl.levelNumber,
       wordId: lvl.wordId,
@@ -220,6 +246,8 @@ export const getLevelByNumber = query({
       pathId: wordDoc?.pathId,
       placeId: wordDoc?.placeId,
       editorialOrder: wordDoc?.editorialOrder,
+      culturalOrderVersion,
+      ...difficultyMetadata,
       reward: lvl.reward,
     };
   },

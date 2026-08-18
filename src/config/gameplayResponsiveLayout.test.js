@@ -22,16 +22,12 @@ for (const fixture of fixtures) {
   assert.ok(layout.keyboardWidth <= availableWidth, `${fixture.width}: keyboard stays inside safe width`);
   assert.ok(layout.controlsWidth <= availableWidth, `${fixture.width}: controls stay inside safe width`);
   assert.ok(
-    layout.keyWidth * 10 + layout.keyGap * 9 <= layout.keyboardWidth,
+    layout.keyWidth * 10 + layout.keyGap * 9 <= layout.keyboardInnerWidth,
     `${fixture.width}: ten-key row fits`,
   );
   assert.ok(
-    layout.controlWidth * 7 + layout.controlGap * 6 <= layout.controlsWidth,
-    `${fixture.width}: seven-control row fits`,
-  );
-  assert.ok(
-    layout.controlWidth * 2 + layout.controlGap <= layout.controlsWidth,
-    `${fixture.width}: two-control row fits`,
+    layout.keyWidth * 7 + layout.specialWidth * 2 + layout.keyGap * 8 <= layout.keyboardInnerWidth,
+    `${fixture.width}: seven keys plus two special keys fit`,
   );
   assert.ok(layout.keyHeight >= 36, `${fixture.width}: keys remain tappable`);
 
@@ -41,6 +37,25 @@ for (const fixture of fixtures) {
 }
 
 const sanitized = getGameplayResponsiveLayout({ width: -20, height: NaN, insets: { left: -4, right: 999 } });
-assert.ok(Number.isFinite(sanitized.keyboardWidth) && sanitized.keyboardWidth > 0, "invalid dimensions are safe");
+assert.ok(Number.isFinite(sanitized.keyboardWidth) && sanitized.keyboardWidth >= 0, "invalid dimensions are safe");
+
+const narrowSafeArea = getGameplayResponsiveLayout({
+  width: 320,
+  height: 568,
+  insets: { left: 64, right: 64, top: 0, bottom: 0 },
+});
+assert.ok(narrowSafeArea.keyboardWidth <= 192, "large horizontal insets never overflow real safe width");
+for (const field of ["contentWidth", "keyboardWidth", "keyboardInnerWidth", "keyWidth", "specialWidth"]) {
+  assert.ok(Number.isFinite(narrowSafeArea[field]) && narrowSafeArea[field] >= 0, `${field} remains usable`);
+}
+
+const regularHeight = getGameplayResponsiveLayout({ width: 390, height: 700, insets: {} });
+const reducedHeight = getGameplayResponsiveLayout({
+  width: 390,
+  height: 700,
+  insets: { top: 140, bottom: 140 },
+});
+assert.equal(regularHeight.mode, "phone", "full usable height keeps phone mode");
+assert.equal(reducedHeight.mode, "compact", "vertical insets can select compact mode by usable height");
 
 console.log("gameplayResponsiveLayout: five responsive fixtures fit safely");

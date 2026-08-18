@@ -18,9 +18,24 @@ export function getExplicitPath(pathId) {
   return pathId ? getCulturalPath(pathId) : null;
 }
 
-export function buildCulturalMapItems(allLevels, waveSize = 2) {
+export function buildCulturalMapItems(allLevels, culturalOrderVersion, waveSize = 2) {
   if (!Array.isArray(allLevels) || allLevels.length === 0) return [];
   const items = [];
+  if (culturalOrderVersion !== 2) {
+    items.push({ type: "path", key: "path-legacy-neutral", path: null, zone: NEUTRAL_CULTURAL_PATH });
+    allLevels.forEach((level, index) => {
+      items.push({
+        type: "level",
+        key: `level-${index}-${level.levelNumber ?? index + 1}`,
+        level,
+        path: null,
+        zone: NEUTRAL_CULTURAL_PATH,
+        waveIdx: index % waveSize,
+        displayIndex: index + 1,
+      });
+    });
+    return items;
+  }
   let lastPathKey;
   let waveIdx = 0;
   allLevels.forEach((level, index) => {

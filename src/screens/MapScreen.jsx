@@ -286,7 +286,11 @@ export default function MapScreen({ navigation, route }) {
 
   const currentLevel = levelInfo?.level ?? 1;
   const totalLevels = allLevels?.length ?? 0;
-  const items = useMemo(() => buildCulturalMapItems(allLevels, WAVE_RATIOS.length), [allLevels]);
+  const culturalOrderVersion = allLevels?.[0]?.culturalOrderVersion;
+  const items = useMemo(
+    () => buildCulturalMapItems(allLevels, culturalOrderVersion, WAVE_RATIOS.length),
+    [allLevels, culturalOrderVersion]
+  );
   const completedLevels = Math.max(0, currentLevel - 1);
 
   // Pre-compute item heights for getItemLayout — zone banners are ~104px, level rows are ROW_H.

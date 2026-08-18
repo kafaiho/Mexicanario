@@ -172,9 +172,10 @@ export const getAllLevels = query({
     const rawLevels = await ctx.db.query("levels").collect();
     const rawWords = await ctx.db.query("words").collect();
     const user = userId ? await ctx.db.get(userId) : null;
+    const culturalOrderVersion = user?.culturalOrderVersion ?? 1;
 
     // Use same ordering logic as gameplay so map matches the game exactly
-    const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "", user?.culturalOrderVersion ?? 1);
+    const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "", culturalOrderVersion);
 
     const wordMap = new Map(rawWords.map((w) => [w._id.toString(), w]));
     return ordered.map((lvl) => {
@@ -186,6 +187,7 @@ export const getAllLevels = query({
         pathId: wordDoc?.pathId,
         placeId: wordDoc?.placeId,
         editorialOrder: wordDoc?.editorialOrder,
+        culturalOrderVersion,
       };
     });
   },

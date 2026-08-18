@@ -5,7 +5,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   ImageBackground,
   Modal,
   Pressable,
@@ -18,6 +17,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import TopBar from "../components/TopBar";
+import CulturalAtlasIcon from "../components/CulturalAtlasIcon";
+const { getCulturalAsset } = require("../config/culturalAssets.js");
 import { useAuth } from "../context/AuthContext";
 import { tapMedium } from "../services/haptics";
 import { FONTS } from "../theme/designTokens";
@@ -31,69 +32,6 @@ const AMBER = "#D2691E";
 const GOLD = "#F8BE17";
 const WHEAT = "#FFE4B5";
 
-// ── Imágenes AI por colección ─────────────────────────────────────────────────
-// Mapea tanto nombres canónicos como cortos para máxima compatibilidad
-const _IMG = {
-  expresiones:    require("../../assets/images/collections/expresiones.webp"),
-  comida:         require("../../assets/images/collections/comida.webp"),
-  juegos:         require("../../assets/images/collections/juegos.webp"),
-  bebida:         require("../../assets/images/collections/bebida.webp"),
-  refranes:       require("../../assets/images/collections/refranes.webp"),
-  animales:       require("../../assets/images/collections/animales.webp"),
-  plantas:        require("../../assets/images/collections/plantas.webp"),
-  tradiciones:    require("../../assets/images/collections/tradiciones.webp"),
-  musica:         require("../../assets/images/collections/musica.webp"),
-  historia:       require("../../assets/images/collections/historia.webp"),
-  picaresca:      require("../../assets/images/collections/picaresca.webp"),
-  cultura:        require("../../assets/images/collections/cultura_popular.webp"),
-  monumentos:     require("../../assets/images/collections/monumentos.webp"),
-  leyendas:       require("../../assets/images/collections/leyendas.webp"),
-  digital:        require("../../assets/images/collections/mundo_digital.webp"),
-  vida:           require("../../assets/images/collections/vida_cotidiana.webp"),
-  remedios:       require("../../assets/images/collections/remedios.webp"),
-  artesanias:     require("../../assets/images/collections/artesanias.webp"),
-  deportes:       require("../../assets/images/collections/deportes.webp"),
-};
-const CATEGORY_IMAGE_MAP: Record<string, any> = {
-  // Nombres canónicos completos
-  "Expresiones y Modismos": _IMG.expresiones,
-  "Comida Mexicana":        _IMG.comida,
-  "Juegos y Niñez":         _IMG.juegos,
-  "Bebidas":                _IMG.bebida,
-  "Refranes y Dichos":      _IMG.refranes,
-  "Animales de México":     _IMG.animales,
-  "Flora Mexicana":         _IMG.plantas,
-  "Tradiciones y Fiestas":  _IMG.tradiciones,
-  "Música y Artistas":      _IMG.musica,
-  "Historia de México":     _IMG.historia,
-  "Albures y Picaresca":    _IMG.picaresca,
-  "Cultura Popular":        _IMG.cultura,
-  "Monumentos y Lugares":   _IMG.monumentos,
-  "Leyendas y Mitos":       _IMG.leyendas,
-  "Mundo Digital":          _IMG.digital,
-  // Nombres cortos (compatibilidad con DB antigua)
-  "Modismos":    _IMG.expresiones,
-  "Comida":      _IMG.comida,
-  "Juegos":      _IMG.juegos,
-  "Bebida":      _IMG.bebida,
-  "Refranes":    _IMG.refranes,
-  "Animales":    _IMG.animales,
-  "Plantas":     _IMG.plantas,
-  "Tradiciones": _IMG.tradiciones,
-  "Música":      _IMG.musica,
-  "Artistas":    _IMG.musica,
-  "Historia":    _IMG.historia,
-  "Albures":     _IMG.picaresca,
-  "Monumentos":  _IMG.monumentos,
-  "Leyendas":    _IMG.leyendas,
-  "Digital":     _IMG.digital,
-  "Jerga":       _IMG.expresiones,
-  // 4 categorías nuevas
-  "Vida Cotidiana":       _IMG.vida,
-  "Remedios Caseros":     _IMG.remedios,
-  "Artesanías de México": _IMG.artesanias,
-  "Deportes Mexicanos":   _IMG.deportes,
-};
 const WHEAT2 = "#F5DEB3";
 
 const { width, height } = Dimensions.get("window");
@@ -269,7 +207,7 @@ const CollectionCard = React.memo(function CollectionCard({ category, index, onP
   const totalWords = category.total ?? category.words?.length ?? 0;
   const unlockedWords = category.completed ?? 0;
   const pct = totalWords > 0 ? unlockedWords / totalWords : 0;
-  const img = CATEGORY_IMAGE_MAP[category.name] ?? null;
+  const asset = getCulturalAsset('collection', category.id);
   const isLocked = category.isUnlocked === false;
 
   return (
@@ -281,8 +219,8 @@ const CollectionCard = React.memo(function CollectionCard({ category, index, onP
       disabled={isLocked}
     >
       <View style={[styles.iconSquare, isLocked && { borderColor: "rgba(139,69,19,0.15)" }]}>
-        {img ? (
-          <Image source={img} style={[styles.iconImage, isLocked && { opacity: 0.4 }]} resizeMode="cover" />
+        {asset ? (
+          <CulturalAtlasIcon asset={asset} size={width * 0.17} borderRadius={9} decorative style={isLocked ? { opacity: 0.4 } : null} />
         ) : (
           <Text style={[styles.iconFallback, isLocked && { opacity: 0.4 }]}>{category.icon}</Text>
         )}
@@ -502,7 +440,17 @@ export default function ColeccionScreen({ navigation }: { navigation: any }) {
           <TouchableOpacity style={styles.overlayBackground} onPress={closeModal} activeOpacity={1} />
           <View style={styles.modalRootContainer}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{selectedCategory?.name}</Text>
+              <View style={styles.modalHeading}>
+                {getCulturalAsset('collection', selectedCategory?.id) ? (
+                  <CulturalAtlasIcon
+                    asset={getCulturalAsset('collection', selectedCategory?.id)}
+                    size={52}
+                    borderRadius={8}
+                    accessibilityLabel={`Ilustración de ${selectedCategory?.name}`}
+                  />
+                ) : <Text style={styles.modalHeadingEmoji}>{selectedCategory?.icon}</Text>}
+                <Text style={styles.modalTitle}>{selectedCategory?.name}</Text>
+              </View>
 
               {/* Warm border container for the grid */}
               <View style={styles.innerModalBox}>
@@ -670,10 +618,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1.5,
     borderColor: "rgba(139,69,19,0.3)",
-  },
-  iconImage: {
-    width: "100%",
-    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconFallback: {
     fontSize: width * 0.09,
@@ -775,8 +721,21 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.display,
     fontSize: width * 0.055,
     color: BROWN,
-    marginBottom: 16,
     textTransform: "capitalize",
+    flexShrink: 1,
+  },
+  modalHeading: {
+    width: "100%",
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 26,
+  },
+  modalHeadingEmoji: {
+    fontSize: 38,
   },
   innerModalBox: {
     width: "100%",

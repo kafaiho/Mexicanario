@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const testModules = [
   'src/utils/textUtils.test.js',
   'src/config/culturalTaxonomy.test.js',
+  'src/config/culturalAssets.test.js',
   'src/config/culturalContent.test.js',
   'src/config/regionConfig.test.js',
   'src/config/collectionPresentation.test.js',

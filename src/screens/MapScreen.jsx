@@ -13,7 +13,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
+import CulturalAtlasIcon from "../components/CulturalAtlasIcon";
 import { buildCulturalMapItems } from "../config/culturalPathSelection";
+const { getCulturalAsset } = require("../config/culturalAssets.js");
 import { useAuth } from "../context/AuthContext";
 import { notifySuccess, tapMedium } from "../services/haptics";
 import { TABLET_MODE } from "../utils/tabletSetup";
@@ -44,9 +46,18 @@ const ROW_H = TABLET_MODE ? 130 : 160;
 
 // ── ZoneBanner ────────────────────────────────────────────────────────────────
 function ZoneBanner({ zone }) {
+  const asset = zone.isNeutral ? null : getCulturalAsset('path', zone.id);
   return (
     <View style={[styles.zoneBanner, { backgroundColor: zone.color }]}>
-      <Text style={styles.zoneBannerEmoji}>{zone.emoji}</Text>
+      {asset ? (
+        <CulturalAtlasIcon
+          asset={asset}
+          size={58}
+          borderRadius={9}
+          accessibilityLabel={`Ilustración del camino ${zone.name}`}
+          style={styles.zoneBannerAtlas}
+        />
+      ) : <Text style={styles.zoneBannerEmoji}>{zone.emoji}</Text>}
       <View style={styles.zoneBannerTexts}>
         <Text style={styles.zoneBannerName}>{zone.name.toUpperCase()}</Text>
         <Text style={styles.zoneBannerDesc}>{zone.desc}</Text>
@@ -473,6 +484,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   zoneBannerEmoji: { fontSize: 30 },
+  zoneBannerAtlas: { borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
   zoneBannerTexts: { flex: 1 },
   zoneBannerName: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
   zoneBannerDesc: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontWeight: "600", marginTop: 2 },

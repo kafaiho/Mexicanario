@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../screens/GameplayScreen.jsx'), 'utf8');
 const juicySource = fs.readFileSync(path.join(__dirname, '../components/JuicyButton.jsx'), 'utf8');
+const petSource = fs.readFileSync(path.join(__dirname, '../components/PetCompanion/DraggablePet.jsx'), 'utf8');
 
 for (const label of [
   'Revelar una letra por ${HINT_COST} monedas',
@@ -36,5 +37,7 @@ assert.match(source, /AccessibilityInfo/);
 assert.match(juicySource, /reduceMotion\s*=\s*false/);
 assert.doesNotMatch(juicySource, /AccessibilityInfo/, 'each key must not create its own native motion listener');
 assert.match(source, /reduceMotion=\{reduceMotionEnabled\}/);
+assert.match(source, /<DraggablePet[\s\S]*?reduceMotion=\{reduceMotionEnabled\}/);
+assert.match(petSource, /if \(reduceMotion\)[\s\S]*?floatAnim\.setValue\(0\)/);
 
 console.log('gameplay controls are playful and accessible');

@@ -1745,6 +1745,7 @@ export default function GameplayScreen({ navigation, route }) {
               region={wordRegion || null}
               currentWord={mexicanWord || null}
               gameBubble={mascotaBubble}
+              reduceMotion={reduceMotionEnabled}
               reaction={
                 mascotaReaction === 'celebrating' ? 'correct'
                   : mascotaReaction === 'sad' ? 'wrong'

@@ -355,7 +355,7 @@ const SELF_PHRASES = [
   "¡Esta la sé yo de memoria! Literalmente soy yo.",
 ];
 
-export default function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null }) {
+export default function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
   const vinculo = usePetStore((s) => s.vinculo);
   const petType = usePetStore((s) => s.petType);
   const stage = getStage(vinculo);
@@ -423,20 +423,27 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         clearTimeout(bubbleTimer.current);
         bubbleTimer.current = setTimeout(() => setBubble(null), 3500);
         // Bounce animation
-        Animated.sequence([
-          Animated.timing(tapAnim, { toValue: 1.35, duration: 120, useNativeDriver: false }),
-          Animated.spring(tapAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: false }),
-        ]).start();
-        shakeIt();
+        if (!reduceMotion) {
+          Animated.sequence([
+            Animated.timing(tapAnim, { toValue: 1.35, duration: 120, useNativeDriver: false }),
+            Animated.spring(tapAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: false }),
+          ]).start();
+          shakeIt();
+        }
       }, 800);
     } else if (!matches) {
       shownSelfRef.current = false;
     }
     return () => { clearTimeout(delayTimer); clearTimeout(bubbleTimer.current); };
-  }, [currentWord, petType]);
+  }, [currentWord, petType, reduceMotion]);
 
   // Idle breathing + floating loop
   useEffect(() => {
+    if (reduceMotion) {
+      floatAnim.setValue(0);
+      breatheAnim.setValue(1);
+      return undefined;
+    }
     const loop = Animated.loop(
       Animated.parallel([
         Animated.sequence([
@@ -451,7 +458,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [reduceMotion, floatAnim, breatheAnim]);
 
   // On orientation change: update dimsRef and snap pet to nearest side at same level
   useEffect(() => {
@@ -479,6 +486,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   }, []);
 
   const shakeIt = useCallback(() => {
+    if (reduceMotion) return;
     shakeAnim.setValue(0);
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: false }),
@@ -486,7 +494,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       Animated.timing(shakeAnim, { toValue: 4, duration: 45, useNativeDriver: false }),
       Animated.timing(shakeAnim, { toValue: 0, duration: 45, useNativeDriver: false }),
     ]).start();
-  }, []);
+  }, [reduceMotion, shakeAnim]);
 
   // Bounce to nearest side home (left or right) based on where pet landed
   const bounceHome = useCallback(() => {

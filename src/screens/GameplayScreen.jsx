@@ -308,6 +308,9 @@ export default function GameplayScreen({ navigation, route }) {
   // ── Dynamic keyboard layout ──
   const kb = useKeyboardLayout();
   const layout = kb.layout;
+  const compactKeyHitSlop = layout.mode === 'compact'
+    ? { top: 4, right: 2, bottom: 4, left: 2 }
+    : undefined;
   const coinCenterX = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
   const coinCenterY = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
 
@@ -1862,7 +1865,12 @@ export default function GameplayScreen({ navigation, route }) {
             {/* Power-up row */}
             <View style={styles.powerUpRow}>
               {/* Revelar 1 letra (A) – 25🪙 */}
-              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpReveal]} onPress={handleReveal}>
+              <TouchableOpacity
+                style={[styles.powerUpBtn, styles.powerUpReveal]}
+                onPress={handleReveal}
+                accessibilityRole="button"
+                accessibilityLabel={`Revelar una letra por ${HINT_COST} monedas`}
+              >
                 <Text style={styles.powerUpBtnLabel}>A</Text>
                 <View style={styles.powerUpCost}>
                   <Text style={styles.powerUpCostText}>🪙{HINT_COST}</Text>
@@ -1870,7 +1878,12 @@ export default function GameplayScreen({ navigation, route }) {
               </TouchableOpacity>
 
               {/* Revelar 3 letras (🔓) – 75🪙 */}
-              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpBorrar]} onPress={handleBorrar}>
+              <TouchableOpacity
+                style={[styles.powerUpBtn, styles.powerUpBorrar]}
+                onPress={handleBorrar}
+                accessibilityRole="button"
+                accessibilityLabel={`Revelar tres letras por ${BORRAR_COST} monedas`}
+              >
                 <Text style={styles.powerUpBtnEmoji}>🔓</Text>
                 <View style={styles.powerUpCost}>
                   <Text style={styles.powerUpCostText}>🪙{BORRAR_COST}</Text>
@@ -1878,7 +1891,12 @@ export default function GameplayScreen({ navigation, route }) {
               </TouchableOpacity>
 
               {/* Completar todo (⭐) – 200🪙 */}
-              <TouchableOpacity style={[styles.powerUpBtn, styles.powerUpVerificar]} onPress={handleVerificar}>
+              <TouchableOpacity
+                style={[styles.powerUpBtn, styles.powerUpVerificar]}
+                onPress={handleVerificar}
+                accessibilityRole="button"
+                accessibilityLabel={`Completar palabra por ${VERIFICAR_COST} monedas`}
+              >
                 <Text style={styles.powerUpBtnEmoji}>⭐</Text>
                 <View style={styles.powerUpCost}>
                   <Text style={styles.powerUpCostText}>🪙{VERIFICAR_COST}</Text>
@@ -1889,6 +1907,8 @@ export default function GameplayScreen({ navigation, route }) {
               <TouchableOpacity
                 style={[styles.powerUpBtn, styles.powerUpChallenge]}
                 onPress={handleShareChallenge}
+                accessibilityRole="button"
+                accessibilityLabel="Retar a una amistad"
               >
                 <Text style={styles.powerUpBtnLabel}>!</Text>
               </TouchableOpacity>
@@ -1914,6 +1934,10 @@ export default function GameplayScreen({ navigation, route }) {
                         onPressOut={key === "DELETE_ONE" ? stopDeleteRepeat : undefined}
                         intensity={key === "CLEAR_ALL" ? "medium" : "light"}
                         scaleDown={0.88}
+                        accessibilityRole="button"
+                        accessibilityLabel={isSpecial ? key === "CLEAR_ALL" ? "Borrar toda la palabra" : "Borrar una letra" : `Letra ${key}`}
+                        accessibilityState={{ disabled: isDimmed }}
+                        hitSlop={compactKeyHitSlop}
                       >
                         {key === "DELETE_ONE" ? (
                           Platform.OS === "android" ? (
@@ -2656,7 +2680,12 @@ const styles = StyleSheet.create({
   // ── Keyboard (only sub-styles still referenced — main styles are in dynamicStyles) ──
   deleteKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
   clearKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: "#C8C8D0" },
-  keyDimmed: { backgroundColor: "#D0D0D8", opacity: 0.25 },
+  keyDimmed: {
+    backgroundColor: "#D0D0D8",
+    opacity: 0.32,
+    borderWidth: 2,
+    borderColor: "#8A949C",
+  },
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   modalOverlay: {

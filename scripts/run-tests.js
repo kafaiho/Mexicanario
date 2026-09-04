@@ -13,6 +13,7 @@ const testModules = [
   'src/config/gameplayResponsiveLayout.test.js',
   'src/hooks/useKeyboardLayout.contract.test.js',
   'src/config/gameplayResponsiveStructure.test.js',
+  'src/config/gameplayControlsPresentation.test.js',
 ];
 
 const typescriptTestModules = [

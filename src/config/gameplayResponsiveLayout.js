@@ -32,11 +32,12 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
   const keyboardWidth = panelWidth;
   const controlsWidth = panelWidth;
   const keyboardPadding = mode === "compact" ? 4 : mode === "phone" ? 6 : 8;
-  const keyboardInnerWidth = Math.max(0, keyboardWidth - keyboardPadding * 2);
+  const keyboardHorizontalPadding = 14;
+  const keyboardInnerWidth = Math.max(0, keyboardWidth - keyboardHorizontalPadding * 2);
   const preferredKeyGap = mode === "compact" ? 3 : mode === "phone" ? 4 : 6;
-  const keyGap = Math.min(preferredKeyGap, keyboardInnerWidth / 9);
-  const tenKeyWidth = (keyboardInnerWidth - keyGap * 9) / 10;
-  const mixedRowKeyWidth = (keyboardInnerWidth - keyGap * 8) / 9.5;
+  const keyGap = Math.min(preferredKeyGap, keyboardInnerWidth / 10);
+  const tenKeyWidth = (keyboardInnerWidth - keyGap * 10) / 10;
+  const mixedRowKeyWidth = (keyboardInnerWidth - keyGap * 9) / 9.5;
   const keyWidth = Math.max(0, Math.min(tenKeyWidth, mixedRowKeyWidth));
   const specialWidth = keyWidth * 1.25;
   const keyHeight = mode === "compact" ? 36 : mode === "phone" ? 44 : 48;
@@ -58,6 +59,7 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
     keyboardWidth,
     keyboardHeight,
     keyboardPadding,
+    keyboardHorizontalPadding,
     keyboardInnerWidth,
     controlsWidth,
     keyGap,

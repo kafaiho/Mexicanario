@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { getGameplayResponsiveLayout } = require('../config/gameplayResponsiveLayout');
+const { getKeyboardLayoutMetrics } = require('../config/keyboardLayout');
 
 const hookPath = path.join(__dirname, 'useKeyboardLayout.js');
 const source = fs.readFileSync(hookPath, 'utf8');
@@ -8,23 +10,55 @@ const source = fs.readFileSync(hookPath, 'utf8');
 assert.match(source, /import\s*{[^}]*useWindowDimensions[^}]*}\s*from\s*['"]react-native['"]/s);
 assert.match(source, /useSafeAreaInsets/);
 assert.match(source, /getGameplayResponsiveLayout/);
+assert.match(source, /getKeyboardLayoutMetrics/);
 assert.match(source, /const\s*{\s*width\s*,\s*height\s*}\s*=\s*useWindowDimensions\(\)/);
 assert.doesNotMatch(source, /PHONE_(?:WIDTH|HEIGHT)/);
 assert.doesNotMatch(source, /Dimensions\.get\s*\(/);
 
+const compactLayout = getGameplayResponsiveLayout({
+  width: 320,
+  height: 568,
+  insets: { top: 24, right: 0, bottom: 20, left: 0 },
+});
+const compact = getKeyboardLayoutMetrics({ layout: compactLayout });
+const compactInnerWidth = compactLayout.keyboardWidth - compact.kbPaddingH * 2;
+
 for (const property of [
-  'layout',
-  'kbKeyW',
-  'kbSpecialW',
-  'kbKeyH',
-  'kbHeight',
-  'kbMargin',
-  'kbPaddingV',
-  'kbRowMarginB',
-  'kbFontSize',
-  'kbIconSize',
+  'layout', 'kbKeyW', 'kbSpecialW', 'kbKeyH', 'kbHeight', 'keyboardHeight',
+  'powerUpHeight', 'kbMargin', 'kbPaddingH', 'kbPaddingV', 'kbRowMarginB',
+  'kbFontSize', 'kbIconSize',
 ]) {
-  assert.match(source, new RegExp(`\\b${property}\\b`), `missing ${property} from hook contract`);
+  assert.ok(Object.hasOwn(compact, property), `missing ${property} from hook metrics contract`);
 }
+
+assert.ok(compact.kbHeight > compact.keyboardHeight, 'Gameplay height includes its power-up row');
+assert.ok(compact.kbHeight <= compactLayout.safeHeight, 'compact controls stay inside safe height');
+assert.ok(
+  compact.kbKeyW * 10 + compact.kbMargin * 20 <= compactInnerWidth,
+  'ten-key row fits the consumer padding and per-key margins',
+);
+assert.ok(
+  compact.kbKeyW * 7 + compact.kbSpecialW * 2 + compact.kbMargin * 18 <= compactInnerWidth,
+  'mixed row fits the consumer padding and per-key margins',
+);
+
+const landscapeLayout = getGameplayResponsiveLayout({
+  width: 1024,
+  height: 768,
+  insets: { top: 0, right: 20, bottom: 20, left: 20 },
+});
+const landscape = getKeyboardLayoutMetrics({ layout: landscapeLayout });
+assert.ok(landscape.kbKeyW > compact.kbKeyW, 'orientation changes recompute key dimensions');
+
+const overridden = getKeyboardLayoutMetrics({
+  layout: compactLayout,
+  portraitHeight: 999,
+  portraitKeyH: 999,
+});
+assert.equal(overridden.kbHeight, compactLayout.safeHeight, 'height override clamps to safe height');
+assert.ok(
+  overridden.keyboardHeight + overridden.powerUpHeight <= overridden.kbHeight,
+  'clamped key override keeps all control regions inside the container',
+);
 
 console.log('useKeyboardLayout contract tests passed');

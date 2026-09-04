@@ -25,13 +25,14 @@ for (const fixture of fixtures) {
   assert.ok(layout.keyboardWidth <= availableWidth, `${fixture.width}: keyboard stays inside safe width`);
   assert.ok(layout.controlsWidth <= availableWidth, `${fixture.width}: controls stay inside safe width`);
   assert.ok(
-    layout.keyWidth * 10 + layout.keyGap * 9 <= layout.keyboardInnerWidth,
+    layout.keyWidth * 10 + layout.keyGap * 10 <= layout.keyboardInnerWidth,
     `${fixture.width}: ten-key row fits`,
   );
   assert.ok(
-    layout.keyWidth * 7 + layout.specialWidth * 2 + layout.keyGap * 8 <= layout.keyboardInnerWidth,
+    layout.keyWidth * 7 + layout.specialWidth * 2 + layout.keyGap * 9 <= layout.keyboardInnerWidth,
     `${fixture.width}: seven keys plus two special keys fit`,
   );
+  assert.equal(layout.keyboardHorizontalPadding, 14, 'model matches the current keyboard consumer padding');
   assert.ok(layout.keyHeight >= 36, `${fixture.width}: keys remain tappable`);
   assert.ok(layout.outerGap >= 0 && layout.keyboardPadding >= 0, "published spacing remains non-negative");
   assert.equal(

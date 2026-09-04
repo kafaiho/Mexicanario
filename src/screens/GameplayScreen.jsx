@@ -1636,6 +1636,9 @@ export default function GameplayScreen({ navigation, route }) {
       paddingHorizontal: layout.outerGap,
       paddingBottom: layout.boardBottomPadding,
     },
+    devButton: {
+      top: layout.boardTopPadding + 8,
+    },
     contentRegion: {
       flex: 1,
       minWidth: 0,
@@ -1766,7 +1769,7 @@ export default function GameplayScreen({ navigation, route }) {
             {/* DEV: botón saltar nivel — solo visible en modo desarrollador */}
             {devEnabled && (
               <TouchableOpacity
-                style={styles.devBtn}
+                style={[styles.devBtn, dynamicStyles.devButton]}
                 onPress={() => { setDevLevelInput(""); setShowDevModal(true); }}
               >
                 <Text style={styles.devBtnText}>🔧 Nivel</Text>
@@ -1953,6 +1956,7 @@ export default function GameplayScreen({ navigation, route }) {
                         accessibilityLabel={isSpecial ? key === "CLEAR_ALL" ? "Borrar toda la palabra" : "Borrar una letra" : `Letra ${key}`}
                         accessibilityState={{ disabled: isDimmed }}
                         hitSlop={compactKeyHitSlop}
+                        reduceMotion={reduceMotionEnabled}
                       >
                         {key === "DELETE_ONE" ? (
                           Platform.OS === "android" ? (
@@ -2457,7 +2461,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   devBtn: {
     position: "absolute",
-    top: height * 0.13,
     right: 12,
     zIndex: 999,
     backgroundColor: "#E67E22",

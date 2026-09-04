@@ -1,5 +1,5 @@
-import React, { useRef, useCallback, useEffect, useState } from "react";
-import { AccessibilityInfo, Animated, Pressable } from "react-native";
+import React, { useRef, useCallback } from "react";
+import { Animated, Pressable } from "react-native";
 import { tapLight, tapMedium } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 
@@ -30,16 +30,10 @@ const JuicyButton = React.memo(function JuicyButton({
   sound = "click",
   disabled = false,
   scaleDown = 0.92,
+  reduceMotion = false,
   ...pressableProps
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => subscription.remove();
-  }, []);
 
   const handlePressIn = useCallback(() => {
     // 1. Animación: compresión rápida

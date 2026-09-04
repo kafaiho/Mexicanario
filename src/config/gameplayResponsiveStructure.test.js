@@ -16,5 +16,6 @@ assert.match(source, /paddingBottom:\s*layout\.boardBottomPadding/);
 assert.doesNotMatch(source, /keyboardContainer:\s*{[^}]*position:\s*['"]absolute['"]/s);
 assert.doesNotMatch(source, /Dimensions\.get\s*\(/, 'orientation-critical dimensions must stay live');
 assert.doesNotMatch(source, /_STATIC_KB_|TILE_SCALE/);
+assert.doesNotMatch(source, /\btop:\s*height\s*\*/, 'styles must not reference removed static dimensions');
 
 console.log('gameplay responsive structure uses safe semantic regions');

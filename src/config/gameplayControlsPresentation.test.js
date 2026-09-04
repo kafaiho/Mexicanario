@@ -33,6 +33,8 @@ for (const token of ['#EEF1F3', '#FFFFFF', '#154B6D']) {
 }
 assert.match(source, /maxWidth:\s*layout\.isLandscape\s*\?\s*160\s*:\s*layout\.mode === 'tablet'\s*\?\s*140/);
 assert.match(source, /AccessibilityInfo/);
-assert.match(juicySource, /AccessibilityInfo/);
+assert.match(juicySource, /reduceMotion\s*=\s*false/);
+assert.doesNotMatch(juicySource, /AccessibilityInfo/, 'each key must not create its own native motion listener');
+assert.match(source, /reduceMotion=\{reduceMotionEnabled\}/);
 
 console.log('gameplay controls are playful and accessible');

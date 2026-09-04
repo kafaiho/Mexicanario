@@ -18,7 +18,7 @@ const KEYBOARD_HEIGHT = Math.min(250, height * 0.37);
  *   compact   – boolean (true = flotando sobre teclado, false = pantalla completa)
  *   region    – string (e.g., 'CDMX', 'Norte') for regional accessories
  */
-export default function PetCompanion({ reaction = null, compact = false, region = null }) {
+export default function PetCompanion({ reaction = null, compact = false, region = null, reduceMotion = false }) {
   const vinculo = usePetStore((s) => s.vinculo);
   const petType = usePetStore((s) => s.petType);
   const caricia = usePetStore((s) => s.caricia);
@@ -42,19 +42,21 @@ export default function PetCompanion({ reaction = null, compact = false, region 
     caricia(); // +5 vínculo
     playPetSound("happy", petType);
     if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    setTapReaction('correct');
-    tapTimerRef.current = setTimeout(() => setTapReaction(null), 100);
-  }, [caricia]);
+    if (!reduceMotion) {
+      setTapReaction('correct');
+      tapTimerRef.current = setTimeout(() => setTapReaction(null), 100);
+    }
+  }, [caricia, petType, reduceMotion]);
 
   // Particles burst on correct answer (game) or tap
   const [particlesVisible, setParticlesVisible] = useState(false);
   useEffect(() => {
-    if (reaction === 'correct') {
+    if (reaction === 'correct' && !reduceMotion) {
       setParticlesVisible(true);
       const t = setTimeout(() => setParticlesVisible(false), PARTICLE_DURATION + 100);
       return () => clearTimeout(t);
     }
-  }, [reaction]);
+  }, [reaction, reduceMotion]);
 
   // Active reaction: game reaction takes priority, tap fills in otherwise
   const activeReaction = reaction || tapReaction;
@@ -73,8 +75,9 @@ export default function PetCompanion({ reaction = null, compact = false, region 
           reaction={activeReaction}
           size={size}
           skin={skin}
+          reduceMotion={reduceMotion}
         />
-        {particlesVisible && <PetParticles stage={stage} />}
+        {particlesVisible && !reduceMotion && <PetParticles stage={stage} />}
       </View>
     </TouchableOpacity>
   );

@@ -5,6 +5,8 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../screens/GameplayScreen.jsx'), 'utf8');
 const juicySource = fs.readFileSync(path.join(__dirname, '../components/JuicyButton.jsx'), 'utf8');
 const petSource = fs.readFileSync(path.join(__dirname, '../components/PetCompanion/DraggablePet.jsx'), 'utf8');
+const petCompanionSource = fs.readFileSync(path.join(__dirname, '../components/PetCompanion/index.jsx'), 'utf8');
+const petSpriteSource = fs.readFileSync(path.join(__dirname, '../components/PetCompanion/PetSprite.jsx'), 'utf8');
 
 for (const label of [
   'Revelar una letra por ${HINT_COST} monedas',
@@ -39,5 +41,12 @@ assert.doesNotMatch(juicySource, /AccessibilityInfo/, 'each key must not create 
 assert.match(source, /reduceMotion=\{reduceMotionEnabled\}/);
 assert.match(source, /<DraggablePet[\s\S]*?reduceMotion=\{reduceMotionEnabled\}/);
 assert.match(petSource, /if \(reduceMotion\)[\s\S]*?floatAnim\.setValue\(0\)/);
+assert.match(petSource, /reduceMotionRef\.current\s*=\s*reduceMotion/);
+assert.match(petSource, /if \(!reduceMotionRef\.current\)[\s\S]*?Animated\.sequence/);
+assert.doesNotMatch(petSource, /\[currentWord, petType, reduceMotion\]/, 'motion changes must not cancel the pending word bubble');
+assert.match(petSource, /reduceMotion=\{reduceMotion\}/);
+assert.match(petCompanionSource, /<PetSprite[\s\S]*?reduceMotion=\{reduceMotion\}/);
+assert.match(petSpriteSource, /if \(reduceMotion\)[\s\S]*?cancelAnimation\(breathScale\)/);
+assert.match(petSpriteSource, /if \(reduceMotion\) return;[\s\S]*?reaction === 'correct'/);
 
 console.log('gameplay controls are playful and accessible');

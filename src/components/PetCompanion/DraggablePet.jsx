@@ -356,6 +356,8 @@ const SELF_PHRASES = [
 ];
 
 export default function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
   const vinculo = usePetStore((s) => s.vinculo);
   const petType = usePetStore((s) => s.petType);
   const stage = getStage(vinculo);
@@ -423,7 +425,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         clearTimeout(bubbleTimer.current);
         bubbleTimer.current = setTimeout(() => setBubble(null), 3500);
         // Bounce animation
-        if (!reduceMotion) {
+        if (!reduceMotionRef.current) {
           Animated.sequence([
             Animated.timing(tapAnim, { toValue: 1.35, duration: 120, useNativeDriver: false }),
             Animated.spring(tapAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: false }),
@@ -435,7 +437,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       shownSelfRef.current = false;
     }
     return () => { clearTimeout(delayTimer); clearTimeout(bubbleTimer.current); };
-  }, [currentWord, petType, reduceMotion]);
+  }, [currentWord, petType]);
 
   // Idle breathing + floating loop
   useEffect(() => {
@@ -486,7 +488,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
   }, []);
 
   const shakeIt = useCallback(() => {
-    if (reduceMotion) return;
+    if (reduceMotionRef.current) return;
     shakeAnim.setValue(0);
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: false }),
@@ -494,7 +496,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
       Animated.timing(shakeAnim, { toValue: 4, duration: 45, useNativeDriver: false }),
       Animated.timing(shakeAnim, { toValue: 0, duration: 45, useNativeDriver: false }),
     ]).start();
-  }, [reduceMotion, shakeAnim]);
+  }, [shakeAnim]);
 
   // Bounce to nearest side home (left or right) based on where pet landed
   const bounceHome = useCallback(() => {
@@ -507,6 +509,10 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     const homeX = goLeft ? Math.round(maxX * 0.07) : Math.round(maxX * 0.86);
     const homeY = getHomeY(w, h, sz);
     try {
+      if (reduceMotionRef.current) {
+        pan.setValue({ x: homeX, y: homeY });
+        return;
+      }
       Animated.spring(pan, {
         toValue: { x: homeX, y: homeY },
         friction: 5,
@@ -590,10 +596,12 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
           // ── Tap: show random phrase + scale pulse ──
           showBubble('tap');
 
-          Animated.sequence([
-            Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: false }),
-            Animated.spring(tapAnim, { toValue: 1, friction: 4, tension: 200, useNativeDriver: false }),
-          ]).start();
+          if (!reduceMotionRef.current) {
+            Animated.sequence([
+              Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: false }),
+              Animated.spring(tapAnim, { toValue: 1, friction: 4, tension: 200, useNativeDriver: false }),
+            ]).start();
+          }
           activeZoneRef.current = null;
           return;
         }
@@ -612,6 +620,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
         if (inKeyboardZone || aboveTopBar || tooFarLeft || tooFarRight) {
           bounceHome();
+        } else if (reduceMotionRef.current) {
+          pan.setValue({ x: finalX, y: finalY });
         } else {
           Animated.spring(pan, {
             toValue: { x: finalX, y: finalY },
@@ -640,7 +650,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
             { scale: Animated.multiply(breatheAnim, tapAnim) },
           ],
         }}>
-          <PetCompanion reaction={reaction} compact={false} region={region} />
+          <PetCompanion reaction={reaction} compact={false} region={region} reduceMotion={reduceMotion} />
         </Animated.View>
       </Animated.View>
 

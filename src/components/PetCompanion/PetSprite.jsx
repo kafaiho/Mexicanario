@@ -7,6 +7,7 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withRepeat,
+  cancelAnimation,
   withSequence,
   withSpring,
   withTiming,
@@ -38,7 +39,7 @@ import {
  *   size     – container size in dp
  *   skin     – text/emoji or image source for regional accessory
  */
-export default function PetSprite({ assets, stage, mood, reaction, size, skin }) {
+export default function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = false }) {
   // ── Shared values ────────────────────────────────────────────────────────
   const breathScale = useSharedValue(1.0);
   const celebrateY = useSharedValue(0);
@@ -53,6 +54,11 @@ export default function PetSprite({ assets, stage, mood, reaction, size, skin })
 
   // ── Breathing loop ───────────────────────────────────────────────────────
   useEffect(() => {
+    if (reduceMotion) {
+      cancelAnimation(breathScale);
+      breathScale.value = 1;
+      return undefined;
+    }
     breathScale.value = withRepeat(
       withSequence(
         withTiming(BREATHING.to, { duration: BREATHING.duration, easing: BREATHING.easing }),
@@ -61,10 +67,19 @@ export default function PetSprite({ assets, stage, mood, reaction, size, skin })
       -1,
       false
     );
-  }, []);
+  }, [reduceMotion, breathScale]);
 
   // ── Parallax loops (phase-offset per layer via inverted start) ───────────
   useEffect(() => {
+    if (reduceMotion) {
+      cancelAnimation(bodyParallax);
+      cancelAnimation(wingsParallax);
+      cancelAnimation(auraParallax);
+      bodyParallax.value = 0;
+      wingsParallax.value = 0;
+      auraParallax.value = 0;
+      return undefined;
+    }
     const { amplitude: bA, period: bP } = PARALLAX.body;
     bodyParallax.value = -bA;
     bodyParallax.value = withRepeat(
@@ -94,7 +109,7 @@ export default function PetSprite({ assets, stage, mood, reaction, size, skin })
       ),
       -1
     );
-  }, []);
+  }, [reduceMotion, bodyParallax, wingsParallax, auraParallax]);
 
   // ── Celebrate ────────────────────────────────────────────────────────────
   const triggerCelebrate = useCallback(() => {
@@ -135,9 +150,10 @@ export default function PetSprite({ assets, stage, mood, reaction, size, skin })
 
   // ── React to reaction prop ───────────────────────────────────────────────
   useEffect(() => {
+    if (reduceMotion) return;
     if (reaction === 'correct') triggerCelebrate();
     else if (reaction === 'wrong') triggerSad();
-  }, [reaction]);
+  }, [reaction, reduceMotion, triggerCelebrate, triggerSad]);
 
   // ── Shadow (derived from breathScale) ────────────────────────────────────
   const shadowOpacity = useDerivedValue(() =>

@@ -47,6 +47,10 @@ assert.doesNotMatch(petSource, /\[currentWord, petType, reduceMotion\]/, 'motion
 assert.match(petSource, /reduceMotion=\{reduceMotion\}/);
 assert.match(petCompanionSource, /<PetSprite[\s\S]*?reduceMotion=\{reduceMotion\}/);
 assert.match(petSpriteSource, /if \(reduceMotion\)[\s\S]*?cancelAnimation\(breathScale\)/);
-assert.match(petSpriteSource, /if \(reduceMotion\) return;[\s\S]*?reaction === 'correct'/);
+assert.match(petSpriteSource, /if \(reduceMotion\) \{[\s\S]*?return undefined;[\s\S]*?reaction === 'correct'/);
+assert.match(petCompanionSource, /setParticlesVisible\(false\)/);
+for (const animatedValue of ['celebrateY', 'squashX', 'squashY', 'sadY', 'sadScaleV']) {
+  assert.match(petSpriteSource, new RegExp(`cancelAnimation\\(${animatedValue}\\)`), `reduce motion must cancel ${animatedValue}`);
+}
 
 console.log('gameplay controls are playful and accessible');

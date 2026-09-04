@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -40,6 +40,8 @@ import {
  *   skin     – text/emoji or image source for regional accessory
  */
 export default function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = false }) {
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
   // ── Shared values ────────────────────────────────────────────────────────
   const breathScale = useSharedValue(1.0);
   const celebrateY = useSharedValue(0);
@@ -143,16 +145,34 @@ export default function PetSprite({ assets, stage, mood, reaction, size, skin, r
     sadScaleV.value = withTiming(SAD_DROOP.scale, { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
     // Auto-recover after 1.5s
     setTimeout(() => {
-      sadY.value = withTiming(0, { duration: 400 });
-      sadScaleV.value = withTiming(1.0, { duration: 400 });
+      if (reduceMotionRef.current) {
+        sadY.value = 0;
+        sadScaleV.value = 1;
+      } else {
+        sadY.value = withTiming(0, { duration: 400 });
+        sadScaleV.value = withTiming(1.0, { duration: 400 });
+      }
     }, 1500);
   }, []);
 
   // ── React to reaction prop ───────────────────────────────────────────────
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion) {
+      cancelAnimation(celebrateY);
+      cancelAnimation(squashX);
+      cancelAnimation(squashY);
+      cancelAnimation(sadY);
+      cancelAnimation(sadScaleV);
+      celebrateY.value = 0;
+      squashX.value = 1;
+      squashY.value = 1;
+      sadY.value = 0;
+      sadScaleV.value = 1;
+      return undefined;
+    }
     if (reaction === 'correct') triggerCelebrate();
     else if (reaction === 'wrong') triggerSad();
+    return undefined;
   }, [reaction, reduceMotion, triggerCelebrate, triggerSad]);
 
   // ── Shadow (derived from breathScale) ────────────────────────────────────

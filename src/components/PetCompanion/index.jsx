@@ -56,6 +56,8 @@ export default function PetCompanion({ reaction = null, compact = false, region 
       const t = setTimeout(() => setParticlesVisible(false), PARTICLE_DURATION + 100);
       return () => clearTimeout(t);
     }
+    setParticlesVisible(false);
+    return undefined;
   }, [reaction, reduceMotion]);
 
   // Active reaction: game reaction takes priority, tap fills in otherwise

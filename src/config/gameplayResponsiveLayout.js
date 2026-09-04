@@ -56,6 +56,7 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
     contentWidth,
     columnGap,
     safeHeight,
+    bottomInset,
     keyboardWidth,
     keyboardHeight,
     keyboardPadding,

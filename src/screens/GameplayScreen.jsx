@@ -307,6 +307,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // ── Dynamic keyboard layout ──
   const kb = useKeyboardLayout();
+  const layout = kb.layout;
   const coinCenterX = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
   const coinCenterY = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
 
@@ -1606,20 +1607,40 @@ export default function GameplayScreen({ navigation, route }) {
 
   // ── Dynamic styles (keyboard always at bottom) ─────────────────────────────
   const dynamicStyles = useMemo(() => ({
-    gameContent: {
+    gameplayBoard: {
       flex: 1,
-      paddingTop: 104,
-      paddingHorizontal: 16,
-      paddingBottom: kb.kbHeight + 10,
+      flexDirection: layout.isLandscape ? 'row' : 'column',
+      gap: layout.sectionGap,
+      width: '100%',
+      maxWidth: layout.contentMaxWidth,
+      alignSelf: 'center',
+      paddingTop: layout.mode === 'compact' ? 76 : 96,
+      paddingHorizontal: layout.outerGap,
+      paddingBottom: Math.max(layout.outerGap, layout.bottomInset),
+    },
+    contentRegion: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: 'center',
+      gap: layout.sectionGap,
+    },
+    clueRegion: {
+      gap: layout.sectionGap,
+    },
+    answerRegion: {
+      flexShrink: 1,
+      gap: layout.sectionGap,
+      justifyContent: 'center',
+    },
+    controlsRegion: {
+      width: layout.isLandscape ? layout.controlsWidth : '100%',
+      maxWidth: layout.controlsWidth,
+      alignSelf: 'center',
+      justifyContent: 'flex-end',
     },
     keyboardContainer: {
-      position: 'absolute',
-      bottom: TABLET_MODE ? 20 : 0,
-      left: TABLET_MODE ? 16 : 0,
-      right: TABLET_MODE ? 16 : 0,
-      borderRadius: TABLET_MODE ? 20 : 0,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      width: '100%',
+      borderRadius: 20,
       height: kb.kbHeight,
       backgroundColor: '#EAECEE',
       shadowColor: '#000',
@@ -1662,7 +1683,7 @@ export default function GameplayScreen({ navigation, route }) {
     deleteIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#1A5276' },
     deleteIconText: { fontSize: TABLET_MODE ? 28 : 20, color: '#1A5276' },
     clearIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#C0392B' },
-  }), [kb]);
+  }), [kb, layout]);
 
   // Pre-computed keyboard key styles — dynamic for orientation
   const dynKeyStylesNormal = useMemo(() => ({
@@ -1735,7 +1756,9 @@ export default function GameplayScreen({ navigation, route }) {
             )}
 
             {/* Game Content */}
-            <View style={dynamicStyles.gameContent}>
+            <View style={dynamicStyles.gameplayBoard}>
+              <View style={dynamicStyles.contentRegion}>
+                <View style={dynamicStyles.clueRegion}>
 
           {/* ── Clue Card ── */}
           <View style={styles.clueCard}>
@@ -1768,6 +1791,9 @@ export default function GameplayScreen({ navigation, route }) {
           )}
 
           {/* ── Category icons row ── */}
+                </View>
+
+                <View style={dynamicStyles.answerRegion}>
           <View style={styles.categoryRow}>
             {categoryEmojis.map((emoji, i) => (
               <Text key={i} style={styles.categoryEmoji}>{emoji}</Text>
@@ -1826,9 +1852,11 @@ export default function GameplayScreen({ navigation, route }) {
               </View>
             ))}
           </Animated.View>
-            </View>
+                </View>
+              </View>
 
           {/* ── Keyboard (absolute bottom) ── */}
+              <View style={dynamicStyles.controlsRegion}>
           <View style={dynamicStyles.keyboardContainer}>
 
             {/* Power-up row */}
@@ -1911,6 +1939,8 @@ export default function GameplayScreen({ navigation, route }) {
               ))}
             </View>
           </View>
+              </View>
+            </View>
 
         {/* ── Modals ── */}
         {showDictionary && <DictionaryModal

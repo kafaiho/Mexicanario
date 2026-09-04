@@ -32,7 +32,7 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
   const keyboardWidth = panelWidth;
   const controlsWidth = panelWidth;
   const keyboardPadding = mode === "compact" ? 4 : mode === "phone" ? 6 : 8;
-  const keyboardHorizontalPadding = 14;
+  const keyboardHorizontalPadding = outerGap;
   const keyboardInnerWidth = Math.max(0, keyboardWidth - keyboardHorizontalPadding * 2);
   const preferredKeyGap = mode === "compact" ? 3 : mode === "phone" ? 4 : 6;
   const keyGap = Math.min(preferredKeyGap, keyboardInnerWidth / 10);
@@ -42,10 +42,17 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
   const specialWidth = keyWidth * 1.25;
   const keyHeight = mode === "compact" ? 36 : mode === "phone" ? 44 : 48;
   const keyboardHeight = keyboardPadding * 2 + keyHeight * 3 + keyGap * 2;
+  const boardTopPadding = isLandscape
+    ? clamp(safeHeight * 0.1, 24, 56)
+    : mode === "compact" ? 76 : 96;
+  const boardBottomPadding = Math.max(outerGap, bottomInset);
+  const controlsAvailableHeight = Math.max(0, safeHeight - boardTopPadding - boardBottomPadding);
 
   return {
     mode,
     isLandscape,
+    viewportWidth,
+    viewportHeight,
     columns,
     safeWidth,
     availableWidth: safeWidth,
@@ -57,6 +64,9 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
     columnGap,
     safeHeight,
     bottomInset,
+    boardTopPadding,
+    boardBottomPadding,
+    controlsAvailableHeight,
     keyboardWidth,
     keyboardHeight,
     keyboardPadding,

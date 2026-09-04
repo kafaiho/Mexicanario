@@ -32,7 +32,7 @@ for (const fixture of fixtures) {
     layout.keyWidth * 7 + layout.specialWidth * 2 + layout.keyGap * 9 <= layout.keyboardInnerWidth,
     `${fixture.width}: seven keys plus two special keys fit`,
   );
-  assert.equal(layout.keyboardHorizontalPadding, 14, 'model matches the current keyboard consumer padding');
+  assert.equal(layout.keyboardHorizontalPadding, layout.outerGap, 'keyboard padding follows responsive outer spacing');
   assert.ok(layout.keyHeight >= 36, `${fixture.width}: keys remain tappable`);
   assert.ok(layout.outerGap >= 0 && layout.keyboardPadding >= 0, "published spacing remains non-negative");
   assert.equal(

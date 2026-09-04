@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../screens/GameplayScreen.jsx'), 'utf8');
+const juicySource = fs.readFileSync(path.join(__dirname, '../components/JuicyButton.jsx'), 'utf8');
 
 for (const label of [
   'Revelar una letra por ${HINT_COST} monedas',
@@ -17,6 +18,9 @@ assert.match(source, /accessibilityRole="button"/);
 assert.match(source, /accessibilityLabel=\{isSpecial\s*\?\s*key === "CLEAR_ALL"\s*\?\s*"Borrar toda la palabra"\s*:\s*"Borrar una letra"\s*:\s*`Letra \$\{key\}`\}/s);
 assert.match(source, /accessibilityState=\{\{ disabled: isDimmed \}\}/);
 assert.match(source, /hitSlop=\{compactKeyHitSlop\}/);
+for (const prop of ['accessibilityRole', 'accessibilityLabel', 'accessibilityState', 'hitSlop']) {
+  assert.match(juicySource, new RegExp(`\\{\\.\\.\\.pressableProps\\}|${prop}=\\{${prop}\\}`), `JuicyButton must forward ${prop}`);
+}
 
 for (const color of ['#43A047', '#D81B60', '#1976D2', '#F57C00']) {
   assert.ok(source.includes(color), `missing playful control color ${color}`);
@@ -24,5 +28,11 @@ for (const color of ['#43A047', '#D81B60', '#1976D2', '#F57C00']) {
 
 assert.match(source, /keyDimmed:[^}]*opacity/s);
 assert.match(source, /keyDimmed:[^}]*borderWidth/s);
+for (const token of ['#EEF1F3', '#FFFFFF', '#154B6D']) {
+  assert.ok(source.includes(token), `missing approved surface token ${token}`);
+}
+assert.match(source, /maxWidth:\s*layout\.isLandscape\s*\?\s*160\s*:\s*layout\.mode === 'tablet'\s*\?\s*140/);
+assert.match(source, /AccessibilityInfo/);
+assert.match(juicySource, /AccessibilityInfo/);
 
 console.log('gameplay controls are playful and accessible');

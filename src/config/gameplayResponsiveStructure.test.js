@@ -12,7 +12,9 @@ for (const region of ['gameplayBoard', 'clueRegion', 'answerRegion', 'controlsRe
 assert.match(source, /kb\.layout/);
 assert.match(source, /layout\.isLandscape/);
 assert.match(source, /flexDirection:\s*layout\.isLandscape\s*\?\s*['"]row['"]\s*:\s*['"]column['"]/);
-assert.match(source, /paddingBottom:\s*Math\.max\([^)]*bottom/);
+assert.match(source, /paddingBottom:\s*layout\.boardBottomPadding/);
 assert.doesNotMatch(source, /keyboardContainer:\s*{[^}]*position:\s*['"]absolute['"]/s);
+assert.doesNotMatch(source, /Dimensions\.get\s*\(/, 'orientation-critical dimensions must stay live');
+assert.doesNotMatch(source, /_STATIC_KB_|TILE_SCALE/);
 
 console.log('gameplay responsive structure uses safe semantic regions');

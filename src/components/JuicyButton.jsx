@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from "react";
-import { Animated, Pressable, StyleSheet } from "react-native";
+import React, { useRef, useCallback, useEffect, useState } from "react";
+import { AccessibilityInfo, Animated, Pressable } from "react-native";
 import { tapLight, tapMedium } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 
@@ -30,12 +30,21 @@ const JuicyButton = React.memo(function JuicyButton({
   sound = "click",
   disabled = false,
   scaleDown = 0.92,
+  ...pressableProps
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => subscription.remove();
+  }, []);
 
   const handlePressIn = useCallback(() => {
     // 1. Animación: compresión rápida
-    Animated.spring(scaleAnim, {
+    if (reduceMotion) scaleAnim.setValue(scaleDown);
+    else Animated.spring(scaleAnim, {
       toValue: scaleDown,
       speed: 50,      // muy rápido — sin lag perceptible
       bounciness: 0,  // sin rebote en la bajada
@@ -55,11 +64,12 @@ const JuicyButton = React.memo(function JuicyButton({
     }
 
     if (onPressInProp) onPressInProp();
-  }, [scaleDown, intensity, sound, scaleAnim, onPressInProp]);
+  }, [scaleDown, intensity, sound, scaleAnim, onPressInProp, reduceMotion]);
 
   const handlePressOut = useCallback(() => {
     // Rebote elástico al soltar — el "jugo"
-    Animated.spring(scaleAnim, {
+    if (reduceMotion) scaleAnim.setValue(1);
+    else Animated.spring(scaleAnim, {
       toValue: 1,
       speed: 28,       // velocidad del rebote
       bounciness: 12,  // elasticidad visible pero no exagerada
@@ -67,7 +77,7 @@ const JuicyButton = React.memo(function JuicyButton({
     }).start();
 
     if (onPressOutProp) onPressOutProp();
-  }, [scaleAnim, onPressOutProp]);
+  }, [scaleAnim, onPressOutProp, reduceMotion]);
 
   const handlePress = useCallback(() => {
     if (!disabled && onPress) {
@@ -77,6 +87,7 @@ const JuicyButton = React.memo(function JuicyButton({
 
   return (
     <Pressable
+      {...pressableProps}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={handlePress}

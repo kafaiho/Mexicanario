@@ -9,15 +9,18 @@ function getKeyboardLayoutMetrics({ layout, portraitHeight, portraitKeyH } = {})
     : layout.keyboardPadding;
   const kbMargin = layout.keyGap / 2;
   const kbRowMarginB = layout.keyGap;
-  const powerUpHeight = layout.mode === 'tablet' || layout.mode === 'landscape' ? 76 : 64;
+  const availableHeight = layout.controlsAvailableHeight ?? layout.safeHeight;
+  const powerUpHeight = availableHeight < 260
+    ? 60
+    : layout.mode === 'tablet' || layout.mode === 'landscape' ? 76 : 64;
   const minimumKeyboardHeight = kbPaddingV * 2 + 36 * 3 + kbRowMarginB * 3;
   const minimumControlsHeight = powerUpHeight + minimumKeyboardHeight;
   const desiredHeight = portraitHeight
     ?? powerUpHeight + kbPaddingV * 2 + layout.keyHeight * 3 + kbRowMarginB * 3;
   const kbHeight = clamp(
     desiredHeight,
-    Math.min(minimumControlsHeight, layout.safeHeight),
-    layout.safeHeight,
+    Math.min(minimumControlsHeight, availableHeight),
+    availableHeight,
   );
   const maximumKeyHeight = Math.max(
     0,

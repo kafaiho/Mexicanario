@@ -5,10 +5,10 @@ import * as Speech from "expo-speech";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AccessibilityInfo,
   Alert,
   Animated,
   BackHandler,
-  Dimensions,
   Easing,
   Image,
   ImageBackground,
@@ -58,25 +58,19 @@ import { comboBurst, notifyError, notifySuccess, notifyWarning } from "../servic
 import { hasPermission, requestPermission, rescheduleAfterPlay } from "../services/notificationService";
 import usePetStore from "../store/usePetStore";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
-import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
+import { TABLET_MODE } from "../utils/tabletSetup";
 import { useKeyboardLayout } from "../hooks/useKeyboardLayout";
 import { compareWordsFlexibly, normalizeWordForDisplay } from "../utils/textUtils";
 import ShopScreen from "./ShopScreen";
 
 
-const { width, height } = Dimensions.get("window");
-
-// Static keyboard sizing for StyleSheet — matches useKeyboardLayout output
-const _STATIC_KB_HEIGHT = TABLET_MODE ? 420 : Math.min(264, height * 0.39);
-const _STATIC_KB_MARGIN = TABLET_MODE ? 3 : 2;
-const _STATIC_KB_USABLE = TABLET_MODE
-  ? (Math.min(Dimensions.get('screen').width, Dimensions.get('screen').height) - 60)
-  : (width - 28);
-const _STATIC_KB_KEY_W = Math.floor((_STATIC_KB_USABLE - 10 * _STATIC_KB_MARGIN * 2) / 10);
-const _STATIC_KB_SPECIAL_W = Math.floor((_STATIC_KB_USABLE - 7 * _STATIC_KB_KEY_W - 9 * _STATIC_KB_MARGIN * 2) / 2);
-
-// On tablet, tiles are bigger so they fill more of the larger screen
-const TILE_SCALE = TABLET_MODE ? 1.4 : 1;
+const SOFT_GAME_SHADOW = {
+  shadowColor: '#153A52',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.14,
+  shadowRadius: 6,
+  elevation: 5,
+};
 
 const MASCOTA_CHEER_KEY = "@mexicanario:mascota_cheer_date";
 
@@ -308,11 +302,18 @@ export default function GameplayScreen({ navigation, route }) {
   // ── Dynamic keyboard layout ──
   const kb = useKeyboardLayout();
   const layout = kb.layout;
-  const compactKeyHitSlop = layout.mode === 'compact'
+  const compactKeyHitSlop = kb.kbKeyH < 44 || kb.kbKeyW < 44
     ? { top: 4, right: 2, bottom: 4, left: 2 }
     : undefined;
-  const coinCenterX = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
-  const coinCenterY = TABLET_MODE ? REAL_HEIGHT / 2 : height / 2;
+  const coinCenterX = layout.viewportWidth / 2;
+  const coinCenterY = layout.viewportHeight / 2;
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotionEnabled).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotionEnabled);
+    return () => subscription.remove();
+  }, []);
 
   // UI state — consolidated modal state (only one modal open at a time, prevents re-render cascade)
   const [openModal, setOpenModal] = useState(null);
@@ -362,12 +363,12 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Posición fallback del pill de monedas (igual que AchievementsScreen)
   const getCoinPillFallback = () => {
-    // Use REAL_WIDTH so the fallback target is in the correct top-right corner
+    // Use the live viewport so rotation keeps the fallback in the top-right corner.
     // regardless of the tablet Dimensions patch
     const topPad = Platform.OS === "ios" ? 52 : 36;
     const pillH = 36;
     const pillW = 110;
-    const pillX = REAL_WIDTH - 16 - pillW;
+    const pillX = layout.viewportWidth - 16 - pillW;
     return { x: pillX, y: topPad, w: pillW, h: pillH };
   };
 
@@ -378,7 +379,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   const getDiamondPillFallback = () => {
     const topPad = Platform.OS === "ios" ? 52 : 36;
-    const coinPillLeft = REAL_WIDTH - 16 - 110;
+    const coinPillLeft = layout.viewportWidth - 16 - 110;
     return { x: coinPillLeft - 10 - 90, y: topPad, w: 90, h: 36 };
   };
 
@@ -400,18 +401,18 @@ export default function GameplayScreen({ navigation, route }) {
     {
       text: "¡Toca las letras del teclado para adivinar la palabra mexicana! 🎹",
       bubbleStyle: { bottom: kb.kbHeight + 30, left: 20, right: 20 },
-      handStyle: { bottom: kb.kbHeight + 10, left: width / 2 - 24 },
+      handStyle: { bottom: kb.kbHeight + 10, left: layout.viewportWidth / 2 - 24 },
       handEmoji: "👇",
       handBounceDir: "down",
     },
     {
       text: "¡Así se llena la cuadrícula! Cuando completes la palabra presiona ✓ para confirmar 🏆",
-      bubbleStyle: { top: height * 0.22, left: 20, right: 20 },
-      handStyle: { top: height * 0.5, left: width / 2 - 24 },
+      bubbleStyle: { top: layout.viewportHeight * 0.22, left: 20, right: 20 },
+      handStyle: { top: layout.viewportHeight * 0.5, left: layout.viewportWidth / 2 - 24 },
       handEmoji: "👆",
       handBounceDir: "up",
     },
-  ], [kb.kbHeight, width, height]);
+  ], [kb.kbHeight, layout.viewportWidth, layout.viewportHeight]);
 
   // Proactive rewarded ad offer (shown on 3rd wrong attempt)
   const [showRewardedOffer, setShowRewardedOffer] = useState(false);
@@ -679,6 +680,9 @@ export default function GameplayScreen({ navigation, route }) {
     []
   );
   const wordSegments = useMemo(() => {
+    const tileScale = layout.mode === 'tablet' || (layout.isLandscape && layout.safeWidth >= 800)
+      ? 1.4
+      : 1;
     const segs = [];
     let cur = { startIdx: 0, letters: "" };
     for (let i = 0; i < mexicanWord.length; i++) {
@@ -692,20 +696,20 @@ export default function GameplayScreen({ navigation, route }) {
     segs.push(cur);
     return segs.map((seg) => {
       const wordLength = seg.letters.length;
-      let boxSize = Math.round(38 * TILE_SCALE);
-      let boxHeight = Math.round(42 * TILE_SCALE);
-      let fontSize = Math.round(20 * TILE_SCALE);
-      let marginH = Math.round(2 * TILE_SCALE);
+      let boxSize = Math.round(38 * tileScale);
+      let boxHeight = Math.round(42 * tileScale);
+      let fontSize = Math.round(20 * tileScale);
+      let marginH = Math.round(2 * tileScale);
       if (wordLength > 7) {
         const scale = Math.max(0.65, 7.5 / wordLength);
-        boxSize = Math.floor(38 * TILE_SCALE * scale);
-        boxHeight = Math.floor(42 * TILE_SCALE * scale);
-        fontSize = Math.floor(20 * TILE_SCALE * scale);
-        marginH = Math.max(0.5, Math.floor(2 * TILE_SCALE * scale));
+        boxSize = Math.floor(38 * tileScale * scale);
+        boxHeight = Math.floor(42 * tileScale * scale);
+        fontSize = Math.floor(20 * tileScale * scale);
+        marginH = Math.max(0.5, Math.floor(2 * tileScale * scale));
       }
       return { ...seg, boxSize, boxHeight, fontSize, marginH };
     });
-  }, [mexicanWord]);
+  }, [mexicanWord, layout.mode, layout.isLandscape, layout.safeWidth]);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   // Prevents the levelInfo useEffect from calling initGame() while the
@@ -953,6 +957,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // ─── Animations ─────────────────────────────────────────────────────────────
   const bounceAtIndex = (idx) => {
+    if (reduceMotionEnabled) return;
     Animated.sequence([
       Animated.timing(scaleAnims[idx], { toValue: 1.18, duration: 50, useNativeDriver: true }),
       Animated.timing(scaleAnims[idx], { toValue: 1, duration: 40, useNativeDriver: true }),
@@ -960,6 +965,7 @@ export default function GameplayScreen({ navigation, route }) {
   };
 
   const shakeRow = () => {
+    if (reduceMotionEnabled) return;
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 1, duration: 50, easing: Easing.linear, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: -1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
@@ -969,6 +975,7 @@ export default function GameplayScreen({ navigation, route }) {
   };
 
   const celebrate = () => {
+    if (reduceMotionEnabled) return;
     // Stagger(20ms) instead of parallel — distributes native animation starts over time,
     // reducing the JS→native burst that causes jank on Android.
     // Tiles all turn green simultaneously (isCorrect state); the scale wave is decoration.
@@ -1344,6 +1351,14 @@ export default function GameplayScreen({ navigation, route }) {
     }
     if (key === "CLEAR_ALL") {
       if (guess.length > 0) {
+        if (reduceMotionEnabled) {
+          setGuess((prev) => prev.map((letter, index) =>
+            mexicanWord[index] === " " || fixedLetters.includes(index) ? letter : ""
+          ));
+          setWrongLetters([]);
+          setSelectedBoxIndex(nextTypableIndex(0, mexicanWord));
+          return;
+        }
         Animated.stagger(10,
           scaleAnims.map((anim) =>
             Animated.sequence([
@@ -1617,9 +1632,9 @@ export default function GameplayScreen({ navigation, route }) {
       width: '100%',
       maxWidth: layout.contentMaxWidth,
       alignSelf: 'center',
-      paddingTop: layout.mode === 'compact' ? 76 : 96,
+      paddingTop: layout.boardTopPadding,
       paddingHorizontal: layout.outerGap,
-      paddingBottom: Math.max(layout.outerGap, layout.bottomInset),
+      paddingBottom: layout.boardBottomPadding,
     },
     contentRegion: {
       flex: 1,
@@ -1645,17 +1660,21 @@ export default function GameplayScreen({ navigation, route }) {
       width: '100%',
       borderRadius: 20,
       height: kb.kbHeight,
-      backgroundColor: '#EAECEE',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: TABLET_MODE ? 6 : -3 },
-      shadowOpacity: TABLET_MODE ? 0.28 : 0.12,
-      shadowRadius: TABLET_MODE ? 14 : 8,
-      elevation: 16,
+      backgroundColor: '#EEF1F3',
+      ...SOFT_GAME_SHADOW,
+    },
+    powerUpRow: {
+      paddingTop: Math.max(6, layout.outerGap / 2),
+      paddingHorizontal: layout.outerGap,
+      marginBottom: Math.max(4, layout.sectionGap / 2),
+    },
+    powerUpButton: {
+      maxWidth: layout.isLandscape ? 160 : layout.mode === 'tablet' ? 140 : 110,
     },
     keyboard: {
       width: '100%',
       paddingVertical: kb.kbPaddingV,
-      paddingHorizontal: 14,
+      paddingHorizontal: layout.outerGap,
     },
     keyboardRow: {
       flexDirection: 'row',
@@ -1666,20 +1685,16 @@ export default function GameplayScreen({ navigation, route }) {
       width: kb.kbKeyW,
       height: kb.kbKeyH,
       marginHorizontal: kb.kbMargin,
-      backgroundColor: 'white',
+      backgroundColor: '#FFFFFF',
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 2,
-      elevation: 3,
+      ...SOFT_GAME_SHADOW,
     },
     keyText: {
       fontSize: kb.kbFontSize,
       fontWeight: '800',
-      color: '#1A5276',
+      color: '#154B6D',
     },
     deleteKey: { width: kb.kbSpecialW, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
     clearKey: { width: kb.kbSpecialW, backgroundColor: "#C8C8D0" },
@@ -1863,10 +1878,10 @@ export default function GameplayScreen({ navigation, route }) {
           <View style={dynamicStyles.keyboardContainer}>
 
             {/* Power-up row */}
-            <View style={styles.powerUpRow}>
+            <View style={[styles.powerUpRow, dynamicStyles.powerUpRow]}>
               {/* Revelar 1 letra (A) – 25🪙 */}
               <TouchableOpacity
-                style={[styles.powerUpBtn, styles.powerUpReveal]}
+                style={[styles.powerUpBtn, dynamicStyles.powerUpButton, styles.powerUpReveal]}
                 onPress={handleReveal}
                 accessibilityRole="button"
                 accessibilityLabel={`Revelar una letra por ${HINT_COST} monedas`}
@@ -1879,7 +1894,7 @@ export default function GameplayScreen({ navigation, route }) {
 
               {/* Revelar 3 letras (🔓) – 75🪙 */}
               <TouchableOpacity
-                style={[styles.powerUpBtn, styles.powerUpBorrar]}
+                style={[styles.powerUpBtn, dynamicStyles.powerUpButton, styles.powerUpBorrar]}
                 onPress={handleBorrar}
                 accessibilityRole="button"
                 accessibilityLabel={`Revelar tres letras por ${BORRAR_COST} monedas`}
@@ -1892,7 +1907,7 @@ export default function GameplayScreen({ navigation, route }) {
 
               {/* Completar todo (⭐) – 200🪙 */}
               <TouchableOpacity
-                style={[styles.powerUpBtn, styles.powerUpVerificar]}
+                style={[styles.powerUpBtn, dynamicStyles.powerUpButton, styles.powerUpVerificar]}
                 onPress={handleVerificar}
                 accessibilityRole="button"
                 accessibilityLabel={`Completar palabra por ${VERIFICAR_COST} monedas`}
@@ -1905,7 +1920,7 @@ export default function GameplayScreen({ navigation, route }) {
 
               {/* Retar amigo (!) – comparte la pregunta sin revelar la respuesta */}
               <TouchableOpacity
-                style={[styles.powerUpBtn, styles.powerUpChallenge]}
+                style={[styles.powerUpBtn, dynamicStyles.powerUpButton, styles.powerUpChallenge]}
                 onPress={handleShareChallenge}
                 accessibilityRole="button"
                 accessibilityLabel="Retar a una amistad"
@@ -2472,16 +2487,12 @@ const styles = StyleSheet.create({
 
   // ── Clue Card ──────────────────────────────────────────────────────────────
   clueCard: {
-    backgroundColor: "white",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 20,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 6,
+    ...SOFT_GAME_SHADOW,
     alignItems: "center",
   },
   clueTitle: {
@@ -2624,9 +2635,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: TABLET_MODE ? 14 : 8,
-    paddingHorizontal: 14,
-    marginBottom: TABLET_MODE ? 10 : 6,
     width: "100%",
   },
   powerUpBtn: {
@@ -2641,11 +2649,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 3,
     position: "relative",
     // bottom-edge depth — game button look
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 2,
-    elevation: 6,
+    ...SOFT_GAME_SHADOW,
   },
   powerUpReveal: { backgroundColor: "#43A047" },
   powerUpBorrar: { backgroundColor: "#D81B60" },
@@ -2678,8 +2682,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Keyboard (only sub-styles still referenced — main styles are in dynamicStyles) ──
-  deleteKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
-  clearKey: { width: _STATIC_KB_SPECIAL_W, backgroundColor: "#C8C8D0" },
   keyDimmed: {
     backgroundColor: "#D0D0D8",
     opacity: 0.32,
@@ -3310,15 +3312,6 @@ const styles = StyleSheet.create({
   },
   victoryCircleBtnIcon: {
     fontSize: 22,
-  },
-  // ── GameMascot wrapper ──
-  gameMascotWrap: {
-    position: "absolute",
-    bottom: _STATIC_KB_HEIGHT + 10,
-    right: 8,
-    width: 100,
-    height: 120,
-    zIndex: 150,
   },
   // ── Victory combo info ──
   victoryComboInfo: {

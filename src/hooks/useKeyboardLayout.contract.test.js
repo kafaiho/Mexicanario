@@ -55,10 +55,26 @@ const overridden = getKeyboardLayoutMetrics({
   portraitHeight: 999,
   portraitKeyH: 999,
 });
-assert.equal(overridden.kbHeight, compactLayout.safeHeight, 'height override clamps to safe height');
+assert.equal(
+  overridden.kbHeight,
+  compactLayout.controlsAvailableHeight,
+  'height override clamps to the board controls area',
+);
 assert.ok(
   overridden.keyboardHeight + overridden.powerUpHeight <= overridden.kbHeight,
   'clamped key override keeps all control regions inside the container',
+);
+
+const shortLandscapeLayout = getGameplayResponsiveLayout({
+  width: 640,
+  height: 360,
+  insets: { top: 0, right: 0, bottom: 24, left: 0 },
+});
+const shortLandscape = getKeyboardLayoutMetrics({ layout: shortLandscapeLayout });
+assert.equal(shortLandscapeLayout.isLandscape, true);
+assert.ok(
+  shortLandscape.kbHeight <= shortLandscapeLayout.controlsAvailableHeight,
+  'short landscape controls fit below the header and safe-area padding',
 );
 
 console.log('useKeyboardLayout contract tests passed');

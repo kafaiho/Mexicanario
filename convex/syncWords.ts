@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 // Temporary: insert words only (no level creation to avoid doc limit)
-export const batchInsertWords = mutation({
+export const batchInsertWords = internalMutation({
   args: {
     words: v.array(
       v.object({

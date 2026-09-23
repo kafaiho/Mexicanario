@@ -1,4 +1,11 @@
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+let Notifications = null;
+if (!isExpoGo) {
+  Notifications = require('expo-notifications');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mexicanario — Notification Service
@@ -112,6 +119,7 @@ const COPY = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function setupNotificationHandler() {
+  if (isExpoGo) return; // notifications not supported in Expo Go (SDK 53+)
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -122,6 +130,7 @@ export function setupNotificationHandler() {
 }
 
 export async function requestPermission() {
+  if (isExpoGo) return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -132,6 +141,7 @@ export async function hasPermission() {
 }
 
 async function _schedule(id, content, trigger) {
+  if (isExpoGo) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
     await Notifications.scheduleNotificationAsync({
@@ -239,6 +249,7 @@ export async function scheduleLeagueDrama(rank, divisionName) {
 // Cancelar todo (llamar cuando el usuario juega)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function cancelAllReminders() {
+  if (isExpoGo) return;
   await Promise.allSettled(
     Object.values(NOTIF_IDS).map(id =>
       Notifications.cancelScheduledNotificationAsync(id).catch(() => {})

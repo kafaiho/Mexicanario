@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
 import * as Sharing from "expo-sharing";
 import * as Speech from "expo-speech";
@@ -60,8 +61,11 @@ import usePetStore from "../store/usePetStore";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { useKeyboardLayout } from "../hooks/useKeyboardLayout";
-import { compareWordsFlexibly, normalizeWordForDisplay } from "../utils/textUtils";
+import { getBackspaceTargetIndex, getCursorAfterHint } from "../utils/gameplayKeyboard";
+import { compareWordsFlexibly, normalizeWordForDisplay, stripUntypable } from "../utils/textUtils";
+import { buildTileRows, censorWordInText, isWordPlayable, rowLetterCount } from "../utils/wordPresentation";
 import ShopScreen from "./ShopScreen";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 
 const SOFT_GAME_SHADOW = {
@@ -80,6 +84,8 @@ const KEYBOARD_LAYOUT = [
   ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
   ["CLEAR_ALL", "Z", "X", "C", "V", "B", "N", "M", "DELETE_ONE"],
 ];
+
+const KEYBOARD_ACCENT_COLORS = ['#16A6B6', '#F2B134', '#E85D4A', '#D81B60', '#43A047'];
 
 /** Mensajes aleatorios de celebración cuando el jugador adivina la palabra */
 const WIN_PHRASES_PERFECT = [
@@ -245,20 +251,19 @@ const GAZE_PHRASES = [
 ];
 
 /** Censura la palabra mexicana en el ejemplo de uso para usarla como pista */
-const buildCensoredExample = (example, mexicanWord) => {
-  if (!example || !mexicanWord) return example || "";
-  const stars = "★".repeat(Math.min(mexicanWord.replace(/ /g, "").length, 6));
-  const regex = new RegExp(mexicanWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-  return example.replace(regex, stars);
-};
+const buildCensoredExample = (example, mexicanWord) => censorWordInText(example, mexicanWord);
 
 // Memoized tile — only re-renders when THIS tile's data changes
 const LetterTile = React.memo(function LetterTile({
   idx, ch, isFixed, isWrong, isSelected, isCorrect,
   scaleAnim, boxSize, boxHeight, fontSize, marginH, onSelectBox,
 }) {
+  const handlePress = useCallback(() => {
+    onSelectBox?.(idx);
+  }, [onSelectBox, idx]);
+
   return (
-    <TouchableOpacity onPress={() => onSelectBox(idx)} activeOpacity={0.7}>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <View
           style={[
@@ -437,7 +442,6 @@ export default function GameplayScreen({ navigation, route }) {
   const [attempts, setAttempts] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelUpReward, setLevelUpReward] = useState(null);
-  const [totalLevels, setTotalLevels] = useState(50); // default, updated from backend
   const [mexicanWord, setMexicanWord] = useState("");        // normalized (no accents) — for tile display
   const [originalWord, setOriginalWord] = useState("");      // original with accents — for victory display
   const [regularWord, setRegularWord] = useState("");
@@ -468,7 +472,7 @@ export default function GameplayScreen({ navigation, route }) {
   const [isChallengeMode, setIsChallengeMode] = useState(!!challengeModeParam);
   const [challengeStartTime, setChallengeStartTime] = useState(null);
   const [challengeResult, setChallengeResult] = useState(null);
-  const respondToChallengeMut = useMutation(api.friends.respondToChallenge);
+  const respondToChallengeMut = useUserMutation(api.friends.respondToChallenge);
   const { userId, user } = useAuth();
 
   // Map repaso mode — replaying a completed level from the map (no progress change)
@@ -490,7 +494,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Hint costs (no free/inventory system — always charged)
   const HINT_COST = 25;       // A — revela 1 letra
-  const BORRAR_COST = 75;     // 🔓 — revela 3 letras
+  const BORRAR_COST = 75;     // 🔓 — ilumina en el teclado las letras de la palabra
   const VERIFICAR_COST = 200; // ⭐ — completa todo
   const SYNONYM_COST = 30;    // ❓ — muestra definición
   const [fixedLetters, setFixedLetters] = useState([]); // indices filled by hints (locked)
@@ -499,18 +503,17 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Auth and game hooks
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
-  const updateUserCurrency = useMutation(api.users.updateUserCurrency);
-  const completeLevelMutation = useMutation(api.levels.completeLevel);
-  const addXp = useMutation(api.users.addXp);
-  const claimShareReward = useMutation(api.users.claimShareReward);
-  const gainPetXp = useMutation(api.pet.gainPetXp);
-  const allLevels = useQuery(api.levels.getAllLevels);
-  const jumpToLevelMutation = useMutation(api.devTools.jumpToLevel);
-  const usePowerupMutation = useMutation(api.shop.usePowerup);
-  const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
-  const recordDailyPlay = useMutation(api.streaks.recordDailyPlay);
-  const recordBestCombo = useMutation(api.streaks.recordBestCombo);
-  const recordLeagueCXP = useMutation(api.league.recordLeagueCXP);
+  const updateUserCurrency = useUserMutation(api.users.updateUserCurrency);
+  const completeLevelMutation = useUserMutation(api.levels.completeLevel);
+  const addXp = useUserMutation(api.users.addXp);
+  const claimShareReward = useUserMutation(api.users.claimShareReward);
+  const gainPetXp = useUserMutation(api.pet.gainPetXp);
+  const jumpToLevelMutation = useUserMutation(api.devTools.jumpToLevel);
+  const usePowerupMutation = useUserMutation(api.shop.usePowerup);
+  const claimFreeCoins = useUserMutation(api.shop.claimFreeCoins);
+  const recordDailyPlay = useUserMutation(api.streaks.recordDailyPlay);
+  const recordBestCombo = useUserMutation(api.streaks.recordBestCombo);
+  const recordLeagueCXP = useUserMutation(api.league.recordLeagueCXP);
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
   const powerupInventory = shopState?.powerups ?? {};
   const petState = useQuery(api.pet.getPetState, userId ? { userId } : "skip");
@@ -519,8 +522,8 @@ export default function GameplayScreen({ navigation, route }) {
   const reviewWord = useQuery(api.failedWords.getDueWord, userId ? { userId } : "skip");
   const reviewWordRef = useRef(null);
   useEffect(() => { reviewWordRef.current = reviewWord ?? null; }, [reviewWord]);
-  const recordFailMutation = useMutation(api.failedWords.recordFail);
-  const resolveWordMutation = useMutation(api.failedWords.resolveWord);
+  const recordFailMutation = useUserMutation(api.failedWords.recordFail);
+  const resolveWordMutation = useUserMutation(api.failedWords.resolveWord);
 
   // Friends weekly leaderboard (for motivational toast)
   const friendsWeekly = useQuery(
@@ -620,12 +623,7 @@ export default function GameplayScreen({ navigation, route }) {
   const [devLevelInput, setDevLevelInput] = useState("");
   const devEnabled = useDevMode((s) => s.enabled);
 
-  // Update totalLevels when allLevels loads
-  useEffect(() => {
-    if (allLevels && allLevels.length > 0) {
-      setTotalLevels(allLevels.length);
-    }
-  }, [allLevels]);
+  const totalLevels = levelInfo?.totalLevels ?? 50;
 
   // Disparar coin fly y diamond fly cuando se abre el modal de victoria
   useEffect(() => {
@@ -683,19 +681,9 @@ export default function GameplayScreen({ navigation, route }) {
     const tileScale = layout.mode === 'tablet' || (layout.isLandscape && layout.safeWidth >= 800)
       ? 1.4
       : 1;
-    const segs = [];
-    let cur = { startIdx: 0, letters: "" };
-    for (let i = 0; i < mexicanWord.length; i++) {
-      if (mexicanWord[i] === " ") {
-        segs.push(cur);
-        cur = { startIdx: i + 1, letters: "" };
-      } else {
-        cur.letters += mexicanWord[i];
-      }
-    }
-    segs.push(cur);
-    return segs.map((seg) => {
-      const wordLength = seg.letters.length;
+    // Each row holds one word, or several short words for phrases of 4+ words.
+    return buildTileRows(mexicanWord).map((segs) => {
+      const wordLength = rowLetterCount(segs) + (segs.length - 1);
       let boxSize = Math.round(38 * tileScale);
       let boxHeight = Math.round(42 * tileScale);
       let fontSize = Math.round(20 * tileScale);
@@ -707,7 +695,7 @@ export default function GameplayScreen({ navigation, route }) {
         fontSize = Math.floor(20 * tileScale * scale);
         marginH = Math.max(0.5, Math.floor(2 * tileScale * scale));
       }
-      return { ...seg, boxSize, boxHeight, fontSize, marginH };
+      return { segs, boxSize, boxHeight, fontSize, marginH };
     });
   }, [mexicanWord, layout.mode, layout.isLandscape, layout.safeWidth]);
 
@@ -789,8 +777,8 @@ export default function GameplayScreen({ navigation, route }) {
         const wordUp = normalizeWordForDisplay(mapReviewData.word);
         setIsMapReview(true);
         setMexicanWord(wordUp);
-        setOriginalWord(mapReviewData.word.toUpperCase());
-        setRegularWord(mapReviewData.meaning.toUpperCase());
+        setOriginalWord(stripUntypable(mapReviewData.word).toUpperCase());
+        setRegularWord(censorWordInText(mapReviewData.meaning, wordUp).toUpperCase());
         setWordMeaning(mapReviewData.meaning);
         setWordExample(mapReviewData.example);
         setWordRegion(mapReviewData.region);
@@ -808,8 +796,8 @@ export default function GameplayScreen({ navigation, route }) {
       if (isChallengeMode && challengeWordParam) {
         const wordUp = normalizeWordForDisplay(challengeWordParam.word);
         setMexicanWord(wordUp);
-        setOriginalWord(challengeWordParam.word.toUpperCase());
-        setRegularWord(challengeWordParam.meaning?.toUpperCase() || "");
+        setOriginalWord(stripUntypable(challengeWordParam.word).toUpperCase());
+        setRegularWord(censorWordInText(challengeWordParam.meaning || "", wordUp).toUpperCase());
         setWordMeaning(challengeWordParam.meaning || "");
         setWordExample(challengeWordParam.example || "");
         setWordRegion(challengeWordParam.region || "");
@@ -831,8 +819,8 @@ export default function GameplayScreen({ navigation, route }) {
         setIsReviewMode(true);
         setReviewWordId(activeReview.wordId);
         setMexicanWord(wordUp);
-        setOriginalWord(activeReview.wordText.toUpperCase());
-        setRegularWord(activeReview.meaning?.toUpperCase() || "");
+        setOriginalWord(stripUntypable(activeReview.wordText).toUpperCase());
+        setRegularWord(censorWordInText(activeReview.meaning || "", wordUp).toUpperCase());
         setWordMeaning(activeReview.meaning || "");
         setWordExample(activeReview.example || "");
         setWordRegion(activeReview.region || "");
@@ -848,19 +836,17 @@ export default function GameplayScreen({ navigation, route }) {
 
       if (levelInfo) {
         if (levelInfo.word) {
-          // ── Auto-skip words that are too long for the tile layout ──
-          const _segs = levelInfo.word.trim().split(/\s+/);
-          const _letters = levelInfo.word.replace(/\s/g, "").length;
-          if (_segs.length > 3 || _letters > 18) {
+          const wordUp = normalizeWordForDisplay(levelInfo.word);
+          // ── Safety net: skip legacy words that cannot fit the tile layout ──
+          if (!isWordPlayable(wordUp)) {
             completeLevelMutation({ userId, levelNumber: levelInfo.level }).catch(() => { });
             setIsLoading(false);
             return;
           }
 
-          const wordUp = normalizeWordForDisplay(levelInfo.word);
           setMexicanWord(wordUp);
-          setOriginalWord(levelInfo.word.toUpperCase());
-          setRegularWord(levelInfo.meaning.toUpperCase());
+          setOriginalWord(stripUntypable(levelInfo.word).toUpperCase());
+          setRegularWord(censorWordInText(levelInfo.meaning || "", wordUp).toUpperCase());
           setWordMeaning(levelInfo.meaning || "");
           setWordExample(levelInfo.example || "");
           setWordRegion(levelInfo.region || "");
@@ -945,7 +931,7 @@ export default function GameplayScreen({ navigation, route }) {
   const REGISTER_PROMPT_LEVELS = [5, 15, 30];
   useEffect(() => {
     if (!levelInfo?.level) return;
-    const isUnregistered = !user?.email && !user?.googleId && !user?.appleId;
+    const isUnregistered = !user?.email && !user?.hasEmail && !user?.googleId && !user?.appleId;
     if (!isUnregistered) return;
     const lvl = levelInfo.level;
     if (REGISTER_PROMPT_LEVELS.includes(lvl) && !promptedLevelsRef.current.has(lvl)) {
@@ -1148,6 +1134,7 @@ export default function GameplayScreen({ navigation, route }) {
         const snapLevel = levelInfo?.level || 1;
         const snapPathId = wordPathId;
         const snapPlaceId = wordPlaceId;
+        const snapIsLastLevel = !isReviewMode && !!levelInfo?.isLastLevel && !levelInfo?.completedAll;
         // Block levelInfo useEffect from resetting game while victory modal is open
         skipNextInitRef.current = true;
         // Calculate reward synchronously (needs levelInfo before mutation runs)
@@ -1156,15 +1143,17 @@ export default function GameplayScreen({ navigation, route }) {
         const reward = usedPowerupRef.current
           ? { coins: baseReward.coins, diamonds: 0 }
           : baseReward;
-        const displayReward = (!usedPowerupRef.current && didCompleteZone)
-          ? { ...reward, coins: reward.coins + 100 }
-          : reward;
+        const displayReward = (levelInfo?.completedAll && !isReviewMode)
+          ? { coins: 0, diamonds: 0 }
+          : (!usedPowerupRef.current && didCompleteZone)
+            ? { ...reward, coins: reward.coins + 100 }
+            : reward;
 
         // Batch all victory state updates in a single setTimeout — one re-render
         // instead of 5 immediate + 1 delayed. Keeps JS thread free for animations.
         const victoryDelay = attempts === 0 ? 1350 : 500;
         setTimeout(() => {
-          setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel, pathId: snapPathId, placeId: snapPlaceId });
+          setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel, pathId: snapPathId, placeId: snapPlaceId, isLastLevel: snapIsLastLevel });
           setLevelUpReward(displayReward);
           setShowLevelUp(true);
           playSound("celebration");
@@ -1172,13 +1161,19 @@ export default function GameplayScreen({ navigation, route }) {
 
         // Fire level completion immediately — InteractionManager.runAfterInteractions
         // can silently fail on Android if celebrate() animation callbacks don't settle.
-        completeLevelMutation({
-          userId,
-          levelNumber: levelInfo.level,
-          isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
-        })
+        // A failed-word review is served before the pending level; solving it
+        // must not advance (and silently skip) that level.
+        const completion = isReviewMode
+          ? Promise.resolve({ success: true, levelUp: false })
+          : completeLevelMutation({
+            userId,
+            levelNumber: levelInfo.level,
+            isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
+          });
+        completion
           .then((levelResult) => {
-            if (levelResult.success) {
+            // Replaying a level after finishing the whole path pays nothing.
+            if (levelResult.success && (levelResult.levelUp || isReviewMode)) {
               completedLevelsRef.current += 1;
               const totalCoins = displayReward.coins; // includes zone bonus; 0 if powerup used
               if (totalCoins > 0 || displayReward.diamonds > 0) {
@@ -1331,21 +1326,19 @@ export default function GameplayScreen({ navigation, route }) {
     // Haptic + sound + animation handled by JuicyButton
     if (key === "DELETE_ONE") {
       if (guess.length > 0) {
+        const targetIndex = getBackspaceTargetIndex({
+          word: mexicanWord,
+          guess,
+          fixedLetters,
+          selectedIndex: selectedBoxIndex,
+        });
+        if (targetIndex < 0) return;
+
         const newGuess = [...guess];
-        const hasLetter =
-          newGuess[selectedBoxIndex] &&
-          newGuess[selectedBoxIndex] !== "" &&
-          newGuess[selectedBoxIndex] !== " " &&
-          !fixedLetters.includes(selectedBoxIndex);
-        if (hasLetter) {
-          newGuess[selectedBoxIndex] = "";
-          setGuess(newGuess);
-          setWrongLetters((prev) => prev.filter((i) => i !== selectedBoxIndex));
-        }
-        // Move cursor backward to previous typable slot (real backspace behavior)
-        let prevIdx = selectedBoxIndex - 1;
-        while (prevIdx >= 0 && (mexicanWord[prevIdx] === " " || fixedLetters.includes(prevIdx))) prevIdx--;
-        if (prevIdx >= 0) setSelectedBoxIndex(prevIdx);
+        newGuess[targetIndex] = "";
+        setGuess(newGuess);
+        setWrongLetters((prev) => prev.filter((i) => i !== targetIndex));
+        setSelectedBoxIndex(targetIndex);
       }
       return;
     }
@@ -1458,7 +1451,7 @@ export default function GameplayScreen({ navigation, route }) {
     }
   };
 
-  // Revelar letra (A) – siempre gratis, sin monedas
+  // Revelar letra (A) – cuesta HINT_COST monedas
   const handleReveal = () => {
     if (isLoading || !mexicanWord || isCorrect) return;
     // Cancel any pending wrong-answer clear so hint letter isn't wiped
@@ -1488,6 +1481,13 @@ export default function GameplayScreen({ navigation, route }) {
         newGuess[randomIndex] = correctLetter;
         return newGuess;
       });
+      const nextCursor = getCursorAfterHint({
+        word: mexicanWord,
+        fixedLetters,
+        selectedIndex: selectedBoxIndex,
+        revealedIndex: randomIndex,
+      });
+      if (nextCursor >= 0) setSelectedBoxIndex(nextCursor);
       bounceAtIndex(randomIndex);
       // Check completion — read guess via ref to avoid side-effect inside setState
       setTimeout(() => {
@@ -1661,9 +1661,11 @@ export default function GameplayScreen({ navigation, route }) {
     },
     keyboardContainer: {
       width: '100%',
-      borderRadius: 20,
+      borderRadius: 22,
       height: kb.kbHeight,
       backgroundColor: '#EEF1F3',
+      borderWidth: 1,
+      borderColor: 'rgba(21,75,109,0.10)',
       ...SOFT_GAME_SHADOW,
     },
     powerUpRow: {
@@ -1679,6 +1681,18 @@ export default function GameplayScreen({ navigation, route }) {
       paddingVertical: kb.kbPaddingV,
       paddingHorizontal: layout.outerGap,
     },
+    keyboardHint: {
+      height: kb.keyboardHintHeight,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    keyboardHintText: {
+      color: '#496879',
+      fontSize: layout.mode === 'tablet' ? 11 : 10,
+      fontWeight: '700',
+    },
     keyboardRow: {
       flexDirection: 'row',
       justifyContent: 'center',
@@ -1690,6 +1704,8 @@ export default function GameplayScreen({ navigation, route }) {
       marginHorizontal: kb.kbMargin,
       backgroundColor: '#FFFFFF',
       borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'rgba(21,75,109,0.08)',
       justifyContent: 'center',
       alignItems: 'center',
       ...SOFT_GAME_SHADOW,
@@ -1699,11 +1715,15 @@ export default function GameplayScreen({ navigation, route }) {
       fontWeight: '800',
       color: '#154B6D',
     },
-    deleteKey: { width: kb.kbSpecialW, backgroundColor: Platform.OS === "android" ? "#AEB6BF" : "#C8C8D0" },
-    clearKey: { width: kb.kbSpecialW, backgroundColor: "#C8C8D0" },
-    deleteIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#1A5276' },
-    deleteIconText: { fontSize: TABLET_MODE ? 28 : 20, color: '#1A5276' },
-    clearIcon: { width: kb.kbIconSize, height: kb.kbIconSize, tintColor: '#C0392B' },
+    deleteKey: { width: kb.kbSpecialW, backgroundColor: '#16A6B6', borderColor: 'rgba(7,91,105,0.22)' },
+    clearKey: { width: kb.kbSpecialW, backgroundColor: '#E85D4A', borderColor: 'rgba(139,41,29,0.22)' },
+    specialKeyLabel: {
+      marginTop: 1,
+      color: '#FFFFFF',
+      fontSize: kb.specialLabelFontSize,
+      fontWeight: '900',
+      letterSpacing: 0.2,
+    },
   }), [kb, layout]);
 
   // Pre-computed keyboard key styles — dynamic for orientation
@@ -1838,15 +1858,17 @@ export default function GameplayScreen({ navigation, route }) {
               },
             ]}
           >
-            {wordSegments.map((seg, segIdx) => (
-              <View key={segIdx} style={styles.wordRow}>
-                {segIdx > 0 && (
+            {wordSegments.map((row, rowIdx) => (
+              <View key={rowIdx} style={styles.wordRow}>
+                {rowIdx > 0 && (
                   <View style={styles.wordDivider}>
                     <View style={styles.wordDividerLine} />
                   </View>
                 )}
                 <View style={styles.wordRowBoxes}>
-                  {Array.from(seg.letters).map((_, letterIdx) => {
+                  {row.segs.flatMap((seg, segIdx) => [
+                    segIdx > 0 && <View key={`gap-${seg.startIdx}`} style={{ width: row.boxSize / 2 }} />,
+                    ...Array.from(seg.letters).map((_, letterIdx) => {
                     const idx = seg.startIdx + letterIdx;
                     const ch = (isCorrect && originalWord) ? (originalWord[idx] || guess[idx] || "") : (guess[idx] || "");
                     const isFixed = fixedLetters.includes(idx);
@@ -1862,14 +1884,15 @@ export default function GameplayScreen({ navigation, route }) {
                         isSelected={isSelected}
                         isCorrect={isCorrect}
                         scaleAnim={scaleAnims[idx]}
-                        boxSize={seg.boxSize}
-                        boxHeight={seg.boxHeight}
-                        fontSize={seg.fontSize}
-                        marginH={seg.marginH}
+                        boxSize={row.boxSize}
+                        boxHeight={row.boxHeight}
+                        fontSize={row.fontSize}
+                        marginH={row.marginH}
                         onSelectBox={selectLetterBox}
                       />
                     );
-                  })}
+                  }),
+                  ])}
                 </View>
               </View>
             ))}
@@ -1880,6 +1903,22 @@ export default function GameplayScreen({ navigation, route }) {
           {/* ── Keyboard (absolute bottom) ── */}
               <View style={dynamicStyles.controlsRegion}>
           <View style={dynamicStyles.keyboardContainer}>
+            <View
+              style={styles.keyboardAccent}
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              {KEYBOARD_ACCENT_COLORS.map((color, index) => (
+                <View
+                  key={color}
+                  style={[
+                    styles.keyboardAccentDot,
+                    { backgroundColor: color, transform: [{ rotate: index % 2 === 0 ? '45deg' : '0deg' }] },
+                  ]}
+                />
+              ))}
+            </View>
 
             {/* Power-up row */}
             <View style={[styles.powerUpRow, dynamicStyles.powerUpRow]}>
@@ -1935,6 +1974,12 @@ export default function GameplayScreen({ navigation, route }) {
 
             {/* Keyboard — JuicyButton for multisensory feedback */}
             <View style={dynamicStyles.keyboard}>
+              {kb.showKeyboardHint && (
+                <View style={dynamicStyles.keyboardHint}>
+                  <Ionicons name="finger-print-outline" size={12} color="#496879" />
+                  <Text style={dynamicStyles.keyboardHintText}>Mantén borrar para borrar rápido</Text>
+                </View>
+              )}
               {KEYBOARD_LAYOUT.map((row, rowIndex) => (
                 <View key={rowIndex} style={dynamicStyles.keyboardRow}>
                   {row.map((key) => {
@@ -1956,23 +2001,20 @@ export default function GameplayScreen({ navigation, route }) {
                         accessibilityRole="button"
                         accessibilityLabel={isSpecial ? key === "CLEAR_ALL" ? "Borrar toda la palabra" : "Borrar una letra" : `Letra ${key}`}
                         accessibilityState={{ disabled: isDimmed }}
+                        accessibilityHint={key === "DELETE_ONE" ? "Mantén presionado para borrar varias letras" : undefined}
                         hitSlop={compactKeyHitSlop}
                         reduceMotion={reduceMotionEnabled}
                       >
                         {key === "DELETE_ONE" ? (
-                          Platform.OS === "android" ? (
-                            <Text style={dynamicStyles.deleteIconText}>⌫</Text>
-                          ) : (
-                            <Image
-                              source={require("../../assets/images/delete_one.png")}
-                              style={dynamicStyles.deleteIcon}
-                            />
-                          )
+                          <View style={styles.specialKeyContent}>
+                            <Ionicons name="backspace-outline" size={kb.kbIconSize} color="#FFFFFF" />
+                            {kb.showSpecialLabels && <Text style={dynamicStyles.specialKeyLabel}>BORRAR</Text>}
+                          </View>
                         ) : key === "CLEAR_ALL" ? (
-                          <Image
-                            source={require("../../assets/icons/trash.png")}
-                            style={dynamicStyles.clearIcon}
-                          />
+                          <View style={styles.specialKeyContent}>
+                            <Ionicons name="trash-outline" size={kb.kbIconSize} color="#FFFFFF" />
+                            {kb.showSpecialLabels && <Text style={dynamicStyles.specialKeyLabel}>LIMPIAR</Text>}
+                          </View>
                         ) : (
                           <Text style={dynamicStyles.keyText}>{key}</Text>
                         )}
@@ -2348,6 +2390,7 @@ export default function GameplayScreen({ navigation, route }) {
             setShowLevelUp(false);
             if (isChallengeMode) { navigation.navigate("MainMenu"); return; }
             if (isMapReview) { navigation.navigate("Map"); return; }
+            if (victorySnap?.isLastLevel) { navigation.navigate("MainMenu"); return; }
             if (completedLevelsRef.current % 5 === 0 && completedLevelsRef.current > 0) { showInterstitial(); }
             skipNextInitRef.current = false;
             initGame();
@@ -2356,7 +2399,7 @@ export default function GameplayScreen({ navigation, route }) {
           onShare={handleShare}
           isMapReview={isMapReview}
           isReviewMode={isReviewMode}
-          isLastLevel={levelInfo?.isLastLevel}
+          isLastLevel={!!victorySnap?.isLastLevel}
           petHasPet={petState?.hasPet}
           maxCombo={maxCombo}
           victoryPhrase={isChallengeMode
@@ -2691,6 +2734,24 @@ const styles = StyleSheet.create({
     opacity: 0.32,
     borderWidth: 2,
     borderColor: "#8A949C",
+  },
+
+  keyboardAccent: {
+    position: 'absolute',
+    top: 5,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    opacity: 0.68,
+  },
+  keyboardAccentDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2,
+  },
+  specialKeyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // ── Modals ─────────────────────────────────────────────────────────────────

@@ -39,14 +39,16 @@ const NAH_TEST = require('../../../assets/images/help-character.png');
 
 // PET_ASSETS[type][stage] = { body }
 // PetSprite.jsx uses assets.body via the legacy multi-layer render path.
+// ── Nahual (legendario — Mexicanario Plus) ────────────────────────────────────
+// 3 variantes con auras prehispánicas y etapas progresivas
 export const PET_ASSETS = {
   ajolote: {
     1: { body: AJO_S1 },
     2: { body: AJO_S2 },
     3: { body: AJO_S3 },
-    4: { body: AJO_S3 }, // juvenile (same image)
+    4: { body: AJO_S3 },
     5: { body: AJO_S5 },
-    6: { body: AJO_S5 }, // adult (same image)
+    6: { body: AJO_S5 },
   },
 
   alebrije: {
@@ -67,10 +69,9 @@ export const PET_ASSETS = {
     6: { body: XOL_S6 },
   },
 
-  // ── Nahual (Mexicanario Plus exclusive) — test sprite ────────────────────
-  nahual_norte:  { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
-  nahual_sur:    { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
-  nahual_urbano: { 1: { body: NAH_TEST }, 2: { body: NAH_TEST }, 3: { body: NAH_TEST }, 4: { body: NAH_TEST }, 5: { body: NAH_TEST }, 6: { body: NAH_TEST } },
+  nahual_norte:  { 1: { body: XOL_S1 }, 2: { body: XOL_S3 }, 3: { body: XOL_S4 }, 4: { body: XOL_S5 }, 5: { body: XOL_S6 }, 6: { body: XOL_S6, wings: ALE_S6 } },
+  nahual_sur:    { 1: { body: AJO_S1 }, 2: { body: AJO_S2 }, 3: { body: AJO_S3 }, 4: { body: AJO_S5 }, 5: { body: AJO_S5 }, 6: { body: AJO_S5, wings: ALE_S6 } },
+  nahual_urbano: { 1: { body: ALE_S1 }, 2: { body: ALE_S2 }, 3: { body: ALE_S3 }, 4: { body: ALE_S4 }, 5: { body: ALE_S5 }, 6: { body: ALE_S6 } },
 };
 
 // Display sizes per stage (dp)

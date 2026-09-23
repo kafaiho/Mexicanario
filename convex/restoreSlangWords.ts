@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 import { NEW_WORDS } from "./seedWords1000";
 import { sampleWords } from "./words";
 
@@ -10,7 +10,7 @@ const RECOVERED_WORDS = [
     "Huevón", "No tener madre", "Estar de mala leche"
 ];
 
-export const restoreSlangWords = mutation({
+export const restoreSlangWords = internalMutation({
     args: {},
     handler: async (ctx) => {
         const restored: string[] = [];

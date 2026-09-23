@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { playBGM, stopBGM } from "../utils/soundManager";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -44,6 +45,16 @@ const TABS = [
     { key: "alltime", label: "🏆 Total" },
 ];
 
+function getIngredientIcon(ingredient) {
+    switch (ingredient) {
+        case "Tortilla": return "🫓";
+        case "Carne": return "🥩";
+        case "Salsa": return "🌶️";
+        case "Limón": return "🍋";
+        default: return "";
+    }
+}
+
 function scoreMsg(n) {
     if (n > 15) return "¡Eres el Rey del Trompo! 👑";
     if (n > 8) return "¡Nada mal, taquero nivel medio! 👍";
@@ -67,7 +78,7 @@ export default function TaqueroRushScreen({ navigation }) {
     const [tacoStack, setTacoStack] = useState([]);
     const tacoShake = React.useRef(new Animated.Value(0)).current;
 
-    const submitScore = useMutation(api.taquero.submitScore);
+    const submitScore = useUserMutation(api.taquero.submitScore);
     const leaderboard = useQuery(api.taquero.getLeaderboard, isGameOver ? { type: tab } : "skip");
     const myBest = useQuery(api.taquero.getMyBest, userId && isGameOver ? { userId } : "skip");
 
@@ -100,7 +111,7 @@ export default function TaqueroRushScreen({ navigation }) {
     const animPool = useRef(Array.from({ length: 20 }, () => new Animated.Value(0))).current;
     const animIdx = useRef(0);
 
-    const handleIngredientTap = (ingredient) => {
+    const handleIngredientTap = useCallback((ingredient) => {
         if (!isPlaying || isGameOver) return;
         if (ingredient === currentRecipe[currentStep]) {
             // Reuse Animated.Value from pool (no leak)
@@ -153,17 +164,7 @@ export default function TaqueroRushScreen({ navigation }) {
                 setTacoStack([]);
             });
         }
-    };
-
-    const getIngredientIcon = (ingredient) => {
-        switch (ingredient) {
-            case "Tortilla": return "🫓";
-            case "Carne": return "🥩";
-            case "Salsa": return "🌶️";
-            case "Limón": return "🍋";
-            default: return "";
-        }
-    };
+    }, [isPlaying, isGameOver, currentRecipe, currentStep]);
 
     return (
         <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.root} resizeMode="cover">

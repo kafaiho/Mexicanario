@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import FriendCompareCard from "./FriendCompareCard";
 import ChallengesModal from "./ChallengesModal";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -48,7 +49,7 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
     userId ? { userId } : "skip"
   );
   const challengeCount = pendingChallenges?.length ?? 0;
-  const acceptChallengeMut = useMutation(api.friends.acceptChallenge);
+  const acceptChallengeMut = useUserMutation(api.friends.acceptChallenge);
 
   // Username setup (para usuarios de Google/Apple sin username)
   const [usernameInput, setUsernameInput] = useState("");
@@ -96,17 +97,17 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
   const pendingCount = pendingRequests?.length ?? 0;
 
   // Mutations
-  const addFriend = useMutation(api.friends.addFriend);
-  const removeFriend = useMutation(api.friends.removeFriend);
-  const acceptRequest = useMutation(api.friends.acceptFriendRequest);
-  const declineRequest = useMutation(api.friends.declineFriendRequest);
-  const setUsernameMutation = useMutation(api.friends.setUsername);
+  const addFriend = useUserMutation(api.friends.addFriend);
+  const removeFriend = useUserMutation(api.friends.removeFriend);
+  const acceptRequest = useUserMutation(api.friends.acceptFriendRequest);
+  const declineRequest = useUserMutation(api.friends.declineFriendRequest);
+  const setUsernameMutation = useUserMutation(api.friends.setUsername);
 
   // IDs de cuates actuales para comparar rápido
   const friendIds = new Set((myFriends ?? []).map((f) => String(f.friendId)));
 
   // ¿Tiene cuenta vinculada (Google, Apple o email)?
-  const isLinked = !!(user?.email || user?.googleId || user?.appleId);
+  const isLinked = !!(user?.email || user?.hasEmail || user?.googleId || user?.appleId);
   // ¿Necesita elegir username?
   const needsUsername = isLinked && !user?.username;
 

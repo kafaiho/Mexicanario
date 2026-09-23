@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -44,26 +45,35 @@ import usePetStore from "../store/usePetStore";
 import { playSound } from "../utils/soundManager";
 import { REAL_HEIGHT, REAL_WIDTH } from "../utils/tabletSetup";
 import ShopScreen from "./ShopScreen";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 // Use real screen dimensions for layout-critical values (carousel snap, full-screen containers)
 const SCREEN_W = REAL_WIDTH;
 const SCREEN_H = REAL_HEIGHT;
+const COMPACT_HEIGHT = SCREEN_H < 720;
+const CAROUSEL_HEIGHT = COMPACT_HEIGHT
+  ? Math.max(310, SCREEN_H * 0.5)
+  : Math.min(440, SCREEN_H * 0.5);
 
-const GROUP_SIZE = 50;
 // Each slide fills the full real screen width so snapping works correctly on all devices
 const ITEM_W = SCREEN_W;
 const SIDE_PAD = 0;
 
-const GROUP_EMOJIS = ["🌮", "🎲", "🎵", "🦎", "🎨", "🏯", "🗣️", "🌵", "🥳", "🤠",
-  "🫔", "🍹", "🎻", "🦜", "🖌️", "⛏️", "🌄", "🦩", "🎭", "🏔️"];
+const GROUP_IMAGES = [
+  require("../../assets/images/level-groups/sabores-v2.png"),
+  require("../../assets/images/level-groups/juegos-v2.png"),
+  require("../../assets/images/level-groups/musica-v2.png"),
+  require("../../assets/images/level-groups/fauna-v2.png"),
+  require("../../assets/images/level-groups/arte-v2.png"),
+];
 const GROUP_NAMES = [
   "Sabores mexicanos", "Juego y tradición", "Música y raíces", "Fauna mexicana",
   "Arte y cultura", "Historia viva", "Expresiones del pueblo", "Tierras y regiones",
   "Costumbres y fiestas", "Habla mexicana",
 ];
 
-function getGroupEmoji(idx) { return GROUP_EMOJIS[idx % GROUP_EMOJIS.length]; }
+function getGroupImage(idx) { return GROUP_IMAGES[idx % GROUP_IMAGES.length]; }
 function getGroupName(idx, firstWord) { return firstWord || GROUP_NAMES[idx % GROUP_NAMES.length]; }
 
 export default function MainMenuScreen({ navigation }) {
@@ -102,7 +112,7 @@ export default function MainMenuScreen({ navigation }) {
 
   const { userId, logout } = useAuth();
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
-  const allLevels = useQuery(api.levels.getAllLevels, userId ? { userId } : {});
+  const levelCount = useQuery(api.levels.getLevelCount);
 
   // Onboarding — shown only on first launch
   const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("menu");
@@ -138,12 +148,9 @@ export default function MainMenuScreen({ navigation }) {
     },
   ];
 
-  const giveDevCoins = useMutation(api.devTools.giveDevCoins);
-  const resetLevelDev = useMutation(api.devTools.resetLevelDev);
-  const switchPetType = useMutation(api.devTools.switchPetType);
-  const seed15to18 = useMutation(api.levels.seedLevels15_18);
-  const buildLevels = useMutation(api.levels.createLevelsForAllWords);
-  const seedOriginal = useMutation(api.words.seedOriginalWords);
+  const giveDevCoins = useUserMutation(api.devTools.giveDevCoins);
+  const resetLevelDev = useUserMutation(api.devTools.resetLevelDev);
+  const switchPetType = useUserMutation(api.devTools.switchPetType);
 
   const DEV_PET_TYPES = ["ajolote", "xolo", "alebrije"];
   const [devPetIdx, setDevPetIdx] = useState(0);
@@ -152,31 +159,38 @@ export default function MainMenuScreen({ navigation }) {
   const scrollX = useRef(new Animated.Value(0)).current;
 
   const currentLevel = levelInfo?.level || 1;
-  const allLevelsData = allLevels || [];
-  const totalLevels = allLevelsData.length;
+  const levelGroups = levelInfo?.levelGroups ?? [];
 
   // ── Groups of 50 ────────────────────────────────────────────────────────────
   const groups = useMemo(() => {
-    const result = [];
-    for (let i = 0; i < allLevelsData.length; i += GROUP_SIZE) {
-      const chunk = allLevelsData.slice(i, i + GROUP_SIZE);
-      // Use array position (1-indexed) so it aligns with currentLevel,
-      // which is also a sequential counter — not the levelNumber from the DB.
-      const groupStart = i + 1;
-      const completed = Math.max(0, Math.min(chunk.length, currentLevel - groupStart));
-      const isCompleted = completed >= chunk.length;
+    // Older deployed Convex versions do not include levelGroups yet. Keep the
+    // carousel visible while the backend update propagates instead of falling
+    // back to an empty home screen.
+    const knownTotal = Math.max(levelInfo?.totalLevels ?? levelCount ?? 50, currentLevel);
+    const visibleGroups = levelGroups.length > 0
+      ? levelGroups
+      : Array.from({ length: Math.ceil(knownTotal / 50) }, (_, index) => ({
+          groupStart: index * 50 + 1,
+          totalInGroup: Math.min(50, knownTotal - index * 50),
+          firstWord: "",
+        }));
+
+    return visibleGroups.map((group, index) => {
+      const groupStart = group.groupStart;
+      const completed = Math.max(0, Math.min(group.totalInGroup, currentLevel - groupStart));
+      const isCompleted = completed >= group.totalInGroup;
       const isActive = !isCompleted && groupStart <= currentLevel;
       const isLocked = groupStart > currentLevel;
-      result.push({
-        idx: result.length, chunk, groupStart,
-        firstWord: chunk[0]?.word,
+      return {
+        idx: index,
+        groupStart,
+        firstWord: group.firstWord,
         completedInGroup: completed,
-        totalInGroup: chunk.length,
+        totalInGroup: group.totalInGroup,
         isCompleted, isActive, isLocked,
-      });
-    }
-    return result;
-  }, [allLevelsData, currentLevel]);
+      };
+    });
+  }, [levelGroups, levelInfo?.totalLevels, levelCount, currentLevel]);
 
   // Auto-scroll to active group
   useEffect(() => {
@@ -246,7 +260,7 @@ export default function MainMenuScreen({ navigation }) {
   // ── Card renderer ────────────────────────────────────────────────────────────
   const renderGroup = ({ item, index }) => {
     const { isCompleted, isActive, isLocked, completedInGroup, totalInGroup, idx } = item;
-    const emoji = getGroupEmoji(idx);
+    const groupImage = getGroupImage(idx);
     const name = getGroupName(idx, item.firstWord);
     const progressFraction = totalInGroup > 0 ? completedInGroup / totalInGroup : 0;
 
@@ -263,11 +277,22 @@ export default function MainMenuScreen({ navigation }) {
         {/* ── Centre content ── */}
         {/* Large emoji with oval drop-shadow */}
         <Animated.View style={[styles.emojiWrapper, { transform: [{ scale: emojiScale }] }]}>
-          {isLocked && (
-            <View style={styles.lockBadge}><Text style={{ fontSize: 28 }}>🔒</Text></View>
-          )}
-          <Text style={[styles.bigEmoji, isLocked && { opacity: 0.45 }]}>{emoji}</Text>
-          {/* Oval shadow beneath emoji */}
+          <View style={[styles.levelArtwork, isLocked && styles.levelArtworkLocked]}>
+            <Image
+              source={groupImage}
+              style={[styles.groupImage, isLocked && styles.groupImageLocked]}
+              resizeMode="contain"
+              accessibilityLabel={`Ilustración de ${name}`}
+            />
+            <View style={styles.groupNumberBadge}>
+              <Text style={styles.groupNumberText}>{idx + 1}</Text>
+            </View>
+            {isLocked && (
+              <View style={styles.lockBadge}>
+                <Ionicons name="lock-closed" size={22} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
           <View style={styles.emojiShadow} />
         </Animated.View>
 
@@ -373,6 +398,12 @@ export default function MainMenuScreen({ navigation }) {
         </Reanimated.View>
       </View>
 
+      <ScrollView
+        style={styles.contentScroll}
+        contentContainerStyle={styles.contentScrollInner}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
       {/* Carousel */}
       <View style={styles.carouselArea}>
         {groups.length > 0 ? (
@@ -383,6 +414,11 @@ export default function MainMenuScreen({ navigation }) {
               keyExtractor={(item) => String(item.idx)}
               renderItem={renderGroup}
               horizontal
+              pagingEnabled
+              directionalLockEnabled
+              nestedScrollEnabled
+              disableIntervalMomentum
+              scrollEnabled={groups.length > 1}
               showsHorizontalScrollIndicator={false}
               snapToInterval={ITEM_W}
               decelerationRate="fast"
@@ -408,9 +444,6 @@ export default function MainMenuScreen({ navigation }) {
           </>
         ) : (
           <View style={{ alignItems: "center", gap: 20 }}>
-            {allLevels === undefined && (
-              <ActivityIndicator size="large" color="#F59B40" />
-            )}
             <TouchableOpacity
               style={styles.ctaBtn}
               onPress={() => { tapMedium(); navigation.navigate("Gameplay"); }}
@@ -431,7 +464,9 @@ export default function MainMenuScreen({ navigation }) {
       </View>
 
       {/* Misiones diarias */}
-      <DailyMissionsWidget userId={userId} />
+      <View style={styles.missionsSection}>
+        <DailyMissionsWidget userId={userId} />
+      </View>
 
       {/* DEV trigger — solo visible en modo desarrollador */}
       {devEnabled && (
@@ -439,6 +474,7 @@ export default function MainMenuScreen({ navigation }) {
           <Text style={styles.devTriggerText}>🔧 Herramientas Dev</Text>
         </TouchableOpacity>
       )}
+      </ScrollView>
 
       {/* DEV panel modal */}
       <Modal
@@ -465,10 +501,6 @@ export default function MainMenuScreen({ navigation }) {
               <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#27ae60" }]}
                 onPress={async () => { if (!userId) return; const r = await resetLevelDev({ userId }); setDevMsg(r.success ? "✅ Nivel → 1" : "Error"); }}>
                 <Text style={styles.devModalBtnText}>🔄 Resetear a Nivel 1</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.devModalBtn, { backgroundColor: "#8E44AD" }]}
-                onPress={async () => { if (!userId) return; setDevMsg("⏳ Cargando seed..."); await seedOriginal(); await seed15to18(); await buildLevels(); setDevMsg("✅ Seed completo"); }}>
-                <Text style={styles.devModalBtnText}>🌱 Seed palabras 15-18</Text>
               </TouchableOpacity>
 
 
@@ -501,7 +533,9 @@ export default function MainMenuScreen({ navigation }) {
 
       {/* Modals */}
       <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowShop(true); setShowAds(true); }} />
-      <ShopScreen visible={showShop} onClose={() => { setShowShop(false); setShowAds(false); }} autoSinAnuncios={showAds} />
+      {showShop && (
+        <ShopScreen visible onClose={() => { setShowShop(false); setShowAds(false); }} autoSinAnuncios={showAds} />
+      )}
       <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <GiftModel visible={showGift} onClose={() => setShowGift(false)} />
       <SinAnuncios visible={showSinAnuncios} onClose={() => setShowSinAnuncios(false)} />
@@ -539,8 +573,13 @@ const styles = StyleSheet.create({
   floatBadge: { width: width * 0.16, height: width * 0.16, justifyContent: "center", alignItems: "center" },
   floatIcon: { width: "100%", height: "100%" },
 
-  // Carousel area: starts after TopBar, takes middle of screen
-  carouselArea: { marginTop: SCREEN_H * 0.14, height: SCREEN_H * 0.47 },
+  // The vertical scroll keeps short screens from forcing the carousel over missions.
+  contentScroll: { flex: 1 },
+  contentScrollInner: {
+    paddingTop: Math.max(82, SCREEN_H * 0.12),
+    paddingBottom: 20,
+  },
+  carouselArea: { height: CAROUSEL_HEIGHT },
 
   // Each slide = full real screen width, vertically centered
   slide: {
@@ -553,29 +592,47 @@ const styles = StyleSheet.create({
   // Emoji floats with a big size + oval shadow beneath
   emojiWrapper: {
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: COMPACT_HEIGHT ? 0 : 4,
     position: "relative",
   },
-  bigEmoji: { fontSize: 100, lineHeight: 110 },
+  levelArtwork: {
+    width: Math.min(width * (COMPACT_HEIGHT ? 0.3 : 0.42), COMPACT_HEIGHT ? 112 : 170),
+    height: Math.min(width * (COMPACT_HEIGHT ? 0.3 : 0.42), COMPACT_HEIGHT ? 112 : 170),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  levelArtworkLocked: { opacity: 0.32 },
+  groupImage: { width: "100%", height: "100%" },
+  groupImageLocked: { opacity: 0.44, tintColor: "#7F878D" },
   // Oval shadow — blurred ellipse below the emoji
   emojiShadow: {
-    width: 110,
-    height: 22,
+    width: COMPACT_HEIGHT ? 64 : 82,
+    height: COMPACT_HEIGHT ? 10 : 14,
     borderRadius: 55,
     backgroundColor: "rgba(0,0,0,0.18)",
-    marginTop: -8,
+    marginTop: COMPACT_HEIGHT ? 4 : 8,
   },
 
-  lockBadge: { position: "absolute", top: 0, right: -10, zIndex: 10 },
+  groupNumberBadge: {
+    position: "absolute", left: 13, bottom: 13, minWidth: 35, height: 35,
+    borderRadius: 18, paddingHorizontal: 8, backgroundColor: "rgba(21,59,82,0.78)",
+    alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.8)",
+  },
+  groupNumberText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  lockBadge: {
+    position: "absolute", top: 12, right: 12, width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center", backgroundColor: "rgba(31,48,61,0.78)",
+    borderWidth: 2, borderColor: "rgba(255,255,255,0.75)", zIndex: 10,
+  },
 
   // Centre slide info
   centreContent: { alignItems: "center", width: "100%", paddingHorizontal: 40 },
 
   namePill: {
     paddingHorizontal: 32,
-    paddingVertical: 11,
+    paddingVertical: COMPACT_HEIGHT ? 7 : 11,
     borderRadius: 40,
-    marginBottom: 8,
+    marginBottom: COMPACT_HEIGHT ? 4 : 8,
     maxWidth: "75%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
@@ -583,18 +640,18 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  namePillText: { color: "white", fontWeight: "800", fontSize: 17, textAlign: "center" },
+  namePillText: { color: "white", fontWeight: "800", fontSize: COMPACT_HEIGHT ? 15 : 17, textAlign: "center" },
 
-  subText: { color: "white", fontSize: 13, fontWeight: "600", marginBottom: 10, textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  subText: { color: "white", fontSize: 13, fontWeight: "600", marginBottom: COMPACT_HEIGHT ? 6 : 10, textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 
-  progressOuter: { width: "60%", height: 8, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: 999, overflow: "hidden", marginBottom: 18 },
+  progressOuter: { width: "60%", height: 8, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: 999, overflow: "hidden", marginBottom: COMPACT_HEIGHT ? 10 : 18 },
   progressInner: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "white", borderRadius: 999 },
 
   zoneChip: {
     borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginBottom: 10,
+    paddingVertical: COMPACT_HEIGHT ? 4 : 6,
+    marginBottom: COMPACT_HEIGHT ? 6 : 10,
     alignSelf: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -610,7 +667,7 @@ const styles = StyleSheet.create({
   ctaBtn: {
     backgroundColor: "#D36B1E",
     paddingHorizontal: width * 0.18,
-    paddingVertical: 14,
+    paddingVertical: COMPACT_HEIGHT ? 10 : 14,
     borderRadius: 50,
     borderWidth: 2,
     borderColor: "#E6CCB2",
@@ -621,7 +678,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   ctaBtnCompleted: { backgroundColor: "#D36B1E" },
-  ctaBtnText: { color: "white", fontSize: 18, fontWeight: "800" },
+  ctaBtnText: { color: "white", fontSize: COMPACT_HEIGHT ? 16 : 18, fontWeight: "800" },
+
+  missionsSection: { marginTop: COMPACT_HEIGHT ? 12 : 18 },
 
   // Side-slide peek pill (faded)
   peekLabel: {

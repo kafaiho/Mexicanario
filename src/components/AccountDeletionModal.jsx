@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 /**
  * AccountDeletionModal
@@ -22,7 +23,7 @@ import { useAuth } from "../context/AuthContext";
  */
 export default function AccountDeletionModal({ visible, onClose }) {
     const { userId, logout } = useAuth();
-    const deleteAccount = useMutation(api.users.deleteAccount);
+    const deleteAccount = useUserMutation(api.users.deleteAccount);
     const [deleting, setDeleting] = useState(false);
 
     async function handleDelete() {

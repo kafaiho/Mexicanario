@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 import { insertNewLevel } from "./levelWrites";
 
 /**
@@ -127,7 +127,7 @@ const NEW_ENTRIES = [
   },
 ];
 
-export const seedCulturaDigitalV2 = mutation({
+export const seedCulturaDigitalV2 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const existing = await ctx.db.query("words").collect();

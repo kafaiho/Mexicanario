@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 /**
  * Corrige errores culturales/geográficos encontrados en la auditoría de los
@@ -84,7 +84,7 @@ const CORRECTIONS: {
   },
 ];
 
-export const patchCulturalErrors = mutation({
+export const patchCulturalErrors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

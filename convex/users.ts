@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
+import { loadOrderingData } from "./levelData";
 import {
   getOrderedLevels
 } from "./levelOrdering";
@@ -12,10 +13,14 @@ function normalizeWord(str: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+/** Public view of a player: never exposes the password hash or email. */
 export const getUser = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.userId);
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    const { passwordHash: _passwordHash, email: _email, ...rest } = user;
+    return rest;
   },
 });
 
@@ -108,7 +113,7 @@ export const getCurrentLevel = query({
     // Get user's current level (how many levels they've completed + 1)
     const currentLevel = user.currentLevel || 1;
 
-    const allLevels = await ctx.db.query("levels").collect();
+    const { levels: allLevels, words: allWords } = await loadOrderingData(ctx, user.culturalOrderVersion ?? 1);
 
     if (allLevels.length === 0) {
       return {
@@ -127,11 +132,22 @@ export const getCurrentLevel = query({
       };
     }
 
-    const allWords = await ctx.db.query("words").collect();
-
     // Order: first 50 = easy words (same for everyone), rest = seeded per user
     const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user.culturalOrderVersion ?? 1);
     const maxLevel = ordered.length;
+    const wordMap = new Map(allWords.map((item) => [item._id.toString(), item]));
+    const levelGroups = [];
+    for (let index = 0; index < ordered.length; index += 50) {
+      const group = ordered.slice(index, index + 50);
+      const firstWord = group[0]
+        ? wordMap.get(group[0].wordId.toString())?.word ?? ""
+        : "";
+      levelGroups.push({
+        groupStart: index + 1,
+        totalInGroup: group.length,
+        firstWord: normalizeWord(firstWord),
+      });
+    }
 
     // Clamp currentLevel to the available range
     const clampedLevel = Math.min(currentLevel, maxLevel);
@@ -154,10 +170,10 @@ export const getCurrentLevel = query({
       };
     }
 
-    const word = await ctx.db.get(levelConfig.wordId as Id<"words">);
+    const word = wordMap.get(levelConfig.wordId.toString());
     const nextLevelConfig = ordered[clampedLevel];
     const nextWord = nextLevelConfig
-      ? await ctx.db.get(nextLevelConfig.wordId as Id<"words">)
+      ? wordMap.get(nextLevelConfig.wordId.toString())
       : null;
 
     return {
@@ -177,13 +193,16 @@ export const getCurrentLevel = query({
       difficultyDeviation: levelConfig.deviation ?? null,
       nextPathId: nextWord?.pathId,
       reward: levelConfig.reward,
+      totalLevels: maxLevel,
+      levelGroups,
       isLastLevel: clampedLevel >= maxLevel,
+      completedAll: currentLevel > maxLevel,
       isDefaultLevel: false,
     };
   },
 });
 
-export const updateUserCurrency = mutation({
+export const updateUserCurrency = userMutation({
   args: {
     userId: v.id("users"),
     coins: v.optional(v.number()),
@@ -200,12 +219,19 @@ export const updateUserCurrency = mutation({
     if (args.diamonds !== undefined) {
       update.diamonds = (user.diamonds || 0) + args.diamonds;
     }
+    // Spending must never leave a negative balance (e.g. two hints tapped
+    // before the reactive balance refreshes on the client).
+    const spendsCoins = (args.coins ?? 0) < 0 && (update.coins ?? 0) < 0;
+    const spendsDiamonds = (args.diamonds ?? 0) < 0 && (update.diamonds ?? 0) < 0;
+    if (spendsCoins || spendsDiamonds) {
+      throw new Error("Saldo insuficiente");
+    }
 
     await ctx.db.patch(args.userId, update);
   },
 });
 
-export const updateUserLevel = mutation({
+export const updateUserLevel = internalMutation({
   args: {
     userId: v.id("users"),
     level: v.number(),
@@ -222,7 +248,7 @@ export const updateUserLevel = mutation({
   },
 });
 
-export const incrementUserLevel = mutation({
+export const incrementUserLevel = internalMutation({
   args: {
     userId: v.id("users"),
   },
@@ -241,7 +267,7 @@ export const incrementUserLevel = mutation({
   },
 });
 
-export const updateUserProfile = mutation({
+export const updateUserProfile = userMutation({
   args: {
     userId: v.id("users"),
     name: v.optional(v.string()),
@@ -263,7 +289,7 @@ export const updateUserProfile = mutation({
 });
 
 // ─── Reset level to 1 (keeps coins & diamonds) ────────────────────────────────
-export const resetLevel = mutation({
+export const resetLevel = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -305,7 +331,7 @@ function getMonthId(): string {
 // ─── XP Cultural ─────────────────────────────────────────────────────────────
 // Suma XP al perfil del jugador + trackea XP semanal/mensual.
 // amount: +10 por palabra, +5 sin errores, +15 nivel perfecto.
-export const addXp = mutation({
+export const addXp = userMutation({
   args: { userId: v.id("users"), amount: v.number() },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -528,7 +554,7 @@ export const getGlobalLeaderboard = query({
 });
 
 // ─── Claim share reward (once per day) ──────────────────────────────────────
-export const claimShareReward = mutation({
+export const claimShareReward = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -549,7 +575,7 @@ export const claimShareReward = mutation({
   },
 });
 
-export const deleteAccount = mutation({
+export const deleteAccount = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const { userId } = args;
@@ -582,6 +608,7 @@ export const deleteAccount = mutation({
       "pvpMatches",
       "dailyMiniScores",
       "userRankCache",
+      "sessions",
     ] as const;
 
     for (const table of tables) {

@@ -1,5 +1,27 @@
-import * as Google from 'expo-auth-session/providers/google';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
+
+// ─── Google OAuth client IDs ──────────────────────────────────────────────────
+const GOOGLE_WEB_CLIENT_ID     = "238037079938-rlg954774ts69r3pkig9f39ubl48dm86.apps.googleusercontent.com";
+const GOOGLE_IOS_CLIENT_ID     = "238037079938-uk6c2f89ni70vnu4fu6rmtnghnu3p14m.apps.googleusercontent.com";
+const GOOGLE_ANDROID_CLIENT_ID = "238037079938-8so7kfjsajjpesp1ger6r8nshfgspjs5.apps.googleusercontent.com";
+
+let GoogleSignin = null;
+let statusCodes = {};
+try {
+  const mod = require('@react-native-google-signin/google-signin');
+  GoogleSignin = mod.GoogleSignin;
+  statusCodes = mod.statusCodes || {};
+  if (GoogleSignin?.configure) {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
+      scopes: ['openid', 'profile', 'email'],
+      offlineAccess: false,
+    });
+  }
+} catch (_) {
+  // Module not available in this environment (e.g. Expo Go)
+}
 
 // expo-apple-authentication is a native-only module — safe to import but
 // only functional on iOS native builds (not Expo Go on Android).
@@ -9,15 +31,6 @@ try {
 } catch {
   // Module not available in this environment (Expo Go on Android)
 }
-
-// ─── Google OAuth client IDs ──────────────────────────────────────────────────
-// Obtain these from https://console.cloud.google.com → APIs & Services → Credentials
-// Create 3 OAuth 2.0 Client IDs: Web Application, Android, iOS
-// Android package:  com.kafaiho.mexicanario
-// iOS bundle ID:    com.kafaiho.mexicanario
-const GOOGLE_EXPO_CLIENT_ID    = "238037079938-rlg954774ts69r3pkig9f39ubl48dm86.apps.googleusercontent.com";
-const GOOGLE_IOS_CLIENT_ID     = "238037079938-uk6c2f89ni70vnu4fu6rmtnghnu3p14m.apps.googleusercontent.com";
-const GOOGLE_ANDROID_CLIENT_ID = "238037079938-8so7kfjsajjpesp1ger6r8nshfgspjs5.apps.googleusercontent.com";
 
 // ─── JWT decode helper ────────────────────────────────────────────────────────
 function decodeJwtPayload(token) {
@@ -37,33 +50,47 @@ function decodeJwtPayload(token) {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 export function useSocialAuth() {
-  const [request, , promptAsync] = Google.useAuthRequest({
-    expoClientId:    GOOGLE_EXPO_CLIENT_ID,
-    iosClientId:     GOOGLE_IOS_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
   /**
    * Opens Google OAuth flow.
-   * Returns { googleId, email } on success, null if cancelled or failed.
+   * Returns { googleId, email, idToken } on success, null if cancelled or failed.
+   * The backend verifies idToken; googleId/email are only for display.
    */
   const signInWithGoogle = async () => {
-    const result = await promptAsync();
-    if (result?.type !== 'success') return null;
+    if (!GoogleSignin) {
+      Alert.alert(
+        "Google Sign-In",
+        "El inicio de sesión con Google requiere una compilación nativa."
+      );
+      return null;
+    }
+    try {
+      await GoogleSignin.hasPlayServices();
+      const result = await GoogleSignin.signIn();
+      // Use getTokens() to consistently extract idToken across different versions
+      const tokens = await GoogleSignin.getTokens();
+      const idToken = tokens?.idToken || result?.idToken || result?.data?.idToken;
 
-    const idToken = result.authentication?.idToken;
-    if (!idToken) return null;
+      if (!idToken) {
+        console.warn('No ID token from Google SignIn');
+        return null;
+      }
 
-    const payload = decodeJwtPayload(idToken);
-    if (!payload?.sub) return null;
+      const payload = decodeJwtPayload(idToken);
+      if (!payload?.sub) return null;
 
-    return { googleId: payload.sub, email: payload.email ?? null };
+      return { googleId: payload.sub, email: payload.email ?? null, idToken };
+    } catch (e) {
+      if (e.code === statusCodes.SIGN_IN_CANCELLED) {
+        return null; // normal dismissal
+      }
+      console.warn('[useSocialAuth] Google Sign-In error:', e);
+      return null;
+    }
   };
 
   /**
    * Opens Apple Sign-In (iOS only).
-   * Returns { appleId, email } on success, null if cancelled or failed.
+   * Returns { appleId, email, idToken } on success, null if cancelled or failed.
    */
   const signInWithApple = async () => {
     if (Platform.OS !== 'ios' || !AppleAuthentication) return null;
@@ -74,7 +101,8 @@ export function useSocialAuth() {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      return { appleId: credential.user, email: credential.email ?? null };
+      if (!credential.identityToken) return null;
+      return { appleId: credential.user, email: credential.email ?? null, idToken: credential.identityToken };
     } catch (e) {
       // ERR_CANCELED is normal when user dismisses
       if (e?.code !== 'ERR_CANCELED') {
@@ -87,6 +115,6 @@ export function useSocialAuth() {
   return {
     signInWithGoogle,
     signInWithApple,
-    googleAuthReady: !!request,
+    googleAuthReady: true, // Native GoogleSignin is always ready
   };
 }

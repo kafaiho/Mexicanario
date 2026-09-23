@@ -12,6 +12,7 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width } = Dimensions.get("window");
 
@@ -34,8 +35,8 @@ export default function PvPMatchmakingModal({
   const [searching, setSearching] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
-  const joinQueue = useMutation(api.pvp.joinQueue);
-  const leaveQueue = useMutation(api.pvp.leaveQueue);
+  const joinQueue = useUserMutation(api.pvp.joinQueue);
+  const leaveQueue = useUserMutation(api.pvp.leaveQueue);
 
   // Queue status (reactive)
   const queueStatus = useQuery(

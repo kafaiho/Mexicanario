@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 // ── Las 19 categorías canónicas ─────────────────────────────────────────────
 const CANONICAL = new Set([
@@ -88,7 +88,7 @@ export const listNonCanonicalCategories = query({
  *
  * Dashboard: migrateCollections:fixAllCategories
  */
-export const fixAllCategories = mutation({
+export const fixAllCategories = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -121,7 +121,7 @@ const BEVERAGE_WORDS = [
   "tepache", "tequila", "tejuino", "chela", "pisto",
 ];
 
-export const reclassifyBeverages = mutation({
+export const reclassifyBeverages = internalMutation({
   args: {},
   handler: async (ctx) => {
     const beverageSet = new Set(BEVERAGE_WORDS.map((w) => w.toLowerCase().trim()));
@@ -146,7 +146,7 @@ export const reclassifyBeverages = mutation({
  *
  * Ejecutar desde Convex Dashboard: migrateCollections:fixLevelRewards
  */
-export const fixLevelRewards = mutation({
+export const fixLevelRewards = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allLevels = await ctx.db.query("levels").collect();

@@ -1,5 +1,7 @@
-import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalMutation, query } from "./_generated/server";
+import { userAction, userMutation } from "./sessionAuth";
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 // Items that can be bought with coins or diamonds (not real money)
@@ -50,7 +52,7 @@ export const getShopState = query({
     // Season pass
     const passes = await ctx.db
       .query("seasonPass")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .collect();
     const activePass = passes.find((p) => p.expiresAt > now) ?? null;
 
@@ -74,7 +76,7 @@ export const getShopState = query({
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /** Claim the daily free 10 coins (24h cooldown) */
-export const claimFreeCoins = mutation({
+export const claimFreeCoins = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -104,7 +106,7 @@ export const claimFreeCoins = mutation({
 });
 
 /** Buy a power-up or mascota item with coins or diamonds */
-export const buyWithCoins = mutation({
+export const buyWithCoins = userMutation({
   args: {
     userId: v.id("users"),
     itemId: v.string(),
@@ -171,11 +173,52 @@ export const buyWithCoins = mutation({
 });
 
 /** Apply an IAP purchase (called after RevenueCat confirms payment) */
-export const applyIAPPurchase = mutation({
+// ─── Real-money purchases (verified with RevenueCat) ──────────────────────────
+// Store purchases are only credited after RevenueCat confirms the transaction for
+// this player (RevenueCat app user id === Convex userId, see RevenueCatService.logIn).
+const ENTITLEMENT_PLUS = "Mexicanario Pro";
+
+async function fetchRevenueCatSubscriber(userId: string): Promise<any> {
+  const secret = process.env.REVENUECAT_SECRET_API_KEY;
+  if (!secret) throw new ConvexError("PAYMENTS_NOT_CONFIGURED");
+  const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!res.ok) throw new ConvexError("PAYMENTS_UNAVAILABLE");
+  const body: any = await res.json();
+  return body.subscriber ?? {};
+}
+
+/** Credits a store purchase after verifying its transaction with RevenueCat. */
+export const applyIAPPurchase = userAction({
   args: {
     userId: v.id("users"),
     itemId: v.string(),
-    receiptToken: v.optional(v.string()),
+    transactionId: v.string(), // store transaction id from Purchases.purchasePackage
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; coins: number; diamonds: number; coinsGranted: number; diamondsGranted: number; alreadyApplied?: boolean }> => {
+    const item = IAP_ITEMS[args.itemId];
+    if (!item) throw new ConvexError("IAP item no encontrado: " + args.itemId);
+    const subscriber = await fetchRevenueCatSubscriber(args.userId);
+    const transactions: any[] = [
+      ...(subscriber.non_subscriptions?.[item.rcProductId] ?? []),
+      ...(subscriber.subscriptions?.[item.rcProductId] ? [subscriber.subscriptions[item.rcProductId]] : []),
+    ];
+    const tx = transactions.find((t) => t?.store_transaction_id === args.transactionId || t?.id === args.transactionId);
+    if (!tx) throw new ConvexError("PURCHASE_NOT_VERIFIED");
+    return await ctx.runMutation(internal.shop.grantIAPPurchase, {
+      userId: args.userId,
+      itemId: args.itemId,
+      receiptToken: String(tx.store_transaction_id ?? tx.id),
+    });
+  },
+});
+
+export const grantIAPPurchase = internalMutation({
+  args: {
+    userId: v.id("users"),
+    itemId: v.string(),
+    receiptToken: v.string(),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -183,6 +226,15 @@ export const applyIAPPurchase = mutation({
 
     const item = IAP_ITEMS[args.itemId];
     if (!item) throw new Error("IAP item no encontrado: " + args.itemId);
+
+    // A verified transaction is credited once, no matter how often it is sent.
+    const already = await ctx.db
+      .query("purchases")
+      .withIndex("by_receiptToken", (q) => q.eq("receiptToken", args.receiptToken))
+      .first();
+    if (already) {
+      return { success: true, alreadyApplied: true, coins: user.coins, diamonds: user.diamonds, coinsGranted: 0, diamondsGranted: 0 };
+    }
 
     const now = Date.now();
     const patch: Record<string, number> = {};
@@ -228,7 +280,7 @@ export const applyIAPPurchase = mutation({
       // Remove any existing non-expired passes
       const existing = await ctx.db
         .query("seasonPass")
-        .filter((q) => q.eq(q.field("userId"), args.userId))
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
         .collect();
       for (const p of existing) {
         await ctx.db.delete(p._id);
@@ -254,7 +306,7 @@ export const applyIAPPurchase = mutation({
 });
 
 /** Use a power-up from inventory (called from GameplayScreen) */
-export const usePowerup = mutation({
+export const usePowerup = userMutation({
   args: {
     userId: v.id("users"),
     powerupType: v.string(), // "hints" | "skips" | "completes" | "synonyms"
@@ -275,22 +327,34 @@ export const usePowerup = mutation({
 });
 
 /**
- * Sync the "Mexicanario Pro" entitlement status from RevenueCat to the database.
- * Called after paywall completion, purchase restoration, or customerInfo listener
- * updates (subscription renewals / lapses).
- *
- * Pass expiresAt as the epoch ms expiry from RevenueCat's entitlement.expirationDate,
- * or omit/pass 0 to mark the subscription as inactive.
+ * Refreshes the "Mexicanario Pro" entitlement from RevenueCat (server-side).
+ * Called after paywall completion, purchase restoration, or customerInfo
+ * listener updates (renewals / lapses). The client never sends the expiry.
  */
-export const syncMexPlusEntitlement = mutation({
+export const verifyMexPlusEntitlement = userAction({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args): Promise<{ active: boolean; expiresAt: number }> => {
+    const subscriber = await fetchRevenueCatSubscriber(args.userId);
+    const entitlement = subscriber.entitlements?.[ENTITLEMENT_PLUS];
+    let expiresAt = 0;
+    if (entitlement) {
+      // expires_date null = lifetime; keep it far in the future.
+      expiresAt = entitlement.expires_date ? Date.parse(entitlement.expires_date) : Date.UTC(2100, 0, 1);
+    }
+    await ctx.runMutation(internal.shop.syncMexPlusEntitlement, { userId: args.userId, expiresAt });
+    return { active: expiresAt > Date.now(), expiresAt };
+  },
+});
+
+export const syncMexPlusEntitlement = internalMutation({
   args: {
     userId: v.id("users"),
-    expiresAt: v.optional(v.number()), // epoch ms; omit or 0 → not active
+    expiresAt: v.number(), // epoch ms; 0 → not active
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
-    await ctx.db.patch(args.userId, { mexPlusExpiresAt: args.expiresAt ?? 0 } as any);
+    await ctx.db.patch(args.userId, { mexPlusExpiresAt: args.expiresAt } as any);
     return { success: true };
   },
 });
@@ -299,7 +363,7 @@ export const syncMexPlusEntitlement = mutation({
 const TACOS_PER_GIFT = 12;
 const GIFT_REWARD_COINS = 100;
 
-export const claimGiftReward = mutation({
+export const claimGiftReward = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);

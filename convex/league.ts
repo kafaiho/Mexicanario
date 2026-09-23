@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 
 // ── Division metadata ───────────────────────────────────────────────────────
 
@@ -318,7 +319,7 @@ export const getLeagueHistory = query({
 
 // ── Mutations ───────────────────────────────────────────────────────────────
 
-export const joinLeague = mutation({
+export const joinLeague = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -413,7 +414,7 @@ export const joinLeague = mutation({
   },
 });
 
-export const recordLeagueCXP = mutation({
+export const recordLeagueCXP = userMutation({
   args: {
     userId: v.id("users"),
     attempts: v.number(),
@@ -485,7 +486,7 @@ export const recordLeagueCXP = mutation({
   },
 });
 
-export const assignDailyMiniGroup = mutation({
+export const assignDailyMiniGroup = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -549,7 +550,7 @@ export const assignDailyMiniGroup = mutation({
   },
 });
 
-export const claimDailyMiniReward = mutation({
+export const claimDailyMiniReward = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const today = getTodayCST();

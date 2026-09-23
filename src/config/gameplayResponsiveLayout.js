@@ -37,9 +37,11 @@ function getGameplayResponsiveLayout({ width, height, insets = {} } = {}) {
   const preferredKeyGap = mode === "compact" ? 3 : mode === "phone" ? 4 : 6;
   const keyGap = Math.min(preferredKeyGap, keyboardInnerWidth / 10);
   const tenKeyWidth = (keyboardInnerWidth - keyGap * 10) / 10;
-  const mixedRowKeyWidth = (keyboardInnerWidth - keyGap * 9) / 9.5;
-  const keyWidth = Math.max(0, Math.min(tenKeyWidth, mixedRowKeyWidth));
-  const specialWidth = keyWidth * 1.25;
+  const keyWidth = Math.max(0, tenKeyWidth);
+  const specialWidth = Math.max(
+    0,
+    (keyboardInnerWidth - keyGap * 9 - keyWidth * 7) / 2,
+  );
   const keyHeight = mode === "compact" ? 36 : mode === "phone" ? 44 : 48;
   const keyboardHeight = keyboardPadding * 2 + keyHeight * 3 + keyGap * 2;
   const boardTopPadding = isLandscape

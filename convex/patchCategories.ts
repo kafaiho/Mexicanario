@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 /**
  * Asigna categorías correctas a las palabras de slang/jerga mexicana.
@@ -6,7 +6,7 @@ import { mutation } from "./_generated/server";
  *
  * Run from Convex dashboard: patchCategories:assignSlangCategories
  */
-export const assignSlangCategories = mutation({
+export const assignSlangCategories = internalMutation({
     args: {},
     handler: async (ctx) => {
         // Palabras de slang/jerga → Modismos (expresiones culturales mexicanas)
@@ -153,7 +153,7 @@ export const assignSlangCategories = mutation({
  * @deprecated Use assignSlangCategories instead.
  * Kept for backwards compatibility only — do NOT use.
  */
-export const forceCategories = mutation({
+export const forceCategories = internalMutation({
     args: {},
     handler: async (ctx) => {
         const words = await ctx.db.query("words").collect();
@@ -168,7 +168,7 @@ export const forceCategories = mutation({
     }
 });
 
-export const forceCorrectAllCategories = mutation({
+export const forceCorrectAllCategories = internalMutation({
     args: {},
     handler: async (ctx) => {
         // Complete mapping based on all known words
@@ -254,7 +254,7 @@ export const forceCorrectAllCategories = mutation({
     }
 });
 
-export const autoFixDatabase = mutation({
+export const autoFixDatabase = internalMutation({
     args: {},
     handler: async (ctx) => {
         // 1. Rename "Arepas" collection to "Taco"
@@ -326,7 +326,7 @@ export const autoFixDatabase = mutation({
     }
 });
 
-export const renameArepasToTacos = mutation({
+export const renameArepasToTacos = internalMutation({
     args: {},
     handler: async (ctx) => {
         const allWords = await ctx.db.query("words").collect();
@@ -356,7 +356,7 @@ export const renameArepasToTacos = mutation({
  *
  * Run from Convex dashboard: patchCategories:reorganizeCategories
  */
-export const reorganizeCategories = mutation({
+export const reorganizeCategories = internalMutation({
     args: {},
     handler: async (ctx) => {
         // ── Category-level merges (old category name → canonical category) ──────
@@ -520,7 +520,7 @@ export const reorganizeCategories = mutation({
  *
  * Run from Convex dashboard: patchCategories:cleanupDuplicateWords
  */
-export const cleanupDuplicateWords = mutation({
+export const cleanupDuplicateWords = internalMutation({
     args: {},
     handler: async (ctx) => {
         let allWords = await ctx.db.query("words").collect();

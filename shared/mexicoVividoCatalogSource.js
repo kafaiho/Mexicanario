@@ -267,6 +267,131 @@ const MEXICO_VIVIDO_WORDS = Object.freeze(groups.flatMap(([pathId, entries]) => 
 })));
 
 const REMOVED_WORDS = [
+  {
+    word: 'bato',
+    reason: 'Se retiró del recorrido editorial porque la pista antigua lo presentaba como sinónimo directo de cuate y lo ubicaba fuera de su contexto regional.',
+    legacyPresentation: {
+      meaning: 'Muchacho u hombre, en lenguaje popular.',
+      example: 'Ese bato esperaba el camión con sus amigos.',
+      region: 'Noroeste y occidente',
+      collectionId: 'regiones-hablas',
+      placeId: 'sinaloa',
+      icon: '🧢',
+      difficulty: 2,
+    },
+  },
+  {
+    word: 'bato loco',
+    reason: 'Se retiró por ser una expresión imprecisa y estereotipada que no corresponde al apartado de CDMX.',
+    legacyPresentation: {
+      meaning: 'Expresión coloquial para un hombre considerado temerario.',
+      example: 'En la película llamaban bato loco al personaje más temerario.',
+      region: 'Noroeste y occidente',
+      collectionId: 'regiones-hablas',
+      placeId: 'sinaloa',
+      icon: '🧢',
+      difficulty: 2,
+    },
+  },
+  {
+    word: 'wey',
+    reason: 'Duplicaba una variante ortográfica y su pista lo reducía incorrectamente a sinónimo de amigo.',
+    legacyPresentation: {
+      meaning: 'Grafía informal usada en mensajes para representar la voz «güey».',
+      example: 'En el mensaje escribió «wey» como variante informal de «güey».',
+      region: 'Todo México', collectionId: 'regiones-hablas', placeId: 'todo-mexico', icon: '💬', difficulty: 2,
+    },
+  },
+  {
+    word: 'güey',
+    reason: 'Se retiró para evitar una pista ambigua que lo presentaba simplemente como amigo.',
+    legacyPresentation: {
+      meaning: 'Tratamiento coloquial cuyo sentido cambia entre confianza y molestia según el tono.',
+      example: 'Entre personas de confianza, el tono dejó claro cómo usaron la palabra güey.',
+      region: 'Todo México', collectionId: 'regiones-hablas', placeId: 'todo-mexico', icon: '💬', difficulty: 2,
+    },
+  },
+  {
+    word: 'carnal',
+    reason: 'Su pista antigua se confundía con cuate y no explicaba el vínculo de hermandad o confianza estrecha.',
+    legacyPresentation: {
+      meaning: 'Hermano o persona tratada con afecto y mucha confianza.',
+      example: 'Lo llamó carnal porque crecieron juntos y se tienen mucha confianza.',
+      region: 'Todo México', collectionId: 'regiones-hablas', placeId: 'todo-mexico', icon: '🤜🤛', difficulty: 2,
+    },
+  },
+  {
+    word: 'ñero',
+    reason: 'La definición «amigo de la calle» era imprecisa y podía reforzar un estereotipo social.',
+    legacyPresentation: {
+      meaning: 'Tratamiento callejero derivado de compañero; puede ser despectivo según el contexto.',
+      example: 'El glosario explicó que ñero cambia de intención según el tono y el contexto.',
+      region: 'Uso regional variable', collectionId: 'regiones-hablas', placeId: 'unclassified', icon: '💬', difficulty: 3,
+    },
+  },
+  {
+    word: 'morra / morro',
+    reason: 'Combinaba dos respuestas en un solo nivel y las presentaba como voces generales de todo México.',
+    legacyPresentation: {
+      meaning: 'Formas populares para una joven y un joven, especialmente en el noroeste.',
+      example: 'En el noroeste es común oír morra o morro al hablar de gente joven.',
+      region: 'Noroeste', collectionId: 'regiones-hablas', placeId: 'sinaloa', icon: '🧑', difficulty: 2,
+    },
+  },
+  {
+    word: 'morro',
+    reason: 'Estaba asignado a CDMX aunque su marca regional documentada corresponde al noroeste.',
+    legacyPresentation: {
+      meaning: 'Niño o joven, en el habla popular del noroeste.',
+      example: 'De morro jugaba futbol todas las tardes con la gente de la cuadra.',
+      region: 'Noroeste', collectionId: 'regiones-hablas', placeId: 'sinaloa', icon: '🧒', difficulty: 2,
+    },
+  },
+  {
+    word: 'morra',
+    reason: 'Estaba asignada a CDMX aunque su marca regional documentada corresponde al noroeste.',
+    legacyPresentation: {
+      meaning: 'Niña o joven, en el habla popular del noroeste.',
+      example: 'La morra del equipo anotó el gol durante la cascarita.',
+      region: 'Noroeste', collectionId: 'regiones-hablas', placeId: 'sinaloa', icon: '🧒', difficulty: 2,
+    },
+  },
+  {
+    word: 'morrita',
+    reason: 'Necesitaba la misma corrección regional que morra y morro.',
+    legacyPresentation: {
+      meaning: 'Forma diminutiva para una niña o joven, propia del habla popular del noroeste.',
+      example: 'La familia recordó que de morrita aprendió a andar en bicicleta.',
+      region: 'Noroeste', collectionId: 'regiones-hablas', placeId: 'sinaloa', icon: '🧒', difficulty: 2,
+    },
+  },
+  {
+    word: 'palomilla',
+    reason: 'La pista antigua incluía la palabra cuates y permitía más de una respuesta razonable.',
+    legacyPresentation: {
+      meaning: 'Grupo de personas que conviven y salen juntas con frecuencia.',
+      example: 'La palomilla se reunió en la cancha después de la escuela.',
+      region: 'Todo México', collectionId: 'vida-barrio', placeId: 'todo-mexico', icon: '👥', difficulty: 2,
+    },
+  },
+  {
+    word: 'naco',
+    reason: 'Se retiró por ser un insulto clasista presentado sin contexto crítico en una experiencia familiar.',
+    legacyPresentation: {
+      meaning: 'Insulto clasista aplicado a quien se considera de mal gusto; conviene evitarlo.',
+      example: 'El taller analizó por qué usar naco para humillar a alguien reproduce prejuicios.',
+      region: 'Todo México', collectionId: 'regiones-hablas', placeId: 'todo-mexico', icon: '⚠️', difficulty: 3,
+    },
+  },
+  {
+    word: 'chaleco',
+    reason: 'La acepción «persona torpe» y su asignación a CDMX no tenían sustento editorial suficiente.',
+    legacyPresentation: {
+      meaning: 'Voz regional pendiente de documentación; no debe asumirse como expresión de CDMX.',
+      example: 'El equipo editorial dejó chaleco fuera del recorrido hasta documentar su uso.',
+      region: 'Uso regional no confirmado', collectionId: 'regiones-hablas', placeId: 'unclassified', icon: '❓', difficulty: 3,
+    },
+  },
   { word: 'cadena de tías', reason: 'Formulación retirada para no asociar una práctica digital familiar con un género específico.' },
   { word: 'rayuela', reason: 'Duplicaba el concepto de avioncito; se conservó la variante mexicana del juego.' },
   { word: 'laqueado', reason: 'Duplicaba el concepto artesanal de maque; se sustituyó por telar de cintura.' },

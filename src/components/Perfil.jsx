@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocialAuth } from '../hooks/useSocialAuth';
 import CountryPicker from './CountryPicker';
 import { FONTS } from '../theme/designTokens';
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get('window');
 const BROWN = '#8B4513';
@@ -28,8 +29,8 @@ const WHEAT = '#FFE4B5';
 const WHEAT2 = '#F5DEB3';
 
 export default function Perfil({ visible, onClose }) {
-  const { userId, user, linkGoogle, linkApple, restoreAccount } = useAuth();
-  const updateUserProfile = useMutation(api.users.updateUserProfile);
+  const { userId, user, socialSignIn, restoreAccount } = useAuth();
+  const updateUserProfile = useUserMutation(api.users.updateUserProfile);
   const { signInWithGoogle, signInWithApple, googleAuthReady } = useSocialAuth();
 
   const [name, setName] = useState('');
@@ -40,39 +41,10 @@ export default function Perfil({ visible, onClose }) {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Queries for finding linked accounts (for restore flow)
-  const [pendingGoogleId, setPendingGoogleId] = useState(null);
-  const [pendingAppleId, setPendingAppleId] = useState(null);
-  const foundByGoogle = useQuery(
-    api.auth.getUserByGoogleId,
-    pendingGoogleId ? { googleId: pendingGoogleId } : 'skip'
-  );
-  const foundByApple = useQuery(
-    api.auth.getUserByAppleId,
-    pendingAppleId ? { appleId: pendingAppleId } : 'skip'
-  );
-
-  // When query resolves, handle the restore
-  useEffect(() => {
-    if (foundByGoogle === undefined) return; // still loading
-    if (pendingGoogleId === null) return;
-    const id = pendingGoogleId;
-    setPendingGoogleId(null);
-    setSocialLoading(null);
-    handleRestoreQueryResult(foundByGoogle, id, 'google');
-  }, [foundByGoogle]);
-
-  useEffect(() => {
-    if (foundByApple === undefined) return;
-    if (pendingAppleId === null) return;
-    const id = pendingAppleId;
-    setPendingAppleId(null);
-    setSocialLoading(null);
-    handleRestoreQueryResult(foundByApple, id, 'apple');
-  }, [foundByApple]);
-
-  const handleRestoreQueryResult = (found, socialId, provider) => {
-    if (found) {
+  // The backend verifies the Google/Apple token and, if an account is linked,
+  // returns a session for it.
+  const handleRestoreResult = (found, idToken, provider) => {
+    if (found?.found) {
       Alert.alert(
         '¡Cuenta encontrada! 🎉',
         `Encontramos tu cuenta con ${found.name}.\n\n¿Cargar ese progreso? Esto reemplazará la sesión actual.`,
@@ -81,7 +53,7 @@ export default function Perfil({ visible, onClose }) {
           {
             text: 'Restaurar progreso',
             onPress: async () => {
-              await restoreAccount(found._id);
+              await restoreAccount(found.userId, found.sessionToken);
               onClose();
             },
           },
@@ -95,7 +67,7 @@ export default function Perfil({ visible, onClose }) {
           { text: 'Cancelar', style: 'cancel' },
           {
             text: 'Vincular este progreso',
-            onPress: () => handleLinkFlow(socialId, null, provider),
+            onPress: () => handleLinkFlow(idToken, provider),
           },
         ]
       );
@@ -118,9 +90,14 @@ export default function Perfil({ visible, onClose }) {
 
   // ── Social auth handlers ───────────────────────────────────────────────────
 
-  const handleLinkFlow = async (socialId, email, provider) => {
-    const linkFn = provider === 'google' ? linkGoogle : linkApple;
-    const result = await linkFn(socialId, email);
+  const handleLinkFlow = async (idToken, provider) => {
+    let result;
+    try {
+      result = await socialSignIn(provider, idToken, 'link');
+    } catch (e) {
+      Alert.alert('Error', 'No pudimos verificar tu cuenta. Intenta de nuevo.');
+      return;
+    }
     if (result?.success) {
       Alert.alert('¡Vinculado! ✅', `Tu cuenta está ahora vinculada con ${provider === 'google' ? 'Google' : 'Apple'}. Tu progreso se guardará automáticamente.`);
     } else if (result?.conflict) {
@@ -133,7 +110,7 @@ export default function Perfil({ visible, onClose }) {
             text: 'Cargar progreso anterior',
             style: 'destructive',
             onPress: async () => {
-              await restoreAccount(result.existingUserId);
+              await restoreAccount(result.existingUserId, result.sessionToken);
               onClose();
             },
           },
@@ -147,7 +124,7 @@ export default function Perfil({ visible, onClose }) {
     try {
       const creds = await signInWithGoogle();
       if (!creds) { setSocialLoading(null); return; }
-      await handleLinkFlow(creds.googleId, creds.email, 'google');
+      await handleLinkFlow(creds.idToken, 'google');
     } catch (e) {
       Alert.alert('Error', 'No se pudo conectar con Google. Intenta de nuevo.');
     } finally {
@@ -160,7 +137,7 @@ export default function Perfil({ visible, onClose }) {
     try {
       const creds = await signInWithApple();
       if (!creds) { setSocialLoading(null); return; }
-      await handleLinkFlow(creds.appleId, creds.email, 'apple');
+      await handleLinkFlow(creds.idToken, 'apple');
     } catch (e) {
       Alert.alert('Error', 'No se pudo conectar con Apple. Intenta de nuevo.');
     } finally {
@@ -172,12 +149,13 @@ export default function Perfil({ visible, onClose }) {
     setSocialLoading('google-restore');
     try {
       const creds = await signInWithGoogle();
-      if (!creds) { setSocialLoading(null); return; }
-      // Trigger query via state — effect handles the result
-      setPendingGoogleId(creds.googleId);
+      if (!creds) return;
+      const found = await socialSignIn('google', creds.idToken, 'restore');
+      handleRestoreResult(found, creds.idToken, 'google');
     } catch (e) {
-      setSocialLoading(null);
       Alert.alert('Error', 'No se pudo conectar con Google. Intenta de nuevo.');
+    } finally {
+      setSocialLoading(null);
     }
   };
 
@@ -185,11 +163,13 @@ export default function Perfil({ visible, onClose }) {
     setSocialLoading('apple-restore');
     try {
       const creds = await signInWithApple();
-      if (!creds) { setSocialLoading(null); return; }
-      setPendingAppleId(creds.appleId);
+      if (!creds) return;
+      const found = await socialSignIn('apple', creds.idToken, 'restore');
+      handleRestoreResult(found, creds.idToken, 'apple');
     } catch (e) {
-      setSocialLoading(null);
       Alert.alert('Error', 'No se pudo conectar con Apple. Intenta de nuevo.');
+    } finally {
+      setSocialLoading(null);
     }
   };
 

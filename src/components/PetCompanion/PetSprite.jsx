@@ -39,7 +39,7 @@ import {
  *   size     – container size in dp
  *   skin     – text/emoji or image source for regional accessory
  */
-export default function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = false }) {
+function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = false }) {
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
   // ── Shared values ────────────────────────────────────────────────────────
@@ -313,3 +313,5 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 });
+
+export default React.memo(PetSprite);

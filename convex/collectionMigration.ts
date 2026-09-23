@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 /**
  * One-time migration: consolidates 22+ old categories into 15 canonical collections.
@@ -64,7 +64,7 @@ const CATEGORY_MIGRATION: Record<string, string> = {
   "Cultura Digital":   "Mundo Digital",
 };
 
-export const migrateCategories = mutation({
+export const migrateCategories = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

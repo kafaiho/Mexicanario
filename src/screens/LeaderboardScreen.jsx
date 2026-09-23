@@ -26,6 +26,7 @@ import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
 import { scheduleLeagueDrama, hasPermission } from "../services/notificationService";
 import { TABLET_MODE } from "../utils/tabletSetup";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -58,7 +59,7 @@ export default function LeaderboardScreen() {
   const [showResult, setShowResult] = useState(false);
   const [busyFriendId, setBusyFriendId] = useState(null);
 
-  const addFriendM = useMutation(api.friends.addFriend);
+  const addFriendM = useUserMutation(api.friends.addFriend);
   const myFriends = useQuery(api.friends.getMyFriends, userId ? { userId } : "skip");
   const friendIds = new Set((myFriends ?? []).map((f) => String(f.friendId)));
 
@@ -86,7 +87,7 @@ export default function LeaderboardScreen() {
     api.league.getLeagueHistory,
     userId ? { userId, limit: 10 } : "skip"
   );
-  const joinLeague = useMutation(api.league.joinLeague);
+  const joinLeague = useUserMutation(api.league.joinLeague);
 
   useEffect(() => {
     if (userId && leagueStatus && !leagueStatus.joined) {
@@ -611,8 +612,8 @@ function CuatesTab({ userId }) {
     userId ? { userId } : "skip"
   );
 
-  const acceptM = useMutation(api.friends.acceptFriendRequest);
-  const declineM = useMutation(api.friends.declineFriendRequest);
+  const acceptM = useUserMutation(api.friends.acceptFriendRequest);
+  const declineM = useUserMutation(api.friends.declineFriendRequest);
 
   const MEDAL = ["🥇", "🥈", "🥉"];
   const isWeekly = period === "weekly";

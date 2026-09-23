@@ -304,7 +304,7 @@ export default function VictoryModal({
               {isMapReview
                 ? "🗺️ Volver al mapa"
                 : isLastLevel
-                ? "Reiniciar desde el inicio 🔄"
+                ? "Volver al menú 🏠"
                 : "Continuar"}
             </Text>
           </TouchableOpacity>

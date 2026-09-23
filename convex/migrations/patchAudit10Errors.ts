@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "../_generated/server";
 
 /**
  * Correcciones de la 10ª auditoría cultural (bloques 11-20 de seedWords1000).
@@ -7,7 +7,7 @@ import { mutation } from "./_generated/server";
  * Run desde el dashboard de Convex:  patchAudit10Errors:patchAudit10Errors
  */
 
-export const patchAudit10Errors = mutation({
+export const patchAudit10Errors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

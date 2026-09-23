@@ -36,6 +36,7 @@ import {
 } from "../services/RevenueCatService";
 import { FONTS } from "../theme/designTokens";
 import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
+import { useUserAction, useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -239,13 +240,13 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
   const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
   const shopState = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
-  const claimFreeCoins = useMutation(api.shop.claimFreeCoins);
-  const buyWithCoins = useMutation(api.shop.buyWithCoins);
-  const applyIAPPurchase = useMutation(api.shop.applyIAPPurchase);
-  const syncMexPlus = useMutation(api.shop.syncMexPlusEntitlement);
-  const buyPetFood = useMutation(api.pet.buyPetFood);
-  const buyStreakFreeze = useMutation(api.streaks.buyStreakFreeze);
-  const updateUserCurrency = useMutation(api.users.updateUserCurrency);
+  const claimFreeCoins = useUserMutation(api.shop.claimFreeCoins);
+  const buyWithCoins = useUserMutation(api.shop.buyWithCoins);
+  const applyIAPPurchase = useUserAction(api.shop.applyIAPPurchase);
+  const verifyMexPlus = useUserAction(api.shop.verifyMexPlusEntitlement);
+  const buyPetFood = useUserMutation(api.pet.buyPetFood);
+  const buyStreakFreeze = useUserMutation(api.streaks.buyStreakFreeze);
+  const updateUserCurrency = useUserMutation(api.users.updateUserCurrency);
 
   const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
 
@@ -275,11 +276,11 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
     }
     setBuying(true);
     try {
-      const { result, entitlement } = await presentMexicanarioPlusPaywall();
+      const { result } = await presentMexicanarioPlusPaywall();
 
       if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-        // Sync the expiry date to Convex so the backend knows Plus is active
-        await syncMexPlus({ userId, expiresAt: entitlement.expiresAt ?? undefined });
+        // The backend confirms the entitlement with RevenueCat before enabling Plus
+        await verifyMexPlus({ userId });
         notifySuccess();
         const verb = result === PAYWALL_RESULT.PURCHASED ? "activada" : "restaurada";
         Alert.alert(
@@ -307,7 +308,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
 
       // Sync Plus entitlement if it was restored
       if (userId && entitlement.active) {
-        await syncMexPlus({ userId, expiresAt: entitlement.expiresAt ?? undefined });
+        await verifyMexPlus({ userId });
       }
 
       if (restored) {
@@ -346,9 +347,9 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
       setBuying(true);
       purchaseProduct(
         item.id,
-        async (receiptToken) => {
+        async (transactionId) => {
           try {
-            const r = await applyIAPPurchase({ userId, itemId: item.id, receiptToken });
+            const r = await applyIAPPurchase({ userId, itemId: item.id, transactionId });
             notifySuccess();
             const t = getDiamondPillFallback();
             const diamonds = r.diamondsGranted ?? 0;

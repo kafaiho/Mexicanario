@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ export const getTodayMissions = query({
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
 /** Crea las misiones del día si no existen. Seguro para llamar múltiples veces. */
-export const ensureDailyMissions = mutation({
+export const ensureDailyMissions = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const today = getTodayString();
@@ -121,7 +122,7 @@ export const ensureDailyMissions = mutation({
 });
 
 /** Reclama la recompensa de una misión completada. */
-export const claimMission = mutation({
+export const claimMission = userMutation({
   args: { userId: v.id("users"), missionId: v.string() },
   handler: async (ctx, args) => {
     const today = getTodayString();

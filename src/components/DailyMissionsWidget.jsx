@@ -18,6 +18,7 @@ import { notifySuccess } from "../services/haptics";
 import { COLORS, FONTS } from "../theme/designTokens";
 import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 import CoinFlyOverlay from './CoinFlyOverlay';
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,7 +29,7 @@ const getCoinPillFallback = () => {
   const pillX = REAL_WIDTH - 16 - pillW;
   return { x: pillX, y: topPad, w: pillW, h: pillH };
 };
-const CARD_W = width - 24;
+const CARD_W = Math.min(REAL_WIDTH - 24, 680);
 
 // ── Paleta Mexicanometro ───────────────────────────────────────────────────────
 const BROWN = '#8B4513';
@@ -288,8 +289,8 @@ export default function DailyMissionsWidget({ userId }) {
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
 
   const data = useQuery(api.dailyMissions.getTodayMissions, userId ? { userId } : 'skip');
-  const ensureMissions = useMutation(api.dailyMissions.ensureDailyMissions);
-  const claimMission = useMutation(api.dailyMissions.claimMission);
+  const ensureMissions = useUserMutation(api.dailyMissions.ensureDailyMissions);
+  const claimMission = useUserMutation(api.dailyMissions.claimMission);
 
   useEffect(() => {
     if (userId) ensureMissions({ userId }).catch(() => { });
@@ -368,7 +369,8 @@ export default function DailyMissionsWidget({ userId }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 12,
+    width: CARD_W,
+    alignSelf: 'center',
     marginBottom: 8,
     backgroundColor: '#5C2A10',              // marrón cálido medio
     borderRadius: 16,

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "../_generated/server";
 
 /**
  * Correcciones de la 8ª auditoría cultural (seedCulturaDigital, seedCulturaDigitalV2, seedCuratedLevels).
@@ -7,7 +7,7 @@ import { mutation } from "./_generated/server";
  * Run desde el dashboard de Convex:  patchAudit8Errors:patchAudit8Errors
  */
 
-export const patchAudit8Errors = mutation({
+export const patchAudit8Errors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

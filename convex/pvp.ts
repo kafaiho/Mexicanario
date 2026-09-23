@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 import { Id } from "./_generated/dataModel";
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -78,7 +79,7 @@ function computePvpScore(
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Join matchmaking queue ──────────────────────────────────────────────────
-export const joinQueue = mutation({
+export const joinQueue = userMutation({
   args: {
     userId: v.id("users"),
     friendInviteId: v.optional(v.id("users")),
@@ -309,7 +310,7 @@ async function createMatchInternal(
 }
 
 // ── Leave queue ─────────────────────────────────────────────────────────────
-export const leaveQueue = mutation({
+export const leaveQueue = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     const entry = await ctx.db
@@ -324,7 +325,7 @@ export const leaveQueue = mutation({
 });
 
 // ── Submit word result during PvP match ─────────────────────────────────────
-export const submitWordResult = mutation({
+export const submitWordResult = userMutation({
   args: {
     matchId: v.id("pvpMatches"),
     userId: v.id("users"),
@@ -550,7 +551,7 @@ async function finishMatchInternal(ctx: any, matchId: Id<"pvpMatches">) {
 }
 
 // ── Abandon match ───────────────────────────────────────────────────────────
-export const abandonMatch = mutation({
+export const abandonMatch = userMutation({
   args: {
     matchId: v.id("pvpMatches"),
     userId: v.id("users"),

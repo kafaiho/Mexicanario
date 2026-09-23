@@ -22,7 +22,7 @@ crons.daily(
 crons.weekly(
   "curador semanal",
   { dayOfWeek: "monday", hourUTC: 8, minuteUTC: 5 },
-  api.curator.processSeedQueue,
+  internal.curator.processSeedQueue,
   { batchSize: 10 },
 );
 
@@ -31,7 +31,7 @@ crons.weekly(
 crons.weekly(
   "curador tendencias",
   { dayOfWeek: "wednesday", hourUTC: 8, minuteUTC: 5 },
-  api.curator.processTrends,
+  internal.curator.processTrends,
   {},
 );
 

@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import CoinFlyOverlay from './CoinFlyOverlay';
 import useCoinFly from '../hooks/useCoinFly';
 import { REAL_WIDTH, REAL_HEIGHT, TABLET_MODE } from '../utils/tabletSetup';
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,7 +33,7 @@ const getCoinPillFallback = () => {
 
 export default function GiftModel({ visible, onClose }) {
   const { user, userId } = useAuth();
-  const claimGift = useMutation(api.shop.claimGiftReward);
+  const claimGift = useUserMutation(api.shop.claimGiftReward);
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
 
   if (!visible) return null;

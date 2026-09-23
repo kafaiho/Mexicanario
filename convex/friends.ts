@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { issueSession, userAction, userMutation } from "./sessionAuth";
 import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 import { buildChallengeWordData } from "./friendsPresentation";
 
@@ -151,7 +152,7 @@ export const registerAccountInDb = internalMutation({
   },
 });
 
-export const registerAccount = action({
+export const registerAccount = userAction({
   args: {
     userId: v.id("users"),
     email: v.string(),
@@ -225,12 +226,13 @@ export const loginWithEmail = mutation({
     const hash = await hashPassword(password);
     if (hash !== user.passwordHash) throw new ConvexError("Contraseña incorrecta. ¡Échale otro intento!");
 
-    return { userId: user._id as string };
+    const sessionToken = await issueSession(ctx, user._id, "email");
+    return { userId: user._id as string, sessionToken };
   },
 });
 
 // ── Elegir / cambiar username ─────────────────────────────────────────────────
-export const setUsername = mutation({
+export const setUsername = userMutation({
   args: { userId: v.id("users"), username: v.string() },
   handler: async (ctx, { userId, username }) => {
     const uname = cleanUsername(username);
@@ -295,7 +297,7 @@ export const searchUsers = query({
 // ── Agregar cuate (bidireccional) ──────────────────────────────────────────────
 // Si el otro ya te envió solicitud → auto-acepta ambas direcciones.
 // Si no → crea solicitud pendiente.
-export const addFriend = mutation({
+export const addFriend = userMutation({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
     if (userId === friendId) throw new ConvexError("No puedes agregarte a ti mismo");
@@ -380,7 +382,7 @@ export const addFriend = mutation({
 });
 
 // ── Aceptar solicitud de cuate ──────────────────────────────────────────────
-export const acceptFriendRequest = mutation({
+export const acceptFriendRequest = userMutation({
   args: { userId: v.id("users"), requesterId: v.id("users") },
   handler: async (ctx, { userId, requesterId }) => {
     // Find the pending request (requester→userId)
@@ -436,7 +438,7 @@ export const acceptFriendRequest = mutation({
 });
 
 // ── Rechazar solicitud de cuate ─────────────────────────────────────────────
-export const declineFriendRequest = mutation({
+export const declineFriendRequest = userMutation({
   args: { userId: v.id("users"), requesterId: v.id("users") },
   handler: async (ctx, { userId, requesterId }) => {
     const request = await ctx.db
@@ -484,7 +486,7 @@ export const getPendingRequests = query({
 });
 
 // ── Quitar cuate (borra ambas direcciones) ──────────────────────────────────
-export const removeFriend = mutation({
+export const removeFriend = userMutation({
   args: { userId: v.id("users"), friendId: v.id("users") },
   handler: async (ctx, { userId, friendId }) => {
     // Delete A→B
@@ -764,19 +766,55 @@ export const createPasswordResetCode = internalMutation({
   },
 });
 
-// 2. Acción expuesta al cliente para solicitar el reseteo (envía el correo)
-export const requestPasswordReset = action({
+// 2a. Internal: confirm the account can reset (email/password, not social).
+export const getResetTarget = internalQuery({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
+    const emailLower = email.toLowerCase().trim();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", emailLower))
+      .first();
+
+    if (!user) {
+      throw new ConvexError("No encontramos una cuenta con ese correo.");
+    }
+    if (!user.passwordHash) {
+      throw new ConvexError("Esta cuenta usa Google o Apple. Inicia sesión por ahí.");
+    }
+    return { email: emailLower, username: user.username || "cuate" };
+  },
+});
+
+// 2b. Internal: store the new (temporary) password hash.
+export const setPasswordHash = internalMutation({
+  args: { email: v.string(), passwordHash: v.string() },
+  handler: async (ctx, { email, passwordHash }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+    if (!user) throw new ConvexError("No encontramos una cuenta con ese correo.");
+    await ctx.db.patch(user._id, { passwordHash });
+  },
+});
+
+// 2c. Action: email a temporary password. It is never returned to the caller —
+// otherwise anyone could take over an account knowing only its email.
+export const requestPasswordReset = action({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
-      throw new ConvexError("Servicio de correos no configurado (falta API Key)");
+      throw new ConvexError("La recuperación por correo no está disponible por ahora. Intenta más tarde.");
     }
+    const target: { email: string; username: string } = await ctx.runQuery(internal.friends.getResetTarget, args);
 
-    // Obtener código
-    const { code, username } = await ctx.runMutation(internal.friends.createPasswordResetCode, { email });
+    const chars = "abcdefghijkmnpqrstuvwxyz23456789";
+    const bytes = new Uint8Array(10);
+    crypto.getRandomValues(bytes);
+    const tempPassword = Array.from(bytes, (b) => chars[b % chars.length]).join("");
 
-    // Enviar correo vía Resend
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -785,35 +823,40 @@ export const requestPasswordReset = action({
       },
       body: JSON.stringify({
         from: "Mexicanario <onboarding@resend.dev>",
-        to: email.toLowerCase().trim(),
-        subject: "Código de recuperación - Mexicanario",
+        to: target.email,
+        subject: "🔑 Tu contraseña temporal de Mexicanario",
         html: `
-          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #8B4513;">
-            <h2>¡Hola, ${username}! 🌮</h2>
-            <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta en Mexicanario.</p>
-            <p>Tu código de recuperación es:</p>
-            <h1 style="background: #F8BE17; color: #8B4513; padding: 10px; text-align: center; border-radius: 8px; letter-spacing: 4px;">
-              ${code}
-            </h1>
-            <p>Este código expira en 15 minutos.</p>
-            <p>Si no pediste esto, simplemente ignora el correo. ¡Nos vemos en el juego!</p>
+          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #8B4513; text-align: center;">
+            <h1 style="font-size: 40px; margin-bottom: 5px;">🔑</h1>
+            <h2 style="color: #D2691E;">¡Hola, ${target.username}!</h2>
+            <p style="font-size: 16px; line-height: 1.5;">
+              Alguien solicitó recuperar la contraseña de tu cuenta en <strong>Mexicanario</strong>.
+            </p>
+            <div style="background-color: #F5DEB3; border-radius: 12px; padding: 20px; margin: 20px 0; border: 2px solid #D2691E;">
+              <h3 style="margin-top: 0; color: #8B4513;">Tu contraseña temporal</h3>
+              <p style="font-size: 24px; font-weight: bold; letter-spacing: 3px; color: #D2691E; margin: 10px 0;">${tempPassword}</p>
+              <p style="margin-bottom: 0; font-size: 14px; color: #8B4513;">Úsala para entrar a tu cuenta y luego cámbiala desde ajustes.</p>
+            </div>
+            <p style="font-size: 14px; color: #999;">Si tú no solicitaste esto, ignora este correo.</p>
           </div>
         `,
       }),
     });
-
+    // Only change the password once the email is on its way; otherwise the
+    // player would be locked out with a password nobody received.
     if (!res.ok) {
-      const errorText = await res.text();
-      console.error("Resend Error:", errorText);
-      throw new ConvexError("No pudimos enviar el correo. Intenta de nuevo más tarde.");
+      throw new ConvexError("No pudimos enviar el correo. Intenta de nuevo en unos minutos.");
     }
-
-    return { success: true };
+    await ctx.runMutation(internal.friends.setPasswordHash, {
+      email: target.email,
+      passwordHash: await hashPassword(tempPassword),
+    });
+    return { sent: true };
   },
 });
 
 // 3. Verificar código y cambiar contraseña
-export const resetPassword = mutation({
+export const resetPassword = internalMutation({
   args: {
     email: v.string(),
     code: v.string(),
@@ -891,7 +934,43 @@ export const getUnreadFriendNotifications = query({
   },
 });
 
-export const markFriendNotificationsRead = mutation({
+// Compact payload for the persistent TopBar. It avoids subscribing to three
+// separate queries and skips profile/word hydration that the badge never uses.
+export const getTopBarSocialSummary = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const now = Date.now();
+    const [pendingRequests, pendingChallenges, unreadNotifications] = await Promise.all([
+      ctx.db
+        .query("friendships")
+        .withIndex("by_friend_status", (q) =>
+          q.eq("friendId", userId).eq("status", "pending")
+        )
+        .collect(),
+      ctx.db
+        .query("friendChallenges")
+        .withIndex("by_challenged_status", (q) =>
+          q.eq("challengedId", userId).eq("status", "pending")
+        )
+        .collect(),
+      ctx.db
+        .query("friendNotifications")
+        .withIndex("by_user_unread", (q) =>
+          q.eq("userId", userId).eq("read", false)
+        )
+        .order("desc")
+        .take(20),
+    ]);
+
+    return {
+      pendingRequestCount: pendingRequests.length,
+      pendingChallengeCount: pendingChallenges.filter((challenge) => challenge.expiresAt > now).length,
+      unreadNotifications,
+    };
+  },
+});
+
+export const markFriendNotificationsRead = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     const unread = await ctx.db
@@ -915,7 +994,7 @@ const CHALLENGE_BET = 50;         // coins cada jugador apuesta
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // ── Crear reto ─────────────────────────────────────────────────────────────
-export const createChallenge = mutation({
+export const createChallenge = internalMutation({
   args: {
     challengerId: v.id("users"),
     challengedId: v.id("users"),
@@ -979,7 +1058,7 @@ export const createChallenge = mutation({
 });
 
 // ── Aceptar reto (paso separado: deducir coins + cambiar status → active) ──
-export const acceptChallenge = mutation({
+export const acceptChallenge = userMutation({
   args: {
     challengeId: v.id("friendChallenges"),
     userId: v.id("users"),
@@ -1027,7 +1106,7 @@ export const acceptChallenge = mutation({
 });
 
 // ── Responder a un reto (enviar resultado después de jugar) ────────────────
-export const respondToChallenge = mutation({
+export const respondToChallenge = userMutation({
   args: {
     challengeId: v.id("friendChallenges"),
     userId: v.id("users"),

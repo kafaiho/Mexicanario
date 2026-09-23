@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const HUNGER_DECAY_PER_HOUR = 8;      // points per hour
@@ -96,7 +97,7 @@ export const getPetState = query({
 /**
  * Choose a pet type and name — hatches the egg.
  */
-export const choosePet = mutation({
+export const choosePet = userMutation({
     args: {
         userId: v.string(),
         petType: v.string(),   // "ajolote" | "xolo" | "alebrije"
@@ -126,7 +127,7 @@ export const choosePet = mutation({
 /**
  * Feed the pet — costs 20 monedas, restores hunger, gives XP.
  */
-export const feedPet = mutation({
+export const feedPet = internalMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -154,7 +155,7 @@ export const feedPet = mutation({
 /**
  * Play with the pet — free, 5-min cooldown, restores happiness, gives XP.
  */
-export const playWithPet = mutation({
+export const playWithPet = internalMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -186,7 +187,7 @@ export const playWithPet = mutation({
 /**
  * Reset/delete the current pet so the player can choose a new one.
  */
-export const resetPet = mutation({
+export const resetPet = userMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -213,7 +214,7 @@ export const resetPet = mutation({
  * Buy premium food with diamonds. Instantly increases the invisible bond (vínculo).
  * Food types: taco (cost 10, bond +5), tamal (cost 25, bond +15), pan_muerto (cost 50, bond +35)
  */
-export const buyPetFood = mutation({
+export const buyPetFood = userMutation({
     args: { userId: v.string(), foodType: v.string() },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -263,7 +264,7 @@ export const buyPetFood = mutation({
  * Called when the app closes or every ~2 minutes in background.
  * NOT called on every game action to avoid saturating the backend.
  */
-export const syncVinculo = mutation({
+export const syncVinculo = internalMutation({
     args: { userId: v.string(), vinculo: v.number() },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -290,7 +291,7 @@ export const getPetVinculo = query({
  * Award pet XP when player completes a game level.
  * Called silently from GameplayScreen after a correct answer.
  */
-export const gainPetXp = mutation({
+export const gainPetXp = userMutation({
     args: { userId: v.string(), xp: v.optional(v.number()) },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
@@ -352,7 +353,7 @@ export const getPetSlots = query({
  * Switch to a different pet type, preserving each pet's individual progress.
  * Saves the current pet's stats (including local vinculo) then restores the new pet's stats.
  */
-export const switchActivePet = mutation({
+export const switchActivePet = userMutation({
     args: {
         userId: v.string(),
         newPetType: v.string(),   // "ajolote" | "xolo" | "alebrije"

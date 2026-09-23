@@ -21,8 +21,8 @@
  */
 
 import { v } from "convex/values";
-import { api } from "./_generated/api";
-import { action, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
+import { action, mutation, query, internalMutation, internalAction } from "./_generated/server";
 import { insertNewLevel } from "./levelWrites";
 
 // ─── Módulo 1: Descubridor de Tendencias MX via Gemini ───────────────────────
@@ -254,7 +254,7 @@ async function callGemini(term: string): Promise<GeminiResult | GeminiError> {
 // ─── Módulo 4: Staging mutations ─────────────────────────────────────────────
 
 /** Inserta un candidato en wordCandidates (internal, llamado por el action) */
-export const submitCandidate = mutation({
+export const submitCandidate = internalMutation({
   args: {
     word: v.string(),
     meaning: v.string(),
@@ -275,7 +275,7 @@ export const submitCandidate = mutation({
 });
 
 /** Aprueba un candidato: lo mueve a words + crea su level entry */
-export const approveCandidate = mutation({
+export const approveCandidate = internalMutation({
   args: { candidateId: v.id("wordCandidates") },
   handler: async (ctx, args) => {
     const candidate = await ctx.db.get(args.candidateId);
@@ -322,7 +322,7 @@ export const approveCandidate = mutation({
 });
 
 /** Rechaza un candidato */
-export const rejectCandidate = mutation({
+export const rejectCandidate = internalMutation({
   args: { candidateId: v.id("wordCandidates") },
   handler: async (ctx, args) => {
     const candidate = await ctx.db.get(args.candidateId);
@@ -363,7 +363,7 @@ export const listRecent = query({
  * Corre el pipeline completo: skip duplicados → validar IP → generar con IA → staging.
  * Procesa máximo `batchSize` términos nuevos por ejecución (default 10).
  */
-export const processSeedQueue = action({
+export const processSeedQueue = internalAction({
   args: { batchSize: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const limit = args.batchSize ?? 10;
@@ -406,7 +406,7 @@ export const processSeedQueue = action({
       }
 
       // Módulo 4: Staging
-      await ctx.runMutation(api.curator.submitCandidate, {
+      await ctx.runMutation(internal.curator.submitCandidate, {
         word: wordData.word,
         meaning: wordData.meaning,
         example: wordData.example,
@@ -442,10 +442,10 @@ export const processSeedQueue = action({
  *   curator:runNow
  * Útil para testear antes del cron semanal.
  */
-export const runNow = action({
+export const runNow = internalAction({
   args: { batchSize: v.optional(v.number()) },
   handler: async (ctx, args): Promise<unknown> => {
-    return ctx.runAction(api.curator.processSeedQueue, { batchSize: args.batchSize ?? 5 });
+    return ctx.runAction(internal.curator.processSeedQueue, { batchSize: args.batchSize ?? 5 });
   },
 });
 
@@ -458,7 +458,7 @@ export const runNow = action({
  *
  * Pipeline: discoverTrendsMX → validateIP → callGemini → staging
  */
-export const processTrends = action({
+export const processTrends = internalAction({
   args: {},
   handler: async (ctx) => {
     // Load existing words/candidates (needed for dedup + Gemini context)
@@ -494,7 +494,7 @@ export const processTrends = action({
       }
 
       // Módulo 4: Staging
-      await ctx.runMutation(api.curator.submitCandidate, {
+      await ctx.runMutation(internal.curator.submitCandidate, {
         word: wordData.word,
         meaning: wordData.meaning,
         example: wordData.example,

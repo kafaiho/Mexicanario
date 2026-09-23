@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 
@@ -17,7 +18,7 @@ function getWeekStr() {
 }
 
 // ── Submit score ──────────────────────────────────────────────────────────────
-export const submitScore = mutation({
+export const submitScore = userMutation({
   args: { userId: v.id("users"), score: v.number() },
   handler: async (ctx, { userId, score }) => {
     if (score <= 0) return;

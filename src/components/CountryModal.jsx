@@ -12,6 +12,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const BROWN = "#8B4513";
 const GOLD  = "#F8BE17";
@@ -38,7 +39,7 @@ const COUNTRIES = [
 
 export default function CountryModal({ visible, onClose }) {
   const { userId, user } = useAuth();
-  const updateProfile = useMutation(api.users.updateUserProfile);
+  const updateProfile = useUserMutation(api.users.updateUserProfile);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
 

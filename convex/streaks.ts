@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ export const getStreakStatus = query({
 // ── Mutations ──────────────────────────────────────────────────────────────────
 
 /** Called when user completes a word — tracks daily play and streak */
-export const recordDailyPlay = mutation({
+export const recordDailyPlay = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -227,7 +228,7 @@ export const recordDailyPlay = mutation({
 });
 
 /** Commit to a streak goal (7, 14, 30, or 50 days) */
-export const commitStreakGoal = mutation({
+export const commitStreakGoal = userMutation({
   args: { userId: v.id("users"), targetDays: v.number() },
   handler: async (ctx, args) => {
     if (![7, 14, 30, 50].includes(args.targetDays)) {
@@ -243,7 +244,7 @@ export const commitStreakGoal = mutation({
 });
 
 /** Claim diamond reward for reaching a streak milestone */
-export const claimStreakMilestone = mutation({
+export const claimStreakMilestone = userMutation({
   args: { userId: v.id("users"), milestoneDays: v.number() },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -284,7 +285,7 @@ export const claimStreakMilestone = mutation({
 });
 
 /** Update best combo (all-time + daily) if session combo is higher */
-export const recordBestCombo = mutation({
+export const recordBestCombo = userMutation({
   args: { userId: v.id("users"), sessionMaxCombo: v.number() },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -311,7 +312,7 @@ export const recordBestCombo = mutation({
 });
 
 /** Buy a streak freeze — stackable, one consumed per missed day */
-export const buyStreakFreeze = mutation({
+export const buyStreakFreeze = userMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);

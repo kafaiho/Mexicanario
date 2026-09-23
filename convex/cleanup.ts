@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 // Words to delete — all variants (lowercase for comparison)
 const BANNED_WORDS = [
@@ -8,7 +8,7 @@ const BANNED_WORDS = [
   "piedra papel tijeras",
 ];
 
-export const deleteOAOWords = mutation({
+export const deleteOAOWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     // 1. Find all matching word documents
@@ -56,7 +56,7 @@ export const deleteOAOWords = mutation({
   },
 });
 
-export const clearDatabase = mutation({
+export const clearDatabase = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all documents from each table

@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getOrderedLevels } from "./levelOrdering";
 
@@ -7,7 +7,7 @@ const OWNER_IDS = new Set([
     "k97b1y69czyn1zsm4d2avzxzrx826k7a",
 ]);
 
-export const testLevelState = query({
+export const testLevelState = internalQuery({
     args: { requesterId: v.string() },
     handler: async (ctx, { requesterId }) => {
         if (!OWNER_IDS.has(requesterId))

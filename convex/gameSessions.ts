@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 
-export const startGameSession = mutation({
+export const startGameSession = internalMutation({
   args: {
     userId: v.id("users"),
   },
@@ -14,7 +14,7 @@ export const startGameSession = mutation({
   },
 });
 
-export const updateGameSession = mutation({
+export const updateGameSession = internalMutation({
   args: {
     sessionId: v.id("gameSessions"),
     score: v.optional(v.number()),

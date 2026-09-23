@@ -1,24 +1,17 @@
-import React, { useRef, useCallback } from "react";
-import { Animated, Pressable } from "react-native";
+import React, { useCallback } from "react";
+import { Pressable } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { tapLight, tapMedium } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 
 /**
- * JuicyButton — Botón con retroalimentación multisensorial tipo Duolingo.
- *
- * Dispara en paralelo al presionar:
- *   1. Spring animation (scale 0.92 → 1.0 con rebote elástico)
- *   2. Sonido "click" instantáneo
- *   3. Haptic Light Impact (~6ms)
- *
- * Props:
- *   onPress    — callback al tocar
- *   style      — estilos del contenedor
- *   children   — contenido del botón
- *   intensity  — "light" (default) | "medium" | "heavy"
- *   sound      — nombre del sonido (default "click")
- *   disabled   — desactiva interacción
- *   scaleDown  — escala al presionar (default 0.92)
+ * JuicyButton — botón Reanimated con respuesta multisensorial.
+ * La transformación se ejecuta en el hilo de UI para mantener una pulsación fluida.
  */
 const JuicyButton = React.memo(function JuicyButton({
   onPress,
@@ -33,51 +26,42 @@ const JuicyButton = React.memo(function JuicyButton({
   reduceMotion = false,
   ...pressableProps
 }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const scale = useSharedValue(1);
 
   const handlePressIn = useCallback(() => {
-    // 1. Animación: compresión rápida
-    if (reduceMotion) scaleAnim.setValue(scaleDown);
-    else Animated.spring(scaleAnim, {
-      toValue: scaleDown,
-      speed: 50,      // muy rápido — sin lag perceptible
-      bounciness: 0,  // sin rebote en la bajada
-      useNativeDriver: true,
-    }).start();
+    scale.value = reduceMotion
+      ? scaleDown
+      : withTiming(scaleDown, { duration: 60 });
 
-    // 2. Háptico instantáneo (fire-and-forget, ~6ms en iOS)
     if (intensity === "medium") {
       tapMedium();
     } else {
       tapLight();
     }
 
-    // 3. Sonido instantáneo (precargado en memoria, ~2ms)
     if (sound) {
       playSound(sound);
     }
 
     if (onPressInProp) onPressInProp();
-  }, [scaleDown, intensity, sound, scaleAnim, onPressInProp, reduceMotion]);
+  }, [scale, scaleDown, intensity, sound, onPressInProp, reduceMotion]);
 
   const handlePressOut = useCallback(() => {
-    // Rebote elástico al soltar — el "jugo"
-    if (reduceMotion) scaleAnim.setValue(1);
-    else Animated.spring(scaleAnim, {
-      toValue: 1,
-      speed: 28,       // velocidad del rebote
-      bounciness: 12,  // elasticidad visible pero no exagerada
-      useNativeDriver: true,
-    }).start();
-
+    scale.value = reduceMotion
+      ? 1
+      : withSpring(1, { damping: 4, stiffness: 280 });
     if (onPressOutProp) onPressOutProp();
-  }, [scaleAnim, onPressOutProp, reduceMotion]);
+  }, [scale, onPressOutProp, reduceMotion]);
 
   const handlePress = useCallback(() => {
     if (!disabled && onPress) {
       onPress();
     }
   }, [disabled, onPress]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <Pressable
@@ -86,14 +70,9 @@ const JuicyButton = React.memo(function JuicyButton({
       onPressOut={handlePressOut}
       onPress={handlePress}
       disabled={disabled}
-      style={({ pressed }) => [{ opacity: disabled ? 0.5 : 1 }]}
+      style={{ opacity: disabled ? 0.5 : 1 }}
     >
-      <Animated.View
-        style={[
-          style,
-          { transform: [{ scale: scaleAnim }] },
-        ]}
-      >
+      <Animated.View style={[style, animStyle]}>
         {children}
       </Animated.View>
     </Pressable>

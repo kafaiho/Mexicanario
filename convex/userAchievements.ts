@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 export const getUserAchievements = query({
   args: { userId: v.id("users") },
@@ -9,7 +9,7 @@ export const getUserAchievements = query({
   },
 });
 
-export const updateProgress = mutation({
+export const updateProgress = internalMutation({
   args: {
     userId: v.id("users"),
     achievementId: v.id("achievements"),

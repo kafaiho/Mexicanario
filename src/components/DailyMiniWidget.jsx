@@ -10,6 +10,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -25,8 +26,8 @@ export default function DailyMiniWidget() {
     api.league.getDailyMiniStatus,
     userId ? { userId } : "skip"
   );
-  const assignMini  = useMutation(api.league.assignDailyMiniGroup);
-  const claimReward = useMutation(api.league.claimDailyMiniReward);
+  const assignMini  = useUserMutation(api.league.assignDailyMiniGroup);
+  const claimReward = useUserMutation(api.league.claimDailyMiniReward);
 
   if (!userId) return null;
 

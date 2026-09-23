@@ -114,5 +114,30 @@ for (const item of REMOVED_WORDS) {
   assert(!words.includes(key), `una retirada no puede seguir publicada: ${item.word}`);
   removed.add(key);
 }
+assert(removed.has('bato'), 'bato debe retirarse del catálogo editorial nuevo');
+assert(removed.has('bato loco'), 'bato loco debe retirarse del catálogo editorial nuevo');
+const ambiguousLegacyTerms = [
+  'wey', 'güey', 'carnal', 'ñero', 'morra / morro', 'morro', 'morra', 'morrita',
+  'palomilla', 'naco', 'chaleco',
+];
+for (const word of ambiguousLegacyTerms) {
+  const key = normalizePreservingEnye(word);
+  assert(removed.has(key), `${word} debe retirarse del catálogo editorial nuevo`);
+  const removal = REMOVED_WORDS.find((item) => normalizePreservingEnye(item.word) === key);
+  assert(removal?.legacyPresentation, `${word} necesita una pista segura para cuentas antiguas`);
+  assert.notEqual(removal.legacyPresentation.placeId, 'cdmx', `${word} no debe entrar al apartado CDMX`);
+  assert(
+    !/\b(amigo|cuate)\b/i.test(removal.legacyPresentation.meaning),
+    `${word} no debe definirse como sinónimo directo de amigo o cuate`,
+  );
+}
+
+const cdmxEntries = MEXICO_VIVIDO_WORDS.filter(({ placeId }) => placeId === 'cdmx');
+assert(cdmxEntries.length >= 10, 'CDMX necesita suficientes niveles culturales propios');
+for (const entry of cdmxEntries) {
+  assert(entry.meaning && entry.example && entry.icon, `nivel de CDMX incompleto: ${entry.word}`);
+  assert([1, 2, 3].includes(entry.difficulty), `dificultad inválida en CDMX: ${entry.word}`);
+  assert(!removed.has(normalizePreservingEnye(entry.word)), `una palabra retirada no puede aparecer en CDMX: ${entry.word}`);
+}
 
 console.log(`culturalContent: ${MEXICO_VIVIDO_WORDS.length} entradas y ${REMOVED_WORDS.length} retiradas válidas`);

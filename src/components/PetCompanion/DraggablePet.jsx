@@ -355,7 +355,7 @@ const SELF_PHRASES = [
   "¡Esta la sé yo de memoria! Literalmente soy yo.",
 ];
 
-export default function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
+function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
   const vinculo = usePetStore((s) => s.vinculo);
@@ -427,8 +427,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
         // Bounce animation
         if (!reduceMotionRef.current) {
           Animated.sequence([
-            Animated.timing(tapAnim, { toValue: 1.35, duration: 120, useNativeDriver: false }),
-            Animated.spring(tapAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: false }),
+            Animated.timing(tapAnim, { toValue: 1.35, duration: 120, useNativeDriver: true }),
+            Animated.spring(tapAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: true }),
           ]).start();
           shakeIt();
         }
@@ -439,7 +439,7 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     return () => { clearTimeout(delayTimer); clearTimeout(bubbleTimer.current); };
   }, [currentWord, petType]);
 
-  // Idle breathing + floating loop
+  // Idle breathing + floating loop (UI thread native driver)
   useEffect(() => {
     if (reduceMotion) {
       floatAnim.setValue(0);
@@ -449,12 +449,12 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     const loop = Animated.loop(
       Animated.parallel([
         Animated.sequence([
-          Animated.timing(floatAnim, { toValue: -5, duration: 1100, useNativeDriver: false }),
-          Animated.timing(floatAnim, { toValue: 0, duration: 1100, useNativeDriver: false }),
+          Animated.timing(floatAnim, { toValue: -5, duration: 1100, useNativeDriver: true }),
+          Animated.timing(floatAnim, { toValue: 0, duration: 1100, useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(breatheAnim, { toValue: 1.04, duration: 1100, useNativeDriver: false }),
-          Animated.timing(breatheAnim, { toValue: 1, duration: 1100, useNativeDriver: false }),
+          Animated.timing(breatheAnim, { toValue: 1.04, duration: 1100, useNativeDriver: true }),
+          Animated.timing(breatheAnim, { toValue: 1, duration: 1100, useNativeDriver: true }),
         ]),
       ])
     );
@@ -491,10 +491,10 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     if (reduceMotionRef.current) return;
     shakeAnim.setValue(0);
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: false }),
-      Animated.timing(shakeAnim, { toValue: -7, duration: 55, useNativeDriver: false }),
-      Animated.timing(shakeAnim, { toValue: 4, duration: 45, useNativeDriver: false }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 45, useNativeDriver: false }),
+      Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -7, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 45, useNativeDriver: true }),
     ]).start();
   }, [shakeAnim]);
 
@@ -598,8 +598,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
 
           if (!reduceMotionRef.current) {
             Animated.sequence([
-              Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: false }),
-              Animated.spring(tapAnim, { toValue: 1, friction: 4, tension: 200, useNativeDriver: false }),
+              Animated.timing(tapAnim, { toValue: 1.25, duration: 90, useNativeDriver: true }),
+              Animated.spring(tapAnim, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }),
             ]).start();
           }
           activeZoneRef.current = null;
@@ -674,6 +674,8 @@ export default function DraggablePet({ reaction, scaleFactor = 1.0, region = nul
     </>
   );
 }
+
+export default React.memo(DraggablePet);
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -1,91 +1,121 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Pressable, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import StageCropped from './StageCropped';
+import PetParticles from './PetParticles';
 
 /**
- * FloatingMascot — animated wrapper over StageCropped.
- *
- * Animations:
- *   - Idle float: gentle translateY -10 → 0 loop (1400ms each way)
- *   - Tap bounce: scale 0.9 → spring 1.0
- *   - Dynamic shadow: scaleX + opacity inversely tied to float height
- *
- * Props:
- *   petType – 'alebrije' | 'xolo' | 'ajolote'
- *   stage   – 1-6
- *   size    – display width in dp
- *   onTap   – callback fired after internal bounce starts
+ * FloatingMascot — 60 FPS Reanimated mascot companion with live breathing,
+ * squash & stretch physics, particle burst, and dynamic shadow.
  */
-export default function FloatingMascot({ petType, stage, size, onTap, activeSkin }) {
-  const floatAnim   = useRef(new Animated.Value(0)).current;
-  const scaleAnim   = useRef(new Animated.Value(1)).current;
-  const floatLoopRef = useRef(null);
+function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, active = true }) {
+  const floatY = useSharedValue(0);
+  const squashX = useSharedValue(1);
+  const squashY = useSharedValue(1);
+  const rotateVal = useSharedValue(0);
+  const [burstKey, setBurstKey] = useState(0);
 
-  // ── Idle float loop ──────────────────────────────────────────────────────
+  // ── 60 FPS Idle float loop + gentle breathing/sway (UI thread) ───────────
   useEffect(() => {
-    floatLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -10,
-          duration: 1400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 1400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
+    if (!active) {
+      cancelAnimation(floatY);
+      cancelAnimation(rotateVal);
+      floatY.value = 0;
+      rotateVal.value = 0;
+      return;
+    }
+    floatY.value = withRepeat(
+      withSequence(
+        withTiming(-12, { duration: 1500, easing: Easing.inOut(Easing.cubic) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.cubic) })
+      ),
+      -1,
+      false
     );
-    floatLoopRef.current.start();
-    return () => floatLoopRef.current?.stop();
-  }, []);
 
-  // ── Tap bounce ───────────────────────────────────────────────────────────
+    rotateVal.value = withRepeat(
+      withSequence(
+        withTiming(-2.2, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(2.2, { duration: 1800, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+    return () => {
+      cancelAnimation(floatY);
+      cancelAnimation(rotateVal);
+    };
+  }, [active]);
+
+  // ── Tap bounce with squash, stretch & wobble ───────────────────────────────
   const handlePress = useCallback(() => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.9,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 3,
-        tension: 120,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Trigger particle burst
+    setBurstKey((k) => k + 1);
+
+    // Squash down
+    squashX.value = withSequence(
+      withTiming(1.18, { duration: 70 }),
+      withTiming(0.88, { duration: 90 }),
+      withSpring(1, { damping: 4, stiffness: 220 })
+    );
+
+    squashY.value = withSequence(
+      withTiming(0.82, { duration: 70 }),
+      withTiming(1.16, { duration: 90 }),
+      withSpring(1, { damping: 4, stiffness: 220 })
+    );
+
+    // Playful rotation kick
+    const kickDir = Math.random() > 0.5 ? 8 : -8;
+    rotateVal.value = withSequence(
+      withTiming(kickDir, { duration: 90 }),
+      withSpring(0, { damping: 5, stiffness: 200 })
+    );
+
     onTap?.();
   }, [onTap]);
 
-  // ── Shadow (inversely tied to float position) ────────────────────────────
-  const shadowOpacity = floatAnim.interpolate({
-    inputRange: [-10, 0],
-    outputRange: [0.08, 0.25],
-  });
-  const shadowScaleX = floatAnim.interpolate({
-    inputRange: [-10, 0],
-    outputRange: [0.8, 1.1],
+  // ── Animated styles ──────────────────────────────────────────────────────
+  const mascotStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: floatY.value },
+      { scaleX: squashX.value },
+      { scaleY: squashY.value },
+      { rotate: `${rotateVal.value}deg` },
+    ],
+  }));
+
+  const shadowStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(floatY.value, [-12, 0], [0.09, 0.28]);
+    const scaleX = interpolate(floatY.value, [-12, 0], [0.78, 1.12]);
+    return {
+      opacity,
+      transform: [{ scaleX }],
+    };
   });
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={handlePress}
-      activeOpacity={1}
-      style={{ alignItems: 'center' }}
+      style={styles.container}
     >
-      {/* Mascot with float + bounce */}
-      <Animated.View
-        style={{
-          transform: [
-            { translateY: floatAnim },
-            { scale: scaleAnim },
-          ],
-        }}
-      >
+      {/* Particle burst emitter */}
+      {burstKey > 0 ? (
+        <PetParticles key={burstKey} stage={stage} count={9} />
+      ) : null}
+
+      {/* Mascot with float + squash/stretch + sway */}
+      <Animated.View style={mascotStyle}>
         <StageCropped petType={petType} stage={stage} size={size} activeSkin={activeSkin} />
       </Animated.View>
 
@@ -94,21 +124,24 @@ export default function FloatingMascot({ petType, stage, size, onTap, activeSkin
         style={[
           styles.shadow,
           { width: size * 0.55 },
-          {
-            opacity: shadowOpacity,
-            transform: [{ scaleX: shadowScaleX }],
-          },
+          shadowStyle,
         ]}
       />
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   shadow: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#000',
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: '#3D2005',
     marginTop: -4,
   },
 });
+
+export default React.memo(FloatingMascot);

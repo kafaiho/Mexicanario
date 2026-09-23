@@ -23,6 +23,7 @@ import { playBGM, playSound, stopBGM } from "../utils/soundManager";
 import { compareWordsFlexibly, normalizeWordForDisplay } from "../utils/textUtils";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { useKeyboardLayout } from "../hooks/useKeyboardLayout";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -113,9 +114,9 @@ export default function PvPScreen({ navigation, route }) {
   const [transitioning, setTransitioning] = useState(false);
 
   // Mutations
-  const submitWord = useMutation(api.pvp.submitWordResult);
-  const leaveQueue = useMutation(api.pvp.leaveQueue);
-  const abandonMatch = useMutation(api.pvp.abandonMatch);
+  const submitWord = useUserMutation(api.pvp.submitWordResult);
+  const leaveQueue = useUserMutation(api.pvp.leaveQueue);
+  const abandonMatch = useUserMutation(api.pvp.abandonMatch);
   const activateMatch = useMutation(api.pvp.activateMatch);
   const checkMatchTimeout = useMutation(api.pvp.checkMatchTimeout);
 

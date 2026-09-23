@@ -1,13 +1,13 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "../_generated/server";
 
 /**
- * Correcciones de la 3ª auditoría cultural (bloques 3-6 de seedWords1000).
+ * Correcciones de la 4ª auditoría cultural (bloques 7-10 de seedWords1000).
  * Errores verificados con búsquedas en internet.
  *
- * Run desde el dashboard de Convex:  patchAudit3Errors:patchAudit3Errors
+ * Run desde el dashboard de Convex:  patchAudit4Errors:patchAudit4Errors
  */
 
-export const patchAudit3Errors = mutation({
+export const patchAudit4Errors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -21,34 +21,23 @@ export const patchAudit3Errors = mutation({
       example?: string;
       category?: string;
     }[] = [
-      // ── 1. Silvia Pinal: nació en Guaymas, Sonora — NO en CDMX ──────────────
+      // ── 1. Pedro Armendáriz: nació en Churubusco, CDMX — NO en Chihuahua ────
       {
-        word: "Silvia Pinal",
-        region: "Sonora",
-        // Fuente: Wikipedia, Deadline obituary (nov 2024)
-        // Nació el 12 de septiembre de 1931 en Guaymas, Sonora.
-        // Error común: asociarla con CDMX por su carrera, pero era sonorense.
+        word: "Pedro Armendáriz",
+        region: "CDMX",
+        // Fuente: IMDb, Wikipedia, Find A Grave
+        // Nació el 9 de mayo de 1912 en Churubusco (absorbido por CDMX).
+        // Error frecuente: confundirlo con Chihuahua por sus roles de norteño.
       },
 
-      // ── 2. Toniná: pirámide más alta de México, NO de toda Mesoamérica ──────
+      // ── 2. Cantona: zona más extensa, NO "mayor ciudad prehispánica" ──────────
       {
-        word: "Toniná",
-        example:
-          "Toniná tiene la pirámide más alta de México con 75 metros de altura",
-        // Fuente: Wikipedia (Toniná), Ancient Origins, The Travel
-        // La acrópolis de Toniná mide 75 m, la más alta en México.
-        // Decir "de Mesoamérica" es inexacto pues hay sitios en Guatemala
-        // (El Mirador / La Danta) de altura comparable.
-      },
-
-      // ── 3. Astrid Hadad: nació en Chetumal, Quintana Roo — NO en CDMX ──────
-      {
-        word: "Astrid Hadad",
-        region: "Quintana Roo",
-        meaning: "Artista de cabaret político nacida en Chetumal",
-        // Fuente: Wikipedia, Mexico News Daily
-        // Nació en Chetumal, Quintana Roo, de familia maronita libanesa.
-        // Se mudó a CDMX para estudiar, pero su origen es peninsular.
+        word: "Cantona",
+        meaning: "Zona arqueológica más extensa de México en el estado de Puebla",
+        // Fuente: Wikipedia, INAH, El Universal Puebla
+        // Cantona cubre ~12-14 km² — la zona arqueológica más grande de México por área.
+        // Pero decir "la mayor ciudad prehispánica" es inexacto pues Teotihuacan
+        // superaba a Cantona en población (125-200 mil vs ~90 mil habitantes).
       },
     ];
 

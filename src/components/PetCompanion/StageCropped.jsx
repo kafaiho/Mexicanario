@@ -13,7 +13,7 @@ import { FALLBACK_ASSETS, PET_ASSETS } from './petAssets';
  *   style      – applied to the wrapper View
  *   activeSkin – skin ID string or null/undefined (no skin)
  */
-export default function StageCropped({ petType, stage, size, style, activeSkin }) {
+function StageCropped({ petType, stage, size, style, activeSkin }) {
   const s           = Math.max(1, Math.min(6, stage));
   const typeAssets  = PET_ASSETS[petType] ?? FALLBACK_ASSETS;
   const stageAssets = typeAssets[s] ?? typeAssets[1];
@@ -56,3 +56,5 @@ export default function StageCropped({ petType, stage, size, style, activeSkin }
     </View>
   );
 }
+
+export default React.memo(StageCropped);

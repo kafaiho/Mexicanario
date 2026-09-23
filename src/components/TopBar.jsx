@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
@@ -45,6 +46,7 @@ import FriendsModal from "./FriendsModal";
 import { tapMedium, comboBurst } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 import useDevMode from "../hooks/useDevMode";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 // ProfileScreen loaded on-demand (same pattern as ShopScreen)
 let _ProfileScreen = null;
@@ -144,29 +146,20 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
   const [showProfileScreen, setShowProfileScreen] = useState(false);
 
   const { user, userId } = useAuth();
+  const isFocused = useIsFocused();
 
-  // Solicitudes de amistad pendientes → badge en botón de cuates
-  const isLinked = !!(user?.email || user?.googleId || user?.appleId);
-  const pendingRequests = useQuery(
-    api.friends.getPendingRequests,
-    isLinked && userId ? { userId } : "skip"
+  // Un solo resumen reactivo alimenta badge y avisos de cuates.
+  const isLinked = !!(user?.email || user?.hasEmail || user?.googleId || user?.appleId);
+  const socialSummary = useQuery(
+    api.friends.getTopBarSocialSummary,
+    isFocused && isLinked && userId ? { userId } : "skip"
   );
-  const pendingCount = pendingRequests?.length ?? 0;
-
-  // Retos pendientes de cuates → badge extra
-  const pendingChallenges = useQuery(
-    api.friends.getMyPendingChallenges,
-    isLinked && userId ? { userId } : "skip"
-  );
-  const challengeCount = pendingChallenges?.length ?? 0;
+  const pendingCount = socialSummary?.pendingRequestCount ?? 0;
+  const challengeCount = socialSummary?.pendingChallengeCount ?? 0;
   const totalBadge = pendingCount + challengeCount;
 
-  // Notificaciones de cuates no leídas (aceptaciones, nuevas solicitudes)
-  const unreadNotifs = useQuery(
-    api.friends.getUnreadFriendNotifications,
-    isLinked && userId ? { userId } : "skip"
-  );
-  const markRead = useMutation(api.friends.markFriendNotificationsRead);
+  const unreadNotifs = socialSummary?.unreadNotifications;
+  const markRead = useUserMutation(api.friends.markFriendNotificationsRead);
   const shownNotifsRef = useRef(new Set());
 
   useEffect(() => {
@@ -397,10 +390,9 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
   );
 }
 
-const ForwardedTopBar = forwardRef(TopBar);
+const ForwardedTopBar = React.memo(forwardRef(TopBar));
 
 export default ForwardedTopBar;
-
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",

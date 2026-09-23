@@ -3,12 +3,22 @@
  */
 
 /**
+ * Removes characters the gameplay keyboard cannot type (apostrophes, hyphens,
+ * periods…) while keeping letters — accented or not — and spaces.
+ * "yokot’an" → "yokotan". Keeps a 1:1 index mapping with normalizeWordForDisplay.
+ */
+export const stripUntypable = (word) => {
+  if (!word) return '';
+  return word.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, '').replace(/ {2,}/g, ' ').trim();
+};
+
+/**
  * Strips accents and dieresis from a word for gameplay display.
  * Keeps Ñ (distinct Spanish letter). Used so tiles show "GUEY" not "GÜEY".
  */
 export const normalizeWordForDisplay = (word) => {
   if (!word) return '';
-  return word
+  return stripUntypable(word)
     .toUpperCase()
     .replace(/Á/g, 'A')
     .replace(/É/g, 'E')

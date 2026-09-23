@@ -1,95 +1,35 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { checkSession } from "./sessionAuth";
+import { insertGuestUser } from "./sessions";
 
+// Legacy entry point for app versions without sessions (returns only the id).
 export const createAnonymousUser = mutation({
   args: {},
-  handler: async (ctx) => {
-    // Create new anonymous user
-    const userId = await ctx.db.insert("users", {
-      name: `Player_${Math.floor(Math.random() * 10000)}`,
-      coins: 100, // Starting coins
-      diamonds: 0,
-      country: "Venezuela",
-      avatar: "🌮",
-      currentLevel: 1, // Start at level 1
-      culturalOrderVersion: 2,
-      createdAt: Date.now(),
-    });
-
-    return userId;
-  },
+  handler: async (ctx) => insertGuestUser(ctx),
 });
 
+/**
+ * The player's own document. Secrets never leave the server; the email is only
+ * returned to a caller holding a valid session for this user.
+ */
 export const getUser = query({
-  args: { userId: v.string() },
+  args: { userId: v.string(), sessionToken: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    try {
-      // Cast to Id<"users"> — returns null if ID doesn't exist or is invalid
-      return await ctx.db.get(args.userId as any);
-    } catch {
-      return null;
+    const id = ctx.db.normalizeId("users", args.userId);
+    const user = id ? await ctx.db.get(id) : null;
+    if (!user) return null;
+    const { passwordHash: _passwordHash, email, ...rest } = user;
+    let ownsSession = false;
+    if (args.sessionToken) {
+      try {
+        await checkSession(ctx, args.userId, args.sessionToken);
+        ownsSession = true;
+      } catch {
+        ownsSession = false;
+      }
     }
-  },
-});
-
-
-// ── Social auth linking ────────────────────────────────────────────────────────
-
-// Find a user by their Google ID
-export const getUserByGoogleId = query({
-  args: { googleId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
-      .first();
-  },
-});
-
-// Find a user by their Apple ID
-export const getUserByAppleId = query({
-  args: { appleId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .withIndex("by_appleId", (q) => q.eq("appleId", args.appleId))
-      .first();
-  },
-});
-
-// Link a Google or Apple account to an existing anonymous user.
-// Returns { success: true } or { conflict: true, existingUserId: string }
-export const linkSocialAccount = mutation({
-  args: {
-    userId:   v.string(),
-    provider: v.string(),          // "google" | "apple"
-    socialId: v.string(),          // googleId or appleId
-    email:    v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const { userId, provider, socialId, email } = args;
-
-    // Check if another account already has this socialId
-    const indexName = provider === "google" ? "by_googleId" : "by_appleId";
-    const fieldName = provider === "google" ? "googleId" : "appleId";
-
-    const existing = await ctx.db
-      .query("users")
-      .withIndex(indexName as any, (q: any) => q.eq(fieldName, socialId))
-      .first();
-
-    if (existing && existing._id !== userId) {
-      // Conflict: another account already linked to this social ID
-      return { conflict: true, existingUserId: existing._id as string };
-    }
-
-    // Link the social account to the current user
-    const patch: Record<string, string | undefined> = { [fieldName]: socialId };
-    if (email) patch.email = email;
-    await ctx.db.patch(userId as Id<"users">, patch);
-
-    return { success: true };
+    return { ...rest, email: ownsSession ? email : undefined, hasEmail: !!email };
   },
 });
 
@@ -98,8 +38,8 @@ export const validateAccount = query({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
     try {
-      const user = await ctx.db.get(args.userId as Id<"users">);
-      return user !== null;
+      const id = ctx.db.normalizeId("users", args.userId);
+      return !!id && (await ctx.db.get(id)) !== null;
     } catch {
       return false;
     }
@@ -110,7 +50,7 @@ export const validateAccount = query({
 
 // Checks if a userId exists in the current deployment.
 // Returns true if found, false if the ID is stale/invalid (e.g. from old project).
-export const checkOrCreateUser = mutation({
+export const checkOrCreateUser = internalMutation({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
     try {

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 function norm(s: string) {
   return s.toUpperCase().trim()
@@ -196,7 +196,7 @@ function getNewCategory(word: string, meaning: string, currentCat: string): stri
  *
  * Ejecutar: reclassify:reclassify
  */
-export const reclassify = mutation({
+export const reclassify = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -223,7 +223,7 @@ export const reclassify = mutation({
 });
 
 /** Mueve palabras de la categoría "Deportes" a "Mundo Digital" */
-export const foldSports = mutation({
+export const foldSports = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

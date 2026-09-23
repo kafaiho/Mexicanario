@@ -1,6 +1,6 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
-export const migrateUsers = mutation({
+export const migrateUsers = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all users
@@ -28,7 +28,7 @@ export const migrateUsers = mutation({
 });
 
 // Helper function to get all words
-export const getAllWords = mutation({
+export const getAllWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const words = await ctx.db.query("words").collect();
@@ -37,7 +37,7 @@ export const getAllWords = mutation({
 });
 
 // Helper function to get all levels
-export const getAllLevels = mutation({
+export const getAllLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     const levels = await ctx.db.query("levels").collect();
@@ -46,7 +46,7 @@ export const getAllLevels = mutation({
 });
 
 // Migration to add currentLevel field to existing users
-export const addCurrentLevelToUsers = mutation({
+export const addCurrentLevelToUsers = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all users

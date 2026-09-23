@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 
@@ -9,7 +9,7 @@ function getMilestoneBonus(newCount: number) {
 // ── claimReferral ─────────────────────────────────────────────────────────────
 // Called from registerAccount when a pendingRef username is provided.
 // Safe to call multiple times — idempotent via referredBy check.
-export const claimReferral = mutation({
+export const claimReferral = internalMutation({
   args: {
     referredUserId:   v.id("users"),
     referrerUsername: v.string(),

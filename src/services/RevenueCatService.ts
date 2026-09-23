@@ -42,9 +42,9 @@ export const RC_PRODUCT_IDS: Record<string, string> = {
   coins_500: "mx_coins_500",
   coins_1200: "mx_coins_1200",
   coins_2000: "mx_coins_2000",
-  diamonds_100: "mx_diamonds_100",
-  diamonds_300: "mx_diamonds_300",
-  diamonds_800: "mx_diamonds_800",
+  diamonds_100: "mx_diamond_100", // Fixed to match console
+  diamonds_300: "300diamanteseste", // Fixed to match console
+  diamonds_800: "800diamantes", // Fixed to match console
   pass_mexica: "mx_season_pass",
   // Subscription & consumable product IDs (match your store listings)
   monthly: "monthly",
@@ -128,6 +128,9 @@ export type PaywallOutcome = {
  * Configure the RevenueCat SDK. Call once at app startup.
  * No-op in Expo Go or if the API key is not yet set.
  */
+let markConfigured: () => void = () => { };
+const configured = new Promise<void>((resolve) => { markConfigured = resolve; });
+
 export async function initRevenueCat(): Promise<void> {
   if (!Purchases) {
     if (__DEV__) console.log("[RevenueCat] SDK not available (Expo Go or web)");
@@ -139,6 +142,23 @@ export async function initRevenueCat(): Promise<void> {
   }
   Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.VERBOSE : LOG_LEVEL.ERROR);
   await Purchases.configure({ apiKey: API_KEY });
+  markConfigured();
+}
+
+/**
+ * Use the Convex userId as the RevenueCat app user id, so the backend can verify
+ * this player's purchases and entitlements with RevenueCat's REST API.
+ * Anonymous purchases made before this call are merged into the identified user.
+ */
+export async function identifyRevenueCatUser(userId: string): Promise<void> {
+  if (!isConfigured() || !userId) return;
+  try {
+    await configured;
+    const current = await Purchases.getAppUserID?.();
+    if (current !== userId) await Purchases.logIn(userId);
+  } catch (e) {
+    if (__DEV__) console.warn("[RevenueCat] logIn error:", e);
+  }
 }
 
 // ─── Entitlement Checking ─────────────────────────────────────────────────────
@@ -318,7 +338,7 @@ export async function restorePurchases(): Promise<{
  */
 export async function purchaseProduct(
   itemId: string,
-  onSuccess: (receiptToken: string) => Promise<void>,
+  onSuccess: (transactionId: string) => Promise<void>,
   onError: (msg: string) => void
 ): Promise<void> {
   if (!isConfigured()) {
@@ -341,8 +361,9 @@ export async function purchaseProduct(
       return;
     }
 
-    const { customerInfo } = await Purchases.purchasePackage(pkg);
-    await onSuccess(customerInfo.originalAppUserId);
+    const { transaction } = await Purchases.purchasePackage(pkg);
+    // The backend verifies this store transaction with RevenueCat before crediting it.
+    await onSuccess(transaction?.transactionIdentifier ?? "");
   } catch (e: any) {
     if (!e.userCancelled) onError(e.message ?? "Error al procesar el pago");
   }

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 /**
  * Lista de palabras obscenas/vulgares que se deben eliminar de la base de datos.
@@ -40,7 +40,7 @@ const OBSCENE_WORDS = [
  * Ejecutar desde Convex Dashboard para eliminar palabras obscenas
  * de la colección words y sus niveles asociados.
  */
-export const purgeObsceneWords = mutation({
+export const purgeObsceneWords = internalMutation({
     args: {},
     handler: async (ctx) => {
         const removed: string[] = [];

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 // Normalize: uppercase, no accents, trimmed
 function norm(s: string) {
@@ -88,7 +88,7 @@ function getFixedCategory(word: string, currentCat: string): string | null {
  *
  * Ejecutar: fixCategories:fixCategories
  */
-export const fixCategories = mutation({
+export const fixCategories = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

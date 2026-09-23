@@ -12,6 +12,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const BROWN = "#8B4513";
 const GOLD  = "#F8BE17";
@@ -20,7 +21,7 @@ const WHEAT2 = "#F5DEB3";
 
 export default function ProfileModal({ visible, onClose }) {
   const { userId, user } = useAuth();
-  const updateProfile = useMutation(api.users.updateUserProfile);
+  const updateProfile = useUserMutation(api.users.updateUserProfile);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 

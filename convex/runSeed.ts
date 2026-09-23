@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 const collectionsData = [
   { name: "Tacos",       imageId: "kg28f6928fehevqrknxch9bv6x7qmzgk" },
@@ -15,7 +15,7 @@ const collectionsData = [
   { name: "Tradiciones", imageId: "kg235t2jk4cbda0dedpx5c14cx7qnqqr" },
 ];
 
-export const seedCollections = mutation({
+export const seedCollections = internalMutation({
   args: {},
   handler: async (ctx) => {
     const existingCollections = await ctx.db.query("collections").collect();
@@ -34,7 +34,7 @@ export const seedCollections = mutation({
   },
 });
 
-export const addCollectionCard = mutation({
+export const addCollectionCard = internalMutation({
   args: {
     collectionId: v.id("collections"),
     name: v.string(),
@@ -172,7 +172,7 @@ const cards = [
   { category: "Tradiciones", element: "Carnaval de Veracruz" },
 ];
 
-export const seedCards = mutation({
+export const seedCards = internalMutation({
   args: {},
   handler: async (ctx) => {
     const existingCollections = await ctx.db.query("collections").collect();
@@ -192,7 +192,7 @@ export const seedCards = mutation({
 });
 
 // ── Reseed: borra todo y vuelve a crear colecciones + cartas ──────────────
-export const reseedCollections = mutation({
+export const reseedCollections = internalMutation({
   args: {},
   handler: async (ctx) => {
     // 1. Borrar todas las cartas existentes

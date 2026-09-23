@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { completedWordIds, getOrderedLevels } from "./levelOrdering";
 import { insertNewLevel } from "./levelWrites";
 
@@ -41,7 +41,7 @@ export const getWordById = query({
 });
 
 // Add a new word
-export const addWord = mutation({
+export const addWord = internalMutation({
   args: {
     word: v.string(),
     meaning: v.string(),
@@ -60,7 +60,7 @@ export const addWord = mutation({
 });
 
 // Update an existing word
-export const updateWord = mutation({
+export const updateWord = internalMutation({
   args: {
     wordId: v.id("words"),
     word: v.optional(v.string()),
@@ -76,7 +76,7 @@ export const updateWord = mutation({
 });
 
 // Delete a word
-export const deleteWord = mutation({
+export const deleteWord = internalMutation({
   args: { wordId: v.id("words") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.wordId);
@@ -744,7 +744,7 @@ export const sampleWords = [
 ]
 
 // Mutation to seed all words
-export const seedWords = mutation({
+export const seedWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const results = [];
@@ -767,7 +767,7 @@ export const seedWords = mutation({
 });
 
 // Mutation to add levels for all Mexican slang words (levels 14-113)
-export const addMexicanSlangLevels = mutation({
+export const addMexicanSlangLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all Mexican slang words
@@ -811,7 +811,7 @@ export const addMexicanSlangLevels = mutation({
 });
 
 // Combined mutation to seed words and create levels in one go
-export const seedWordsAndLevels = mutation({
+export const seedWordsAndLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     // First, seed the words
@@ -865,7 +865,7 @@ export const seedWordsAndLevels = mutation({
 // NEW: Seed the 4 themed levels from the user's vocabulary table.
 // Run once: npx convex run words:seedMexicanLevels
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedMexicanLevels = mutation({
+export const seedMexicanLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     const themed = [
@@ -935,7 +935,7 @@ export const seedMexicanLevels = mutation({
 // Seed levels 5–22 from the user's vocabulary tables.
 // Run once: npx convex run words:seedLevels5to22
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels5to22 = mutation({
+export const seedLevels5to22 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1117,7 +1117,7 @@ export const seedLevels5to22 = mutation({
 // Seed levels 23–31.
 // Run: npx convex run words:seedLevels23to31   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels23to31 = mutation({
+export const seedLevels23to31 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1232,7 +1232,7 @@ export const seedLevels23to31 = mutation({
 // Seed levels 52–56.
 // Run once: npx convex run words:seedLevels52to56   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels52to56 = mutation({
+export const seedLevels52to56 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1315,7 +1315,7 @@ export const seedLevels52to56 = mutation({
 // Seed levels 47–51.
 // Run once: npx convex run words:seedLevels47to51   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels47to51 = mutation({
+export const seedLevels47to51 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1398,7 +1398,7 @@ export const seedLevels47to51 = mutation({
 // Seed levels 42–46.
 // Run once: npx convex run words:seedLevels42to46   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels42to46 = mutation({
+export const seedLevels42to46 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1481,7 +1481,7 @@ export const seedLevels42to46 = mutation({
 // Seed levels 37–41.
 // Run once: npx convex run words:seedLevels37to41   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels37to41 = mutation({
+export const seedLevels37to41 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1564,7 +1564,7 @@ export const seedLevels37to41 = mutation({
 // Seed levels 32–36.
 // Run once: npx convex run words:seedLevels32to36   (from MexicanarioApp-main)
 // ─────────────────────────────────────────────────────────────────────────────
-export const seedLevels32to36 = mutation({
+export const seedLevels32to36 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1643,7 +1643,7 @@ export const seedLevels32to36 = mutation({
   },
 });
 
-export const seedLevels57to61 = mutation({
+export const seedLevels57to61 = internalMutation({
   args: {},
   handler: async (ctx) => {
     const newWords = [
@@ -1726,7 +1726,7 @@ export const seedLevels57to61 = mutation({
  * Creates levels for ALL words that don't have a level yet.
  * Safe to run multiple times — skips words that already have a level.
  */
-export const createMissingLevels = mutation({
+export const createMissingLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -1761,7 +1761,7 @@ export const createMissingLevels = mutation({
   },
 });
 
-export const seedOriginalWords = mutation({
+export const seedOriginalWords = internalMutation({
   handler: async (ctx) => {
     let addedCount = 0;
     for (const item of sampleWords) {

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 import { insertNewLevel } from "./levelWrites";
 
 /**
@@ -304,7 +304,7 @@ const CULTURA_DIGITAL_WORDS = [
  *
  * Ejecutar desde el dashboard de Convex: seedCulturaDigital:seedCulturaDigital
  */
-export const seedCulturaDigital = mutation({
+export const seedCulturaDigital = internalMutation({
   args: {},
   handler: async (ctx) => {
     // ── Cargar estado actual ────────────────────────────────────────────────

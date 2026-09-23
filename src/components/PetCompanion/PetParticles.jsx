@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -9,29 +8,31 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { STAGE_THEMES } from '../../theme/designTokens';
-import { PARTICLE_COUNT, PARTICLE_DURATION, PARTICLE_SPREAD_RADIUS } from './petAnimations';
 
-function Particle({ index, color, total }) {
+const PARTICLE_SYMBOLS = ['✨', '💖', '⭐', '🌟', '💫', '🧡'];
+
+function Particle({ index, color, symbol, total }) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const opacity    = useSharedValue(1);
-  const scale      = useSharedValue(1);
+  const opacity = useSharedValue(1);
+  const scale = useSharedValue(0.4);
+  const rotate = useSharedValue(0);
 
   useEffect(() => {
-    // Evenly distribute particles in a circle, with a little randomness
-    const angle    = ((2 * Math.PI) / total) * index + (Math.random() - 0.5) * 0.8;
-    const distance = PARTICLE_SPREAD_RADIUS * (0.6 + Math.random() * 0.4);
+    const angle = ((2 * Math.PI) / total) * index + (Math.random() - 0.5) * 0.9;
+    const distance = 55 + Math.random() * 45;
     const tx = Math.cos(angle) * distance;
-    const ty = Math.sin(angle) * distance - 20; // slight upward bias
+    const ty = Math.sin(angle) * distance - 25; // upward bias
 
-    translateX.value = withSpring(tx, { damping: 8, stiffness: 80 });
-    translateY.value = withSpring(ty, { damping: 8, stiffness: 80 });
+    translateX.value = withSpring(tx, { damping: 9, stiffness: 90 });
+    translateY.value = withSpring(ty, { damping: 9, stiffness: 90 });
+    rotate.value = withTiming((Math.random() - 0.5) * 60, { duration: 800 });
+    scale.value = withSpring(1 + Math.random() * 0.3, { damping: 6, stiffness: 120 });
 
     opacity.value = withDelay(
-      PARTICLE_DURATION * 0.3,
-      withTiming(0, { duration: PARTICLE_DURATION * 0.7 })
+      350,
+      withTiming(0, { duration: 450 })
     );
-    scale.value = withTiming(0, { duration: PARTICLE_DURATION });
   }, []);
 
   const style = useAnimatedStyle(() => ({
@@ -40,42 +41,70 @@ function Particle({ index, color, total }) {
       { translateX: translateX.value },
       { translateY: translateY.value },
       { scale: scale.value },
+      { rotate: `${rotate.value}deg` },
     ],
   }));
+
+  if (symbol) {
+    return (
+      <Animated.View style={[styles.symbolContainer, style]}>
+        <Text style={styles.symbolText}>{symbol}</Text>
+      </Animated.View>
+    );
+  }
 
   return <Animated.View style={[styles.particle, { backgroundColor: color }, style]} />;
 }
 
 /**
- * PetParticles — burst of colored dots on celebrate.
- * Props:
- *   stage – 1-6 (drives accent color)
+ * PetParticles — 60 FPS burst of luminous orbs & sparkles on pet tap/feed.
  */
-export default function PetParticles({ stage = 1 }) {
+function PetParticles({ stage = 1, count = 8 }) {
   const theme = STAGE_THEMES[stage] ?? STAGE_THEMES[1];
-  const color = theme.accent;
+  const color = theme.primary || '#FFB800';
 
   return (
     <View style={styles.container} pointerEvents="none">
-      {Array.from({ length: PARTICLE_COUNT }, (_, i) => (
-        <Particle key={i} index={i} color={color} total={PARTICLE_COUNT} />
-      ))}
+      {Array.from({ length: count }, (_, i) => {
+        const isSymbol = i % 2 === 0;
+        const symbol = isSymbol ? PARTICLE_SYMBOLS[i % PARTICLE_SYMBOLS.length] : null;
+        return (
+          <Particle
+            key={i}
+            index={i}
+            color={color}
+            symbol={symbol}
+            total={count}
+          />
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 99,
   },
   particle: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  symbolContainer: {
+    position: 'absolute',
+  },
+  symbolText: {
+    fontSize: 18,
   },
 });
+
+export default React.memo(PetParticles);

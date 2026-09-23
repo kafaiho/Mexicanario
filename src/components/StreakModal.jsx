@@ -21,6 +21,7 @@ import usePetStore, { getStage } from "../store/usePetStore";
 import { playPetSound } from "../utils/soundManager";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import StageCropped from "./PetCompanion/StageCropped";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -51,8 +52,8 @@ export default function StreakModal({ visible, onClose }) {
     api.pet.getPetState,
     userId ? { userId } : "skip"
   );
-  const commitGoal = useMutation(api.streaks.commitStreakGoal);
-  const claimMilestone = useMutation(api.streaks.claimStreakMilestone);
+  const commitGoal = useUserMutation(api.streaks.commitStreakGoal);
+  const claimMilestone = useUserMutation(api.streaks.claimStreakMilestone);
 
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [claimingMilestone, setClaimingMilestone] = useState(null);

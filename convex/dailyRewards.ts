@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 // Daily rewards configuration (coins only as per latest strategy)
 // For Day 7, we'll use a base value here, but the mutation will handle the randomness.
@@ -60,7 +60,7 @@ export const getDailyRewardStatus = query({
 });
 
 // Claim daily reward
-export const claimDailyReward = mutation({
+export const claimDailyReward = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     // Get current status

@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
+import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -15,6 +16,16 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { api } from "../../convex/_generated/api";
 import FloatingMascot from "../components/PetCompanion/FloatingMascot";
 import StageCropped from "../components/PetCompanion/StageCropped";
@@ -24,9 +35,10 @@ import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { notifySuccess, tapLight, tapMedium } from "../services/haptics";
 import usePetStore, { getStage, SKIN_CONFIG } from "../store/usePetStore";
-import { STAGE_THEMES } from "../theme/designTokens";
+import { STAGE_THEMES, STAGE_THRESHOLDS, VINCULO_MAX } from "../theme/designTokens";
 import { playPetSound } from "../utils/soundManager";
 import ShopScreen from "./ShopScreen";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 const MASCOT_SIZE = Math.min(width * 0.42, 180);
@@ -103,7 +115,7 @@ function SetupScreen({ userId }) {
   const [selectedType, setSelectedType] = useState(null);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const choosePet = useMutation(api.pet.choosePet);
+  const choosePet = useUserMutation(api.pet.choosePet);
 
   const handleHatch = async () => {
     if (!name.trim()) return;
@@ -192,6 +204,128 @@ function SetupScreen({ userId }) {
   );
 }
 
+// ─── Glowing Prehispanic Aura Halo ──────────────────────────────────────────
+const GlowHalo = React.memo(function GlowHalo({ theme, size, active = true }) {
+  const pulse = useSharedValue(1);
+  const rotate = useSharedValue(0);
+
+  useEffect(() => {
+    if (!active) {
+      cancelAnimation(pulse);
+      cancelAnimation(rotate);
+      pulse.value = 1;
+      rotate.value = 0;
+      return;
+    }
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.95, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+    rotate.value = withRepeat(
+      withTiming(360, { duration: 22000, easing: Easing.linear }),
+      -1,
+      false
+    );
+    return () => {
+      cancelAnimation(pulse);
+      cancelAnimation(rotate);
+    };
+  }, [active]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: pulse.value },
+      { rotate: `${rotate.value}deg` },
+    ],
+    borderColor: (theme?.primary || "#FFB800") + "60",
+    shadowColor: theme?.primary || "#FFB800",
+  }));
+
+  const haloSize = size + 28;
+  return (
+    <Animated.View
+      style={[
+        styles.glowRing,
+        {
+          width: haloSize,
+          height: haloSize * 0.72,
+          borderRadius: 999,
+        },
+        animStyle,
+      ]}
+    />
+  );
+});
+
+// ─── Comic Animated Speech Bubble ───────────────────────────────────────────
+const AnimatedSpeechBubble = React.memo(function AnimatedSpeechBubble({ text }) {
+  const scale = useSharedValue(0);
+
+  useEffect(() => {
+    if (text) {
+      scale.value = withSequence(
+        withSpring(1.08, { damping: 4, stiffness: 240 }),
+        withSpring(1, { damping: 6, stiffness: 180 })
+      );
+    } else {
+      scale.value = withTiming(0, { duration: 150 });
+    }
+  }, [text]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: scale.value,
+  }));
+
+  if (!text) return null;
+
+  return (
+    <Animated.View style={[styles.tapBubble, animStyle]}>
+      <Text style={styles.tapBubbleText}>{text}</Text>
+      <View style={styles.tapBubbleTail} />
+    </Animated.View>
+  );
+});
+
+// ─── Bond / Evolution XP Progress Bar ───────────────────────────────────────
+const BondProgressBar = React.memo(function BondProgressBar({ vinculo, stage, theme }) {
+  const minXP = STAGE_THRESHOLDS[stage - 1] ?? 0;
+  const maxXP = STAGE_THRESHOLDS[stage] ?? VINCULO_MAX;
+  const currentXP = Math.max(0, vinculo - minXP);
+  const neededXP = Math.max(1, maxXP - minXP);
+  const ratio = Math.min(1, Math.max(0, currentXP / neededXP));
+  const percent = Math.round(ratio * 100);
+  const remaining = Math.max(0, maxXP - vinculo);
+
+  return (
+    <View style={styles.bondCard}>
+      <View style={styles.bondHeaderRow}>
+        <Text style={styles.bondLabel}>✨ Nivel de Vínculo</Text>
+        <Text style={styles.bondValText}>
+          {stage < 6 ? `${vinculo} / ${maxXP} XP` : `${vinculo} XP (Máx)`}
+        </Text>
+      </View>
+      <View style={styles.bondTrack}>
+        <LinearGradient
+          colors={[theme?.primary || "#FFB800", theme?.accent || "#FF6B35"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.bondFill, { width: `${Math.max(6, percent)}%` }]}
+        />
+      </View>
+      <Text style={styles.bondSubText}>
+        {stage < 6
+          ? `¡Faltan ${remaining} pts para la Etapa ${stage + 1}!`
+          : "🌟 ¡Poder Místico Máximo Alcanzado!"}
+      </Text>
+    </View>
+  );
+});
+
 // ─── Stage Dots ───────────────────────────────────────────────────────────────
 const StageDots = React.memo(function StageDots({ currentStage }) {
   return (
@@ -225,15 +359,17 @@ const StageDots = React.memo(function StageDots({ currentStage }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MascotaScreen() {
   const { userId } = useAuth();
-  const pet = useQuery(api.pet.getPetState, userId ? { userId } : "skip");
-  const streakStatus = useQuery(api.streaks.getStreakStatus, userId ? { userId } : "skip");
+  const isFocused = useIsFocused();
+  const activeUserArgs = isFocused && userId ? { userId } : "skip";
+  const pet = useQuery(api.pet.getPetState, activeUserArgs);
+  const streakStatus = useQuery(api.streaks.getStreakStatus, activeUserArgs);
   const streakDays = streakStatus?.currentStreak ?? 0;
-  const resetPetMutation = useMutation(api.pet.resetPet);
-  const switchActivePetMutation = useMutation(api.pet.switchActivePet);
-  const buyPetFood = useMutation(api.pet.buyPetFood);
-  const buyStreakFreeze = useMutation(api.streaks.buyStreakFreeze);
-  const petSlotsData = useQuery(api.pet.getPetSlots, userId ? { userId } : "skip");
-  const shopState    = useQuery(api.shop.getShopState, userId ? { userId } : "skip");
+  const resetPetMutation = useUserMutation(api.pet.resetPet);
+  const switchActivePetMutation = useUserMutation(api.pet.switchActivePet);
+  const buyPetFood = useUserMutation(api.pet.buyPetFood);
+  const buyStreakFreeze = useUserMutation(api.streaks.buyStreakFreeze);
+  const petSlotsData = useQuery(api.pet.getPetSlots, activeUserArgs);
+  const shopState    = useQuery(api.shop.getShopState, activeUserArgs);
 
   // New bond system
   const vinculo      = usePetStore((s) => s.vinculo);
@@ -400,10 +536,11 @@ export default function MascotaScreen() {
 
         {/* ── Mascot display ── */}
         <View style={styles.mascotWrap}>
-          {/* Glow ring behind mascot */}
-          <View style={[styles.glowRing, { borderColor: theme.primary + "60", shadowColor: theme.primary }]} />
+          {/* Animated pulsing glow halo behind mascot */}
+          <GlowHalo theme={theme} size={MASCOT_SIZE} active={isFocused} />
 
           <FloatingMascot
+            active={isFocused}
             petType={pet.petType}
             stage={stage}
             size={MASCOT_SIZE}
@@ -411,16 +548,11 @@ export default function MascotaScreen() {
             activeSkin={activeSkin}
           />
 
-          {/* Tap bubble */}
-          {tapBubble ? (
-            <View style={styles.tapBubble}>
-              <Text style={styles.tapBubbleText}>{tapBubble}</Text>
-              <View style={styles.tapBubbleTail} />
-            </View>
-          ) : null}
+          {/* Comic Animated Tap bubble */}
+          <AnimatedSpeechBubble text={tapBubble} />
         </View>
 
-        <Text style={styles.tapHint}>👆 Tócame</Text>
+        <Text style={styles.tapHint}>👆 ¡Tócame para acariciarme y ganar vínculo!</Text>
 
         {/* ── Pet info ── */}
         <View style={styles.infoBlock}>
@@ -431,6 +563,9 @@ export default function MascotaScreen() {
             </Text>
           </View>
         </View>
+
+        {/* ── XP / Bond Evolution Progress Bar ── */}
+        <BondProgressBar vinculo={vinculo} stage={stage} theme={theme} />
 
         {/* ── Stage evolution dots ── */}
         <StageDots currentStage={stage} />
@@ -773,28 +908,87 @@ const styles = StyleSheet.create({
   },
   tapBubble: {
     position: "absolute",
-    top: 8,
-    backgroundColor: "rgba(92,58,33,0.9)",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    top: 4,
+    backgroundColor: "#5C3A21",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     zIndex: 10,
+    borderWidth: 1.5,
+    borderColor: "#F8BE17",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
+    maxWidth: width * 0.82,
   },
-  tapBubbleText: { color: "#FFE4B5", fontSize: 16, fontWeight: "bold", textAlign: "center" },
+  tapBubbleText: { color: "#FFE4B5", fontSize: 15, fontWeight: "bold", textAlign: "center" },
   tapBubbleTail: {
     position: "absolute",
-    bottom: -6,
+    bottom: -7,
     alignSelf: "center",
     left: "46%",
     width: 0, height: 0,
-    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 7,
+    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 8,
     borderLeftColor: "transparent", borderRightColor: "transparent",
-    borderTopColor: "rgba(92,58,33,0.9)",
+    borderTopColor: "#5C3A21",
   },
-  tapHint: { color: "rgba(92,58,33,0.4)", fontSize: 11, marginBottom: 20 },
+  tapHint: { color: "rgba(92,58,33,0.55)", fontSize: 12, fontWeight: "600", marginBottom: 16 },
+
+  // Bond / XP Progress Card
+  bondCard: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(211, 107, 30, 0.25)",
+    marginBottom: 20,
+    shadowColor: "#5C3A21",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  bondHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  bondLabel: {
+    color: "#5C3A21",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  bondValText: {
+    color: "#D36B1E",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  bondTrack: {
+    width: "100%",
+    height: 12,
+    backgroundColor: "rgba(92, 58, 33, 0.12)",
+    borderRadius: 6,
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  bondFill: {
+    height: "100%",
+    borderRadius: 6,
+  },
+  bondSubText: {
+    color: "#7A5030",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+  },
 
   // Info
-  infoBlock: { alignItems: "center", marginBottom: 24 },
+  infoBlock: { alignItems: "center", marginBottom: 16 },
   petName: { color: "#5C3A21", fontSize: 26, fontWeight: "800", marginBottom: 8, letterSpacing: 0.3 },
   stagePill: {
     borderRadius: 999,

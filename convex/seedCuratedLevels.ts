@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 import { insertNewLevel } from "./levelWrites";
 
 /**
@@ -78,7 +78,7 @@ const CURATED_WORDS = [
  *
  * Run once from the Convex dashboard:  seedCuratedLevels:seedCuratedLevels
  */
-export const seedCuratedLevels = mutation({
+export const seedCuratedLevels = internalMutation({
     args: {},
     handler: async (ctx) => {
         // Fetch existing data
@@ -147,7 +147,7 @@ export const seedCuratedLevels = mutation({
  *
  * Run from the Convex dashboard: seedCuratedLevels:patchCuratedCategories
  */
-export const patchCuratedCategories = mutation({
+export const patchCuratedCategories = internalMutation({
     args: {},
     handler: async (ctx) => {
         // Build lookup map: word (lowercase) → category

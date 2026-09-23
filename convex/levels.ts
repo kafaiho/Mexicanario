@@ -1,5 +1,8 @@
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
+import { loadOrderingData } from "./levelData";
 import { getOrderedLevels } from "./levelOrdering";
 import { insertNewLevel } from "./levelWrites";
 
@@ -76,7 +79,7 @@ export const getCurrentLevel = query({
   },
 });
 
-export const checkLevelUp = mutation({
+export const checkLevelUp = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -109,7 +112,7 @@ export const checkLevelUp = mutation({
   },
 });
 
-export const completeLevel = mutation({
+export const completeLevel = userMutation({
   args: {
     userId: v.id("users"),
     levelNumber: v.number(), // 1-based position in the ordered level sequence
@@ -119,8 +122,7 @@ export const completeLevel = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
 
-    const allLevels = await ctx.db.query("levels").collect();
-    const allWords = await ctx.db.query("words").collect();
+    const { levels: allLevels, words: allWords } = await loadOrderingData(ctx, user.culturalOrderVersion ?? 1);
     const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user.culturalOrderVersion ?? 1);
     const totalLevels = ordered.length || 1;
 
@@ -131,15 +133,16 @@ export const completeLevel = mutation({
     const reward = levelDoc?.reward ?? DEFAULT_REWARD;
 
     // Update user's position — args.levelNumber is the position they just completed.
-    // Clamp effectiveLevel so users past the total never get stuck.
+    // currentLevel === totalLevels + 1 means every level is done: replaying the
+    // last word afterwards must not level up (or pay out) again.
     const currentLevel = user.currentLevel || 1;
+    const finishedAll = currentLevel > totalLevels;
     const effectiveLevel = Math.min(currentLevel, totalLevels);
     let levelUp = false;
     let nextLevel = currentLevel;
-    if (args.levelNumber === effectiveLevel) {
+    if (!finishedAll && args.levelNumber === effectiveLevel) {
       levelUp = true;
-      // When user finishes the last word, stay at the last level (don't reset)
-      nextLevel = currentLevel >= totalLevels ? totalLevels : currentLevel + 1;
+      nextLevel = currentLevel + 1;
       const levelPatch: any = {
         currentLevel: nextLevel,
         tacos: ((user as any).tacos ?? 0) + 1,
@@ -173,10 +176,9 @@ export const getLevelCount = query({
 export const getAllLevels = query({
   args: { userId: v.optional(v.id("users")) },
   handler: async (ctx, { userId }) => {
-    const rawLevels = await ctx.db.query("levels").collect();
-    const rawWords = await ctx.db.query("words").collect();
     const user = userId ? await ctx.db.get(userId) : null;
     const culturalOrderVersion = user?.culturalOrderVersion ?? 1;
+    const { levels: rawLevels, words: rawWords } = await loadOrderingData(ctx, culturalOrderVersion);
 
     // Use same ordering logic as gameplay so map matches the game exactly
     const ordered = getOrderedLevels(rawLevels, rawWords, userId?.toString() ?? "", culturalOrderVersion);
@@ -218,8 +220,7 @@ export const getLevelByNumber = query({
       const user = await ctx.db.get(args.userId);
       if (user) {
         culturalOrderVersion = user.culturalOrderVersion ?? 1;
-        const allLevels = await ctx.db.query("levels").collect();
-        const allWords = await ctx.db.query("words").collect();
+        const { levels: allLevels, words: allWords } = await loadOrderingData(ctx, culturalOrderVersion);
         const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), culturalOrderVersion);
         orderedLevel = ordered.find((candidate) => candidate._id.toString() === lvl._id.toString());
       }
@@ -254,7 +255,7 @@ export const getLevelByNumber = query({
 });
 
 // Create levels for all words
-export const createLevelsForAllWords = mutation({
+export const createLevelsForAllWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all words
@@ -482,7 +483,7 @@ const newWords15to18 = [
   { word: "Policias y ladrones", meaning: "Juego de persecución", example: "Jugamos policías y ladrones en la calle", region: "Juvenil", category: "Juegos" },
 ];
 
-export const seedLevels15_18 = mutation({
+export const seedLevels15_18 = internalMutation({
   handler: async (ctx) => {
     let addedCount = 0;
     for (const w of newWords15to18) {
@@ -502,7 +503,7 @@ export const seedLevels15_18 = mutation({
         addedCount++;
       }
     }
-    return `Añadidas ${addedCount} palabras. Agrega un botón en MainMenuScreen para llamar a api.levels.createLevelsForAllWords después de esto si quieres actualizar los niveles.`;
+    return `Añadidas ${addedCount} palabras. Agrega un botón en MainMenuScreen para llamar a internal.levels.createLevelsForAllWords después de esto si quieres actualizar los niveles.`;
   },
 });
 
@@ -512,7 +513,7 @@ export const seedLevels15_18 = mutation({
  *
  * Run from Convex dashboard: levels:addMissingLevels
  */
-export const addMissingLevels = mutation({
+export const addMissingLevels = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

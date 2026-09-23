@@ -1,13 +1,13 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "../_generated/server";
 
 /**
- * Correcciones de la 4ª auditoría cultural (bloques 7-10 de seedWords1000).
+ * Correcciones de la 2ª auditoría cultural (bloques 1-20 de seedWords1000).
  * Errores verificados con búsquedas en internet.
  *
- * Run desde el dashboard de Convex:  patchAudit4Errors:patchAudit4Errors
+ * Run desde el dashboard de Convex:  patchAudit2Errors:patchAudit2Errors
  */
 
-export const patchAudit4Errors = mutation({
+export const patchAudit2Errors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -21,23 +21,41 @@ export const patchAudit4Errors = mutation({
       example?: string;
       category?: string;
     }[] = [
-      // ── 1. Pedro Armendáriz: nació en Churubusco, CDMX — NO en Chihuahua ────
+      // ── 1. Jorge Negrete: nació en Silao, Guanajuato — NO en Jalisco ──────────
       {
-        word: "Pedro Armendáriz",
-        region: "CDMX",
-        // Fuente: IMDb, Wikipedia, Find A Grave
-        // Nació el 9 de mayo de 1912 en Churubusco (absorbido por CDMX).
-        // Error frecuente: confundirlo con Chihuahua por sus roles de norteño.
+        word: "Jorge Negrete",
+        region: "Guanajuato",
+        // Fuente: guanajuatodesconocido.com, lasillarota.com
+        // El error más común: asociarlo con Jalisco por el mariachi, pero era guanajuatense.
       },
 
-      // ── 2. Cantona: zona más extensa, NO "mayor ciudad prehispánica" ──────────
+      // ── 2. "Mazahua silvestre" — no existe como especie animal ────────────────
+      // Los Mazahuas son un pueblo indígena otomiano del Estado de México.
+      // Su nombre viene del náhuatl "mazahua" = gente del venado.
+      // Parcharemos el word, meaning, example y category para corrección completa.
       {
-        word: "Cantona",
-        meaning: "Zona arqueológica más extensa de México en el estado de Puebla",
-        // Fuente: Wikipedia, INAH, El Universal Puebla
-        // Cantona cubre ~12-14 km² — la zona arqueológica más grande de México por área.
-        // Pero decir "la mayor ciudad prehispánica" es inexacto pues Teotihuacan
-        // superaba a Cantona en población (125-200 mil vs ~90 mil habitantes).
+        word: "Mazahua silvestre",
+        newWord: "Pueblo mazahua",
+        meaning:
+          "Pueblo indígena del Estado de México cuyo nombre significa 'gente del venado'",
+        example:
+          "El pueblo mazahua vive en San Felipe del Progreso y preserva su lengua otomiana",
+        category: "Historia",
+        // region permanece "Estado de México" — correcto
+      },
+
+      // ── 3. "Caste de la Nueva Galicia" → "Guerra del Mixtón" ─────────────────
+      // La rebelión indígena del occidente de México (1540-1542) se llama
+      // "Guerra del Mixtón". El nombre "Caste" no es el término histórico correcto.
+      // Además el ejemplo anterior decía "del norte" (incorrecto, es occidente).
+      {
+        word: "Caste de la Nueva Galicia",
+        newWord: "Guerra del Mixtón",
+        meaning:
+          "Mayor rebelión indígena del siglo XVI en el occidente de México",
+        example:
+          "La Guerra del Mixtón de 1540 fue la mayor sublevación caxcán contra los españoles en Jalisco",
+        region: "Jalisco",
       },
     ];
 

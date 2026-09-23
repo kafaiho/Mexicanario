@@ -57,8 +57,12 @@ function getNextMilestone(milestones, completed) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Mexicanometro({ visible, onClose }) {
-  const { user } = useAuth();
-  const totalLevels = useQuery(api.levels.getLevelCount) ?? 0;
+  const { user, userId } = useAuth();
+  // Per-user active path length (excludes retired words); shares the
+  // subscription MainMenu already holds for getCurrentLevel.
+  const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
+  const fallbackCount = useQuery(api.levels.getLevelCount, levelInfo?.totalLevels ? "skip" : {});
+  const totalLevels = levelInfo?.totalLevels ?? fallbackCount ?? 0;
 
   // Real screen dimensions — updates on rotation
   const screen = useScreenDims();

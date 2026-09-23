@@ -27,6 +27,7 @@ import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { notifySuccess } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width } = Dimensions.get("window");
 const CARD_W = Math.min(width * 0.88, 380);
@@ -61,7 +62,7 @@ export function useDailyReward() {
   const [claimed, setClaimed] = useState(false);
 
   const { userId } = useAuth();
-  const updateCurrency = useMutation(api.users.updateUserCurrency);
+  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
 
   const check = useCallback(async () => {
     if (!userId) return;

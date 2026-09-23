@@ -15,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { useScreenDims } from "../hooks/useScreenDims";
 import { playBGM, stopBGM } from "../utils/soundManager";
 import { TABLET_MODE } from "../utils/tabletSetup";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width } = Dimensions.get("window");
 
@@ -118,7 +119,7 @@ export default function LoteriaExpressScreen({ navigation }) {
     const screenDims = useScreenDims();
     const isLandscape = TABLET_MODE && screenDims.width > screenDims.height;
 
-    const submitScore = useMutation(api.loteria.submitScore);
+    const submitScore = useUserMutation(api.loteria.submitScore);
     const leaderboard = useQuery(api.loteria.getLeaderboard, isGameOver ? { type: tab } : "skip");
     const myBest = useQuery(api.loteria.getMyBest, userId && isGameOver ? { userId } : "skip");
 

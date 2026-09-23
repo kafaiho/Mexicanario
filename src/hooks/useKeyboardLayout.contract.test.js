@@ -26,7 +26,8 @@ const compactInnerWidth = compactLayout.keyboardWidth - compact.kbPaddingH * 2;
 for (const property of [
   'layout', 'kbKeyW', 'kbSpecialW', 'kbKeyH', 'kbHeight', 'keyboardHeight',
   'powerUpHeight', 'kbMargin', 'kbPaddingH', 'kbPaddingV', 'kbRowMarginB',
-  'kbFontSize', 'kbIconSize',
+  'kbFontSize', 'kbIconSize', 'showSpecialLabels', 'showKeyboardHint',
+  'keyboardHintHeight', 'specialLabelFontSize',
 ]) {
   assert.ok(Object.hasOwn(compact, property), `missing ${property} from hook metrics contract`);
 }
@@ -41,6 +42,8 @@ assert.ok(
   compact.kbKeyW * 7 + compact.kbSpecialW * 2 + compact.kbMargin * 18 <= compactInnerWidth,
   'mixed row fits the consumer padding and per-key margins',
 );
+assert.equal(compact.showSpecialLabels, false, 'compact keys use icons without cramped captions');
+assert.equal(compact.showKeyboardHint, false, 'compact screens preserve vertical gameplay space');
 
 const landscapeLayout = getGameplayResponsiveLayout({
   width: 1024,
@@ -49,6 +52,13 @@ const landscapeLayout = getGameplayResponsiveLayout({
 });
 const landscape = getKeyboardLayoutMetrics({ layout: landscapeLayout });
 assert.ok(landscape.kbKeyW > compact.kbKeyW, 'orientation changes recompute key dimensions');
+assert.equal(landscape.showKeyboardHint, false, 'landscape preserves vertical gameplay space');
+
+const phoneLayout = getGameplayResponsiveLayout({ width: 390, height: 844, insets: {} });
+const phone = getKeyboardLayoutMetrics({ layout: phoneLayout });
+assert.equal(phone.showSpecialLabels, true, 'regular phones can name destructive controls');
+assert.equal(phone.showKeyboardHint, true, 'regular phones explain long-press deletion');
+assert.ok(phone.keyboardHintHeight > 0, 'visible helper copy reserves its own height');
 
 const overridden = getKeyboardLayoutMetrics({
   layout: compactLayout,

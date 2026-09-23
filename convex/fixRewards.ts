@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 /**
  * Actualiza las recompensas de TODOS los niveles existentes
@@ -6,7 +6,7 @@ import { mutation } from "./_generated/server";
  *
  * Ejecutar desde Convex Dashboard: fixRewards:fixLevelRewards
  */
-export const fixLevelRewards = mutation({
+export const fixLevelRewards = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allLevels = await ctx.db.query("levels").collect();

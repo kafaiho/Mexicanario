@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 
 /** Solo el dueño de la app puede llamar estas funciones en producción */
 const OWNER_IDS = new Set([
@@ -14,7 +15,7 @@ function requireOwner(userId: string) {
 /**
  * DEV ONLY — lista todos los usuarios (id, nombre, petType).
  */
-export const listUsers = query({
+export const listUsers = internalQuery({
     args: { requesterId: v.string() },
     handler: async (ctx, { requesterId }) => {
         requireOwner(requesterId);
@@ -32,7 +33,7 @@ export const listUsers = query({
  * a la categoría correcta "Jerga".
  * Run: npx convex run devTools:redistributeHistoriaToJerga
  */
-export const redistributeHistoriaToJerga = mutation({
+export const redistributeHistoriaToJerga = internalMutation({
   args: { requesterId: v.string() },
   handler: async (ctx, { requesterId }) => {
     requireOwner(requesterId);
@@ -79,7 +80,7 @@ export const redistributeHistoriaToJerga = mutation({
  * DEV ONLY — wipes all words and levels, then resets user to level 1.
  * Call this once from the Convex dashboard or via the in-app DEV button.
  */
-export const cleanupDuplicates = mutation({
+export const cleanupDuplicates = internalMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);
@@ -110,7 +111,7 @@ export const cleanupDuplicates = mutation({
 /**
  * DEV ONLY — adds a large amount of coins and diamonds to a user.
  */
-export const giveDevCoins = mutation({
+export const giveDevCoins = userMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);
@@ -128,7 +129,7 @@ export const giveDevCoins = mutation({
 /**
  * DEV ONLY — resets the user's level to 1.
  */
-export const resetLevelDev = mutation({
+export const resetLevelDev = userMutation({
     args: { userId: v.string() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);
@@ -147,7 +148,7 @@ export const resetLevelDev = mutation({
  * DEV ONLY — patches category field for all known themed words.
  * Run once after seeding: npx convex run devTools:patchWordCategories
  */
-export const patchWordCategories = mutation({
+export const patchWordCategories = internalMutation({
     args: { requesterId: v.string() },
     handler: async (ctx, { requesterId }) => {
         requireOwner(requesterId);
@@ -295,7 +296,7 @@ export const patchWordCategories = mutation({
 /**
  * DEV ONLY — salta directamente al nivel indicado.
  */
-export const jumpToLevel = mutation({
+export const jumpToLevel = userMutation({
     args: { userId: v.string(), targetLevel: v.number() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);
@@ -327,7 +328,7 @@ export const jumpToLevel = mutation({
 /**
  * DEV ONLY — cambia el tipo de mascota.
  */
-export const switchPetType = mutation({
+export const switchPetType = userMutation({
     args: { userId: v.string(), petType: v.string() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);
@@ -342,7 +343,7 @@ export const switchPetType = mutation({
     },
 });
 
-export const resetTacos = mutation({
+export const resetTacos = internalMutation({
     args: { userId: v.string(), tacos: v.number() },
     handler: async (ctx, args) => {
         requireOwner(args.userId);

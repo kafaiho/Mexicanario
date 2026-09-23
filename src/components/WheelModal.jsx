@@ -25,6 +25,7 @@ import { playSound } from '../utils/soundManager';
 import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from '../utils/tabletSetup';
 import CoinFlyOverlay from './CoinFlyOverlay';
 import DiamondFlyOverlay from './DiamondFlyOverlay';
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,7 +68,7 @@ function formatCooldown(ms) {
 
 export default function WheelModal({ visible, onClose, onOpenShop }) {
   const { userId } = useAuth();
-  const updateCurrency = useMutation(api.users.updateUserCurrency);
+  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
   const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
@@ -80,6 +81,7 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
   const [cooldownMs, setCooldownMs] = useState(0);
   const [adUsedThisSession, setAdUsedThisSession] = useState(false);
   const tickRef = useRef(null);
+  const cooldownEndsAtRef = useRef(0);
 
   // Load cooldown on open
   useEffect(() => {
@@ -91,9 +93,14 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
   async function checkCooldown() {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (!stored) { setCooldownMs(0); return; }
+      if (!stored) {
+        cooldownEndsAtRef.current = 0;
+        setCooldownMs(0);
+        return;
+      }
       const last = parseInt(stored, 10);
-      const remaining = Math.max(0, last + COOLDOWN_MS - Date.now());
+      cooldownEndsAtRef.current = last + COOLDOWN_MS;
+      const remaining = Math.max(0, cooldownEndsAtRef.current - Date.now());
       setCooldownMs(remaining);
       if (remaining > 0) startTick();
     } catch (_) { }
@@ -101,10 +108,8 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
 
   function startTick() {
     clearInterval(tickRef.current);
-    tickRef.current = setInterval(async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (!stored) { setCooldownMs(0); clearInterval(tickRef.current); return; }
-      const remaining = Math.max(0, parseInt(stored, 10) + COOLDOWN_MS - Date.now());
+    tickRef.current = setInterval(() => {
+      const remaining = Math.max(0, cooldownEndsAtRef.current - Date.now());
       setCooldownMs(remaining);
       if (remaining <= 0) clearInterval(tickRef.current);
     }, 1000);
@@ -176,7 +181,9 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
     const idx = Math.floor(Math.random() * NUM_SEGMENTS);
     spin(idx);
     // Save cooldown
-    await AsyncStorage.setItem(STORAGE_KEY, Date.now().toString());
+    const spunAt = Date.now();
+    cooldownEndsAtRef.current = spunAt + COOLDOWN_MS;
+    await AsyncStorage.setItem(STORAGE_KEY, spunAt.toString());
     setCooldownMs(COOLDOWN_MS);
     startTick();
     // Notificar cuando la ruleta esté lista de nuevo

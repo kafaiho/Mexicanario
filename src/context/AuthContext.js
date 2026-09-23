@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '../../convex/_generated/api';
@@ -30,6 +30,28 @@ async function secureClearCredentials() {
   await SecureStore.deleteItemAsync(CRED_PASS_KEY);
 }
 
+// ── Device session (proves to the backend that this device owns userId) ─────
+const SESSION_KEY = 'mexicanario_session';
+
+async function loadSession() {
+  try {
+    const raw = await SecureStore.getItemAsync(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null; // { userId, sessionToken }
+  } catch (_) {
+    return null;
+  }
+}
+
+async function saveSession(userId, sessionToken) {
+  try {
+    await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify({ userId, sessionToken }));
+  } catch (_) { /* the session still works for this app run */ }
+}
+
+async function clearSession() {
+  try { await SecureStore.deleteItemAsync(SESSION_KEY); } catch (_) { }
+}
+
 /** One-time migration: move plaintext creds from AsyncStorage → SecureStore, then wipe old keys. */
 async function migrateCredsToSecureStore() {
   try {
@@ -54,37 +76,70 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [userId, setUserId] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const staleCheckDone = useRef(false);
 
-  const createAnonymousUser = useMutation(api.auth.createAnonymousUser);
-  const linkSocialAccount   = useMutation(api.auth.linkSocialAccount);
+  const createGuestSession  = useMutation(api.sessions.createGuestSession);
+  const claimLegacySession  = useMutation(api.sessions.claimLegacySession);
+  const revokeSession       = useMutation(api.sessions.revokeSession);
+  const socialSignInAction  = useAction(api.sessions.socialSignIn);
   const loginWithEmailMut   = useMutation(api.friends.loginWithEmail);
   // Query the user — returns null if the userId doesn't exist in this deployment
-  const user = useQuery(api.auth.getUser, userId ? { userId } : 'skip');
+  const user = useQuery(
+    api.auth.getUser,
+    userId ? (sessionToken ? { userId, sessionToken } : { userId }) : 'skip'
+  );
+
+  /** Makes (userId, token) the active identity on this device. */
+  const adoptSession = async (newUserId, newToken) => {
+    await AsyncStorage.setItem('userId', newUserId);
+    await saveSession(newUserId, newToken);
+    staleCheckDone.current = true;
+    setSessionToken(newToken);
+    setUserId(newUserId);
+  };
+
+  const startGuest = async () => {
+    const promise = createGuestSession();
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Connection timeout')), 10000)
+    );
+    const guest = await Promise.race([promise, timeout]);
+    await adoptSession(guest.userId, guest.sessionToken);
+  };
 
   const loadStoredUser = async () => {
     try {
       const storedUserId = await AsyncStorage.getItem('userId');
       if (storedUserId) {
-        staleCheckDone.current = false; // reset so the effect can check
-        setUserId(storedUserId);
-      } else {
-        // No stored user — try auto-restore by email first
-        const restored = await tryAutoRestoreByEmail();
-        if (restored) return;
-
-        // No stored user — create a new one with timeout
-        const promise = createAnonymousUser();
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout')), 10000)
-        );
-        const newUserId = await Promise.race([promise, timeout]);
-        await AsyncStorage.setItem('userId', newUserId);
-        staleCheckDone.current = true;
-        setUserId(newUserId);
+        const stored = await loadSession();
+        if (stored?.userId === storedUserId && stored.sessionToken) {
+          staleCheckDone.current = false; // reset so the effect can check
+          setSessionToken(stored.sessionToken);
+          setUserId(storedUserId);
+          return;
+        }
+        // Install from before sessions existed: claim one for this device.
+        try {
+          const { sessionToken: claimed } = await claimLegacySession({ userId: storedUserId });
+          await saveSession(storedUserId, claimed);
+          staleCheckDone.current = false;
+          setSessionToken(claimed);
+          setUserId(storedUserId);
+          return;
+        } catch (claimErr) {
+          console.warn('Legacy session claim failed:', claimErr);
+          if (await tryAutoRestoreByEmail()) return;
+          await startGuest();
+          return;
+        }
       }
+      // No stored user — try auto-restore by email first, else a new guest
+      const restored = await tryAutoRestoreByEmail();
+      if (restored) return;
+      await startGuest();
     } catch (err) {
       console.error('Error loading/creating user:', err);
       setError(err);
@@ -103,10 +158,8 @@ export const AuthProvider = ({ children }) => {
       if (!savedEmail || !savedPass) return false;
 
       const result = await loginWithEmailMut({ email: savedEmail, password: savedPass });
-      if (result?.userId) {
-        await AsyncStorage.setItem('userId', result.userId);
-        staleCheckDone.current = true;
-        setUserId(result.userId);
+      if (result?.userId && result.sessionToken) {
+        await adoptSession(result.userId, result.sessionToken);
         return true;
       }
     } catch (err) {
@@ -137,10 +190,10 @@ export const AuthProvider = ({ children }) => {
           if (restored) return;
 
           await AsyncStorage.removeItem('userId');
+          await clearSession();
           setUserId(null);
-          const newUserId = await createAnonymousUser();
-          await AsyncStorage.setItem('userId', newUserId);
-          setUserId(newUserId);
+          setSessionToken(null);
+          await startGuest();
         } catch (err) {
           console.error('Error recreating user:', err);
           setError(err);
@@ -158,30 +211,31 @@ export const AuthProvider = ({ children }) => {
     loadStoredUser();
   };
 
-  // ── Social account linking ─────────────────────────────────────────────────
+  // ── Google / Apple (verified by the backend) ──────────────────────────────
 
   /**
-   * Link a Google or Apple account to the current anonymous user.
-   * Returns { success: true } or { conflict: true, existingUserId: string }
+   * mode "restore": { found, userId, name, sessionToken } for the linked account.
+   * mode "link": { success } or { conflict, existingUserId, sessionToken }.
    */
-  const linkGoogle = async (googleId, email) => {
-    if (!userId) return { error: 'No user' };
-    return await linkSocialAccount({ userId, provider: 'google', socialId: googleId, email });
-  };
-
-  const linkApple = async (appleId, email) => {
-    if (!userId) return { error: 'No user' };
-    return await linkSocialAccount({ userId, provider: 'apple', socialId: appleId, email });
+  const socialSignIn = async (provider, idToken, mode) => {
+    return await socialSignInAction({
+      provider,
+      idToken,
+      mode,
+      ...(userId ? { userId } : {}),
+      ...(sessionToken ? { sessionToken } : {}),
+    });
   };
 
   /**
-   * Switch to a different account (e.g. after finding a linked account via Google/Apple).
-   * Updates AsyncStorage and local state — the anonymous account is abandoned.
+   * Switch to a different account the backend already authorized for this
+   * device (email login or verified Google/Apple). The previous session ends.
    */
-  const restoreAccount = async (targetUserId) => {
-    await AsyncStorage.setItem('userId', targetUserId);
-    staleCheckDone.current = true;
-    setUserId(targetUserId);
+  const restoreAccount = async (targetUserId, targetSessionToken) => {
+    if (sessionToken && sessionToken !== targetSessionToken) {
+      revokeSession({ sessionToken }).catch(() => { });
+    }
+    await adoptSession(targetUserId, targetSessionToken);
   };
 
   /**
@@ -205,12 +259,13 @@ export const AuthProvider = ({ children }) => {
     try {
       // Keep saved credentials so Face ID / biometric re-login still works.
       // Credentials are only wiped on account deletion.
+      if (sessionToken) revokeSession({ sessionToken }).catch(() => { });
       await AsyncStorage.removeItem('userId');
+      await clearSession();
       setUserId(null);
+      setSessionToken(null);
       staleCheckDone.current = true;
-      const newUserId = await createAnonymousUser();
-      await AsyncStorage.setItem('userId', newUserId);
-      setUserId(newUserId);
+      await startGuest();
     } catch (err) {
       console.error('Logout error:', err);
     }
@@ -218,6 +273,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     userId,
+    sessionToken,
     user,
     loading,
     error,
@@ -225,8 +281,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAuthenticated: !!userId,
     // Social auth
-    linkGoogle,
-    linkApple,
+    socialSignIn,
     restoreAccount,
     // Email session persistence
     saveCredentials,

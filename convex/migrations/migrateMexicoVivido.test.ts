@@ -75,6 +75,41 @@ assert.equal(catalogOperationDecision(operations[0], [{ _id: "a", word: "niño h
 assert.equal(catalogOperationDecision(operations[0], [applied[0]]).kind, "unchanged", "la segunda pasada del catálogo produce cero escrituras");
 assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela", isRetired: false }]).kind, "retire");
 assert.equal(catalogOperationDecision(operations[1], [{ _id: "a", word: "rayuela", isRetired: true }]).kind, "unchanged");
+
+const batoRemoval = {
+  kind: "remove" as const,
+  entry: {
+    word: "bato",
+    legacyPresentation: {
+      meaning: "Muchacho u hombre, en lenguaje popular.",
+      example: "Ese bato esperaba el camión con sus amigos.",
+      region: "Noroeste y occidente",
+      collectionId: "regiones-hablas",
+      placeId: "sinaloa",
+      icon: "🧢",
+      difficulty: 2,
+    },
+  },
+};
+assert.deepEqual(catalogOperationDecision(batoRemoval, [{
+  _id: "legacy-bato", word: "Bato", meaning: "Tipo, cuate", region: "CDMX", difficulty: 1,
+}]), {
+  kind: "retire",
+  _id: "legacy-bato",
+  patch: {
+    isRetired: true,
+    legacyWord: "Bato",
+    legacyRegion: "Noroeste y occidente",
+    legacyDifficulty: 2,
+    meaning: "Muchacho u hombre, en lenguaje popular.",
+    example: "Ese bato esperaba el camión con sus amigos.",
+    region: "Noroeste y occidente",
+    collectionId: "regiones-hablas",
+    placeId: "sinaloa",
+    icon: "🧢",
+    difficulty: 2,
+  },
+});
 assert.equal(hasMissingNormalizedKeys(undefined), false);
 assert.equal(hasMissingNormalizedKeys({ _id: "legacy" }), true);
 

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { playBGM, stopBGM } from "../utils/soundManager";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -120,7 +121,7 @@ export default function DueloAlburesScreen({ navigation }) {
     const [lastAnswer, setLastAnswer] = useState(null); // null | "correct" | "wrong"
     const [tab, setTab] = useState("daily");
 
-    const submitScore = useMutation(api.albures.submitScore);
+    const submitScore = useUserMutation(api.albures.submitScore);
     const leaderboard = useQuery(api.albures.getLeaderboard, showResult ? { type: tab } : "skip");
     const myBest = useQuery(api.albures.getMyBest, userId && showResult ? { userId } : "skip");
 

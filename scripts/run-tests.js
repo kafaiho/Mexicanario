@@ -14,6 +14,11 @@ const testModules = [
   'src/hooks/useKeyboardLayout.contract.test.js',
   'src/config/gameplayResponsiveStructure.test.js',
   'src/config/gameplayControlsPresentation.test.js',
+  'src/config/mascotaScreenRuntime.test.js',
+  'src/utils/gameplayKeyboard.test.js',
+  'src/utils/wordPresentation.test.js',
+  'src/config/reactHookImports.test.js',
+  'src/config/appPerformance.contract.test.js',
 ];
 
 const typescriptTestModules = [
@@ -33,6 +38,8 @@ const typescriptTestModules = [
   'convex/culturalTaxonomyParity.test.ts',
   'convex/collectionLegacyAliases.test.ts',
   'convex/culturalLibrary.test.ts',
+  'convex/shopPerformance.test.ts',
+  'convex/sessionAuth.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

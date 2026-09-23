@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 // ─── reorganizeModismos ─────────────────────────────────────────────────────
 /**
@@ -18,7 +18,7 @@ import { mutation } from "./_generated/server";
  * Words in easy-region slang (CDMX, Norte, Todo México…) stay as "Modismos".
  * Idempotent — safe to run multiple times.
  */
-export const reorganizeModismos = mutation({
+export const reorganizeModismos = internalMutation({
   args: {},
   handler: async (ctx) => {
     function norm(s: string) {
@@ -154,7 +154,7 @@ function normalize(str: string): string {
  * mezcladas aleatoriamente según el usuario.
  * Idempotente — seguro de correr varias veces.
  */
-export const fixCreatorWordDifficulty = mutation({
+export const fixCreatorWordDifficulty = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Palabras que deben aparecer después del nivel 50, no al inicio
@@ -187,7 +187,7 @@ export const fixCreatorWordDifficulty = mutation({
  * fueron sobrescritas a "Modismos" por patchCategories:assignSlangCategories.
  * Idempotente.
  */
-export const fixCulturaDigitalCategories = mutation({
+export const fixCulturaDigitalCategories = internalMutation({
   args: {},
   handler: async (ctx) => {
     function norm(s: string) {
@@ -235,7 +235,7 @@ export const fixCulturaDigitalCategories = mutation({
  * Los códigos de creador en la tabla referralCodes se conservan (son promocionales).
  * Idempotente — seguro de correr varias veces.
  */
-export const removeStreamersWords = mutation({
+export const removeStreamersWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -255,7 +255,7 @@ export const removeStreamersWords = mutation({
   },
 });
 
-export const removeVulgarWords = mutation({
+export const removeVulgarWords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const normalized = new Set(WORDS_TO_REMOVE.map(normalize));

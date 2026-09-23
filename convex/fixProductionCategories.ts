@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { NEW_WORDS } from "./seedWords1000";
 
 /**
@@ -829,7 +829,7 @@ export const audit = query({
 });
 
 // ─── Fix: aplicar categorías correctas ───────────────────────────────────────
-export const fix = mutation({
+export const fix = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

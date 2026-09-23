@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { userMutation } from "./sessionAuth";
 import { buildDueReviewWord } from "./failedWordPresentation";
 
 const TWO_DAYS_MS = 172_800_000;
@@ -10,7 +11,7 @@ const TWO_DAYS_MS = 172_800_000;
  *   and extends scheduledAt by another 2 days from now.
  * - If no record exists, creates a new one scheduled 2 days from now.
  */
-export const recordFail = mutation({
+export const recordFail = userMutation({
   args: {
     userId: v.id("users"),
     wordId: v.id("words"),
@@ -51,7 +52,7 @@ export const recordFail = mutation({
  * resolveWord — called when user correctly answers a word that was in review.
  * Marks the most recent unresolved record for this word as resolved.
  */
-export const resolveWord = mutation({
+export const resolveWord = userMutation({
   args: {
     userId: v.id("users"),
     wordId: v.id("words"),

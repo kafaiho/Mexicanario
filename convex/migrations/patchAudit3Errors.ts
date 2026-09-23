@@ -1,13 +1,13 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "../_generated/server";
 
 /**
- * Correcciones de la 2ª auditoría cultural (bloques 1-20 de seedWords1000).
+ * Correcciones de la 3ª auditoría cultural (bloques 3-6 de seedWords1000).
  * Errores verificados con búsquedas en internet.
  *
- * Run desde el dashboard de Convex:  patchAudit2Errors:patchAudit2Errors
+ * Run desde el dashboard de Convex:  patchAudit3Errors:patchAudit3Errors
  */
 
-export const patchAudit2Errors = mutation({
+export const patchAudit3Errors = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -21,41 +21,34 @@ export const patchAudit2Errors = mutation({
       example?: string;
       category?: string;
     }[] = [
-      // ── 1. Jorge Negrete: nació en Silao, Guanajuato — NO en Jalisco ──────────
+      // ── 1. Silvia Pinal: nació en Guaymas, Sonora — NO en CDMX ──────────────
       {
-        word: "Jorge Negrete",
-        region: "Guanajuato",
-        // Fuente: guanajuatodesconocido.com, lasillarota.com
-        // El error más común: asociarlo con Jalisco por el mariachi, pero era guanajuatense.
+        word: "Silvia Pinal",
+        region: "Sonora",
+        // Fuente: Wikipedia, Deadline obituary (nov 2024)
+        // Nació el 12 de septiembre de 1931 en Guaymas, Sonora.
+        // Error común: asociarla con CDMX por su carrera, pero era sonorense.
       },
 
-      // ── 2. "Mazahua silvestre" — no existe como especie animal ────────────────
-      // Los Mazahuas son un pueblo indígena otomiano del Estado de México.
-      // Su nombre viene del náhuatl "mazahua" = gente del venado.
-      // Parcharemos el word, meaning, example y category para corrección completa.
+      // ── 2. Toniná: pirámide más alta de México, NO de toda Mesoamérica ──────
       {
-        word: "Mazahua silvestre",
-        newWord: "Pueblo mazahua",
-        meaning:
-          "Pueblo indígena del Estado de México cuyo nombre significa 'gente del venado'",
+        word: "Toniná",
         example:
-          "El pueblo mazahua vive en San Felipe del Progreso y preserva su lengua otomiana",
-        category: "Historia",
-        // region permanece "Estado de México" — correcto
+          "Toniná tiene la pirámide más alta de México con 75 metros de altura",
+        // Fuente: Wikipedia (Toniná), Ancient Origins, The Travel
+        // La acrópolis de Toniná mide 75 m, la más alta en México.
+        // Decir "de Mesoamérica" es inexacto pues hay sitios en Guatemala
+        // (El Mirador / La Danta) de altura comparable.
       },
 
-      // ── 3. "Caste de la Nueva Galicia" → "Guerra del Mixtón" ─────────────────
-      // La rebelión indígena del occidente de México (1540-1542) se llama
-      // "Guerra del Mixtón". El nombre "Caste" no es el término histórico correcto.
-      // Además el ejemplo anterior decía "del norte" (incorrecto, es occidente).
+      // ── 3. Astrid Hadad: nació en Chetumal, Quintana Roo — NO en CDMX ──────
       {
-        word: "Caste de la Nueva Galicia",
-        newWord: "Guerra del Mixtón",
-        meaning:
-          "Mayor rebelión indígena del siglo XVI en el occidente de México",
-        example:
-          "La Guerra del Mixtón de 1540 fue la mayor sublevación caxcán contra los españoles en Jalisco",
-        region: "Jalisco",
+        word: "Astrid Hadad",
+        region: "Quintana Roo",
+        meaning: "Artista de cabaret político nacida en Chetumal",
+        // Fuente: Wikipedia, Mexico News Daily
+        // Nació en Chetumal, Quintana Roo, de familia maronita libanesa.
+        // Se mudó a CDMX para estudiar, pero su origen es peninsular.
       },
     ];
 

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 const DEFAULTS = {
   minAndroidVersionCode: 1,
@@ -23,7 +23,7 @@ export const getAppConfig = query({
  * Ejemplo de uso para forzar actualización a versionCode 9:
  *   setAppConfig({ minAndroidVersionCode: 9, forceUpdate: true })
  */
-export const setAppConfig = mutation({
+export const setAppConfig = internalMutation({
   args: {
     minAndroidVersionCode: v.optional(v.number()),
     minIosVersion:         v.optional(v.string()),

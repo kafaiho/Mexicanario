@@ -1,4 +1,10 @@
-﻿import { Audio } from "expo-av";
+﻿import Constants from "expo-constants";
+
+const isExpoGo = Constants.appOwnership === "expo";
+let Audio = null;
+if (!isExpoGo) {
+  Audio = require("expo-av").Audio;
+}
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SoundManager â€” SFX + Background Music (BGM) + Pet Sounds
@@ -7,7 +13,6 @@
 // â”€â”€ SFX files (short, one-shot) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SFX_FILES = {
   correct: require("../../assets/sounds/correct.mp3"),
-  wrong: require("../../assets/sounds/combo_break.mp3"), // combo_break usado como wrong
   combo: require("../../assets/sounds/combo.mp3"),
   combo_break: require("../../assets/sounds/combo_break.mp3"),
   streak: require("../../assets/sounds/streak.mp3"),
@@ -41,6 +46,8 @@ const BGM_FILES = {
 const loadedSfx = {};
 const loadedPetSfx = {};
 const loadedBgm = {};
+const loadingSounds = new Map();
+const loadingBgm = new Map();
 
 let sfxEnabled = true;  // short SFX on/off
 let musicEnabled = true;  // BGM on/off
@@ -52,7 +59,53 @@ let bgmStatusCallback = null; // onPlaybackStatusUpdate reference for cleanup
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Preload â€” call once at app start
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function ensureSoundLoaded(name) {
+  if (!Audio) return null;
+  const key = name === "wrong" ? "combo_break" : name;
+  const bucket = SFX_FILES[key] ? loadedSfx : loadedPetSfx;
+  const file = SFX_FILES[key] ?? PET_SFX_FILES[key];
+  if (!file) return null;
+  if (bucket[key]) return bucket[key];
+  if (loadingSounds.has(key)) return loadingSounds.get(key);
+
+  const loadPromise = Audio.Sound.createAsync(file, {
+    shouldPlay: false,
+    volume: key === "pet_xolo" ? 0.35 : 1.0,
+  }).then(({ sound }) => {
+    bucket[key] = sound;
+    return sound;
+  }).catch((e) => {
+    if (__DEV__) console.log(`[SoundManager] SFX "${key}" missing:`, e.message);
+    return null;
+  }).finally(() => loadingSounds.delete(key));
+
+  loadingSounds.set(key, loadPromise);
+  return loadPromise;
+}
+
+async function ensureBgmLoaded(key) {
+  if (!Audio || !BGM_FILES[key]) return null;
+  if (loadedBgm[key]) return loadedBgm[key];
+  if (loadingBgm.has(key)) return loadingBgm.get(key);
+
+  const loadPromise = Audio.Sound.createAsync(BGM_FILES[key], {
+    shouldPlay: false,
+    isLooping: true,
+    volume: 0.35,
+  }).then(({ sound }) => {
+    loadedBgm[key] = sound;
+    return sound;
+  }).catch((e) => {
+    if (__DEV__) console.log(`[SoundManager] BGM "${key}" missing:`, e.message);
+    return null;
+  }).finally(() => loadingBgm.delete(key));
+
+  loadingBgm.set(key, loadPromise);
+  return loadPromise;
+}
+
 export async function preloadSounds() {
+  if (!Audio) return;
   try {
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
@@ -61,41 +114,9 @@ export async function preloadSounds() {
     });
   } catch (_) { }
 
-  // Load SFX
-  for (const [key, file] of Object.entries(SFX_FILES)) {
-    try {
-      const { sound } = await Audio.Sound.createAsync(file, { shouldPlay: false, volume: 1.0 });
-      loadedSfx[key] = sound;
-    } catch (e) {
-      if (__DEV__) console.log(`[SoundManager] SFX "${key}" missing:`, e.message);
-    }
-  }
-
-  // Load Pet SFX
-  for (const [key, file] of Object.entries(PET_SFX_FILES)) {
-    try {
-      const vol = key === "pet_xolo" ? 0.35 : 1.0;
-      const { sound } = await Audio.Sound.createAsync(file, { shouldPlay: false, volume: vol });
-      loadedPetSfx[key] = sound;
-    } catch (e) {
-      if (__DEV__) console.log(`[SoundManager] PetSFX "${key}" missing:`, e.message);
-    }
-  }
-
-  // Load BGM (preloaded but NOT played yet)
-  // isLooping disabled — we handle looping manually with fade to avoid the gap/click
-  for (const [key, file] of Object.entries(BGM_FILES)) {
-    try {
-      const { sound } = await Audio.Sound.createAsync(file, {
-        shouldPlay: false,
-        isLooping: true, // native gapless looping — no audible gap between loops
-        volume: 0.35, // subtle background level
-      });
-      loadedBgm[key] = sound;
-    } catch (e) {
-      if (__DEV__) console.log(`[SoundManager] BGM "${key}" missing:`, e.message);
-    }
-  }
+  // Only the first interaction and menu music are needed at startup.
+  // Every other effect/track is loaded the first time it is requested.
+  await Promise.all([ensureSoundLoaded("click"), ensureBgmLoaded("menu")]);
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -105,9 +126,7 @@ const _lastPlay = {};
 const _THROTTLE = 35; // ms — prevents echo from overlapping async calls
 
 export async function playSound(name) {
-  if (!sfxEnabled) return;
-  const sound = loadedSfx[name] ?? loadedPetSfx[name];
-  if (!sound) return;
+  if (!Audio || !sfxEnabled) return;
 
   // Throttle: skip if same sound played <35ms ago (prevents echo)
   const now = Date.now();
@@ -115,6 +134,8 @@ export async function playSound(name) {
   _lastPlay[name] = now;
 
   try {
+    const sound = await ensureSoundLoaded(name);
+    if (!sound) return;
     // replayAsync = atomic stop + play from 0 (single native bridge call)
     await sound.replayAsync({ shouldPlay: true, positionMillis: 0 });
   } catch (_) { }
@@ -124,6 +145,7 @@ export async function playSound(name) {
 // Pet sounds â€” helpers for common pet events
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function playPetSound(event, petType) {
+  if (!Audio) return;
   // event: 'happy' | 'sad' | 'levelup'
   // petType: 'ajolote' | 'alebrije' | 'xolo' | 'nahual_norte' | 'nahual_sur' | 'nahual_urbano'
   if (event === "sad") {
@@ -175,10 +197,10 @@ function attachLoopHandler(sound) {
  * Crossfades from the previous track to the new one.
  */
 export async function playBGM(trackKey) {
-  if (!musicEnabled) return;
+  if (!Audio || !musicEnabled) return;
   if (currentBgmKey === trackKey) return; // already playing this track
 
-  const nextSound = loadedBgm[trackKey];
+  const nextSound = await ensureBgmLoaded(trackKey);
   if (!nextSound) return;
 
   // Crossfade: fade out old, fade in new simultaneously
@@ -267,4 +289,7 @@ export async function unloadSounds() {
   for (const sound of [...Object.values(loadedSfx), ...Object.values(loadedPetSfx), ...Object.values(loadedBgm)]) {
     try { await sound.unloadAsync(); } catch (_) { }
   }
+  for (const key of Object.keys(loadedSfx)) delete loadedSfx[key];
+  for (const key of Object.keys(loadedPetSfx)) delete loadedPetSfx[key];
+  for (const key of Object.keys(loadedBgm)) delete loadedBgm[key];
 }

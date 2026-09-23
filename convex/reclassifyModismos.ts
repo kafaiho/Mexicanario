@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1399,7 +1399,7 @@ const MODISMO_NAMES = new Set([
  *
  * Ejecutar: reclassifyModismos:migrateAll
  */
-export const migrateAll = mutation({
+export const migrateAll = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();
@@ -1489,7 +1489,7 @@ export const auditCategories = query({
  *
  * Ejecutar: reclassifyModismos:removeDuplicates
  */
-export const removeDuplicates = mutation({
+export const removeDuplicates = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

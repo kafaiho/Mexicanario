@@ -15,7 +15,16 @@ import { insertNewLevel } from "../levelWrites";
 
 type ExistingWord = { _id: any; word: string; [key: string]: unknown };
 type CatalogWord = Record<string, unknown> & { word: string };
-type RemovedWord = { word: string; reason?: string };
+type LegacyPresentation = {
+  meaning: string;
+  example: string;
+  region: string;
+  collectionId: string;
+  placeId: string;
+  icon: string;
+  difficulty: number;
+};
+type RemovedWord = { word: string; reason?: string; legacyPresentation?: LegacyPresentation };
 
 const PATCH_FIELDS = ["word", "meaning", "example", "collectionId", "pathId", "placeId", "difficulty", "generation", "rating", "icon", "sourceNote", "relatedConceptId", "conceptId"] as const;
 
@@ -49,6 +58,18 @@ function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function removalPatch(entry: RemovedWord, existing: ExistingWord): Record<string, unknown> {
+  const presentation = entry.legacyPresentation;
+  if (!presentation) return { isRetired: true };
+  return {
+    isRetired: true,
+    legacyWord: existing.legacyWord ?? existing.word,
+    legacyRegion: presentation.region,
+    legacyDifficulty: presentation.difficulty,
+    ...presentation,
+  };
+}
+
 export function planMexicoVividoMigration(
   existingWords: readonly ExistingWord[],
   catalog: readonly CatalogWord[],
@@ -56,7 +77,7 @@ export function planMexicoVividoMigration(
 ) {
   const patches: Array<{ _id: any; patch: Record<string, unknown> }> = [];
   const inserts: Array<Record<string, unknown>> = [];
-  const retires: Array<{ _id: any; patch: { isRetired: true } }> = [];
+  const retires: Array<{ _id: any; patch: Record<string, unknown> }> = [];
   const unchanged: ExistingWord[] = [];
   const conflicts: Array<{ key: string; ids: any[] }> = [];
   const unclassified: ExistingWord[] = [];
@@ -67,6 +88,7 @@ export function planMexicoVividoMigration(
   }
   const retainedKeys = new Set(catalog.map((entry) => normalizeWordKey(entry.word)));
   const removedKeys = new Set(removed.map((entry) => normalizeWordKey(entry.word)));
+  const removedByKey = new Map(removed.map((entry) => [normalizeWordKey(entry.word), entry]));
   const conflictKeys = new Set<string>();
   for (const [key, docs] of byKey) {
     if (docs.length > 1) {
@@ -91,8 +113,10 @@ export function planMexicoVividoMigration(
     const key = normalizeWordKey(word.word);
     if (conflictKeys.has(key) || retainedKeys.has(key)) continue;
     if (removedKeys.has(key)) {
-      if (word.isRetired === true) unchanged.push(word);
-      else retires.push({ _id: word._id, patch: { isRetired: true } });
+      const desired = removalPatch(removedByKey.get(key)!, word);
+      const patch = Object.fromEntries(Object.entries(desired).filter(([field, value]) => !sameValue(word[field], value)));
+      if (Object.keys(patch).length) retires.push({ _id: word._id, patch });
+      else unchanged.push(word);
     } else unclassified.push(word);
   }
   return { patches, inserts, retires, unchanged, conflicts, unclassified };
@@ -198,8 +222,11 @@ export function catalogOperationDecision(operation: CatalogOperation, matches: r
   if (matches.length >= 2) return { kind: "conflict" as const };
   const existing = matches[0];
   if (operation.kind === "remove") {
-    if (!existing || existing.isRetired === true) return { kind: "unchanged" as const };
-    return { kind: "retire" as const, _id: existing._id };
+    if (!existing) return { kind: "unchanged" as const };
+    const desired = removalPatch(operation.entry, existing);
+    const patch = Object.fromEntries(Object.entries(desired).filter(([field, value]) => !sameValue(existing[field], value)));
+    if (!Object.keys(patch).length) return { kind: "unchanged" as const };
+    return { kind: "retire" as const, _id: existing._id, patch };
   }
   const desired = catalogPatch(operation.entry);
   if (!existing) return { kind: "insert" as const, document: desired };
@@ -504,7 +531,7 @@ export const migrateCatalogBatch = internalMutation({
         }
       } else if (decision.kind === "retire") {
         counts.retired += 1;
-        if (!args.dryRun) await ctx.db.patch(decision._id, { isRetired: true, ...legacySnapshot });
+        if (!args.dryRun) await ctx.db.patch(decision._id, decision.patch);
       }
       if (!args.dryRun && orphanWordId) await insertLevelForWord(ctx, orphanWordId);
       if (details.length < 20 && decision.kind !== "unchanged") details.push({ word: operation.entry.word, result: decision.kind });

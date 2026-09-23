@@ -24,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import useCoinFly from "../hooks/useCoinFly";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
+import { useUserMutation } from "../hooks/useUserMutation";
 const { sumPlaceProgress } = require('../config/achievementProgress.js');
 const { getAchievementCollectionDescription } = require('../config/achievementCollections.js');
 
@@ -60,7 +61,7 @@ export default function AchievementsScreen() {
   const [claimedIds, setClaimedIds] = useState(new Set());
   const [claiming, setClaiming] = useState(null);
 
-  const updateCurrency = useMutation(api.users.updateUserCurrency);
+  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
 
   // ── Real user data from Convex ──────────────────────────────────────────────
   const user = useQuery(api.users.getUser, userId ? { userId } : "skip");

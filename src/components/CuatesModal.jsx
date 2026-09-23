@@ -21,6 +21,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { useUserAction, useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -119,7 +120,7 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
         return;
       }
       const res = await loginWithEmail({ email: savedEmail, password: savedPass });
-      await restoreAccount(res.userId);
+      await restoreAccount(res.userId, res.sessionToken);
       await saveCredentials(savedEmail, savedPass);
       // Keep success visible briefly before transitioning
       await new Promise((r) => setTimeout(r, 900));
@@ -136,12 +137,11 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
   const [busyFriendId, setBusyFriendId] = useState(null);
 
   // ── Mutaciones Convex ───────────────────────────────────────────────────────
-  const registerAccount = useAction(api.friends.registerAccount);
+  const registerAccount = useUserAction(api.friends.registerAccount);
   const loginWithEmail = useMutation(api.friends.loginWithEmail);
-  const setUsernameM = useMutation(api.friends.setUsername);
+  const setUsernameM = useUserMutation(api.friends.setUsername);
   const requestReset = useAction(api.friends.requestPasswordReset);
-  const resetPassword = useMutation(api.friends.resetPassword);
-  const addFriendM = useMutation(api.friends.addFriend);
+  const addFriendM = useUserMutation(api.friends.addFriend);
 
   // ── Queries reactivas ───────────────────────────────────────────────────────
   const checkUsername = useQuery(
@@ -190,7 +190,7 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
   if (reward) {
     screen = S_REWARD;
   } else if (user !== undefined) {
-    if (!user?.email) {
+    if (!user?.email && !user?.hasEmail) {
       screen = S_AUTH;
     } else if (!user?.username) {
       screen = S_USERNAME;
@@ -254,7 +254,7 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
     setBusy(true);
     try {
       const res = await loginWithEmail({ email: trimEmail, password });
-      await restoreAccount(res.userId);
+      await restoreAccount(res.userId, res.sessionToken);
       // Save credentials for auto-restore on next app open
       await saveCredentials(trimEmail, password);
       setEmail("");
@@ -269,38 +269,23 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
   async function handleRequestReset() {
     const trimEmail = email.trim();
     if (!trimEmail) {
-      Alert.alert("¡Falta algo!", "Escribe tu correo para enviarte el código.");
+      Alert.alert("¡Falta algo!", "Escribe tu correo electrónico.");
       return;
     }
     setBusy(true);
     try {
       await requestReset({ email: trimEmail });
-      Alert.alert("¡Enviado! 📩", "Revisa tu correo (busca también en spam). Tienes 15 minutos para usar el código.");
-      setResetStep(2);
+      Alert.alert(
+        "¡Revisa tu correo! 📧",
+        "Te enviamos una contraseña temporal a tu correo.\n\nÚsala para entrar y luego cámbiala.",
+        [{ text: "OK", onPress: () => {
+          setAuthTab("login");
+          setPassword("");
+          setUsername("");
+        }}]
+      );
     } catch (e) {
-      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al enviar el correo.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleResetPassword() {
-    const trimEmail = email.trim();
-    const trimCode = resetCode.trim();
-    if (!trimEmail || !trimCode || !password) {
-      Alert.alert("¡Falta algo!", "Llena todos los campos.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await resetPassword({ email: trimEmail, code: trimCode, newPassword: password });
-      Alert.alert("¡Éxito! 🎉", "Contraseña cambiada. Ya puedes entrar.");
-      setAuthTab("login");
-      setResetStep(1);
-      setResetCode("");
-      setPassword("");
-    } catch (e) {
-      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al restablecer.");
+      Alert.alert("¡Aguas!", e.data ?? e.message ?? "Error al recuperar cuenta.");
     } finally {
       setBusy(false);
     }
@@ -573,53 +558,26 @@ export default function CuatesModal({ visible, onClose, onOpenProfile }) {
                   <Text style={[s.subtitle, { marginTop: -10, marginBottom: 16 }]}>
                     Recuperación de contraseña
                   </Text>
-                  {resetStep === 1 ? (
-                    <>
-                      <TextInput
-                        style={s.input}
-                        placeholder="Tu correo electrónico"
-                        placeholderTextColor="#A0714F"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        value={email}
-                        onChangeText={setEmail}
-                      />
-                      <TouchableOpacity style={s.actionBtn} onPress={handleRequestReset} disabled={busy}>
-                        {busy
-                          ? <ActivityIndicator color={BROWN} />
-                          : <Text style={s.actionBtnText}>Enviar código 📩</Text>
-                        }
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <TextInput
-                        style={s.input}
-                        placeholder="Código de 6 dígitos"
-                        placeholderTextColor="#A0714F"
-                        keyboardType="number-pad"
-                        value={resetCode}
-                        onChangeText={setResetCode}
-                        maxLength={6}
-                      />
-                      <TextInput
-                        style={s.input}
-                        placeholder="Nueva contraseña (mín. 6)"
-                        placeholderTextColor="#A0714F"
-                        secureTextEntry
-                        value={password}
-                        onChangeText={setPassword}
-                      />
-                      <TouchableOpacity style={s.actionBtn} onPress={handleResetPassword} disabled={busy}>
-                        {busy
-                          ? <ActivityIndicator color={BROWN} />
-                          : <Text style={s.actionBtnText}>Actualizar contraseña 🔑</Text>
-                        }
-                      </TouchableOpacity>
-                    </>
-                  )}
-                  <TouchableOpacity onPress={() => { setAuthTab("login"); setResetStep(1); }} style={s.switchLink}>
+                  <Text style={[s.rulesText, { marginBottom: 12 }]}>
+                    Escribe tu correo para recibir una contraseña temporal.
+                  </Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Tu correo electrónico"
+                    placeholderTextColor="#A0714F"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                  <TouchableOpacity style={s.actionBtn} onPress={handleRequestReset} disabled={busy}>
+                    {busy
+                      ? <ActivityIndicator color={BROWN} />
+                      : <Text style={s.actionBtnText}>Recuperar cuenta 🔑</Text>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setAuthTab("login"); }} style={s.switchLink}>
                     <Text style={s.switchLinkText}>Volver a Entrar</Text>
                   </TouchableOpacity>
                 </>

@@ -23,4 +23,39 @@ for (const version of [1, 2]) {
   assert.equal("words" in summary.places[0], false, "summary never returns place words");
 }
 
+const regionalLevels = [
+  { _id: "cdmx-level", wordId: "cdmx-word", levelNumber: 1, reward: { coins: 0, diamonds: 0 } },
+  { _id: "bato-level", wordId: "bato-word", levelNumber: 2, reward: { coins: 0, diamonds: 0 } },
+];
+const regionalWords = [
+  {
+    _id: "cdmx-word", word: "Vecindad", legacyWord: "Vecindad", meaning: "Vivienda colectiva",
+    region: "cdmx", legacyRegion: "CDMX", collectionId: "vida-barrio", placeId: "cdmx",
+    pathId: "calle-barrio", icon: "🏘️", difficulty: 2, editorialOrder: 52,
+  },
+  {
+    _id: "bato-word", word: "Bato", legacyWord: "Bato", meaning: "Muchacho u hombre, en lenguaje popular.",
+    region: "Noroeste y occidente", legacyRegion: "Noroeste y occidente", collectionId: "regiones-hablas",
+    placeId: "sinaloa", pathId: "mexico-regional", icon: "🧢", difficulty: 2,
+    legacyDifficulty: 2, isRetired: true,
+  },
+];
+const legacyRegionalLibrary = buildCulturalLibrary(regionalLevels, regionalWords, "legacy-user", 1, 1);
+const editorialRegionalLibrary = buildCulturalLibrary(regionalLevels, regionalWords, "editorial-user", 1, 2);
+assert.deepEqual(
+  legacyRegionalLibrary.places.find((place: any) => place.id === "cdmx")?.words.map((word: any) => word.word),
+  ["Vecindad"],
+  "el apartado CDMX no incorpora regionalismos retirados",
+);
+assert.equal(
+  legacyRegionalLibrary.places.find((place: any) => place.id === "sinaloa")?.words[0].word,
+  "Bato",
+  "la compatibilidad v1 conserva el nivel corregido fuera de CDMX",
+);
+assert.equal(
+  editorialRegionalLibrary.places.some((place: any) => place.words.some((word: any) => word.word === "Bato")),
+  false,
+  "el orden editorial v2 oculta bato retirado",
+);
+
 console.log("culturalLibrary: biblioteca y resumen mantienen progreso v1/v2");

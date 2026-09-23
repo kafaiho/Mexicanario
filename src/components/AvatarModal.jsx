@@ -11,6 +11,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const BROWN = "#8B4513";
 const AMBER = "#D2691E";
@@ -27,7 +28,7 @@ const AVATARS = [
 
 export default function AvatarModal({ visible, onClose }) {
   const { userId } = useAuth();
-  const updateProfile = useMutation(api.users.updateUserProfile);
+  const updateProfile = useUserMutation(api.users.updateUserProfile);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
 

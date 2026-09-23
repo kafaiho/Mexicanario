@@ -46,7 +46,7 @@ export default defineSchema({
     legacyDifficulty: v.optional(v.number()),
     legacyRegion: v.optional(v.string()),
     isRetired: v.optional(v.boolean()),
-  }).index("by_word", ["word"]).index("by_normalized_word_key", ["normalizedWordKey"]),
+  }).index("by_word", ["word"]).index("by_normalized_word_key", ["normalizedWordKey"]).index("by_isRetired", ["isRetired"]),
 
   // Levels table to store level configurations
   levels: defineTable({
@@ -229,8 +229,8 @@ export default defineSchema({
     type: v.string(),                      // "iap" | "coins" | "diamonds" | "free"
     amount: v.number(),
     purchasedAt: v.number(),
-    receiptToken: v.optional(v.string()),  // RevenueCat receipt token
-  }),
+    receiptToken: v.optional(v.string()),  // store transaction id verified with RevenueCat
+  }).index("by_receiptToken", ["receiptToken"]),
 
   // Season pass per user
   seasonPass: defineTable({
@@ -239,7 +239,7 @@ export default defineSchema({
     activatedAt: v.number(),
     expiresAt: v.number(),
     rewardsClaimed: v.boolean(),
-  }),
+  }).index("by_user", ["userId"]),
 
   // Streak milestones claimed by users
   streakMilestones: defineTable({
@@ -392,6 +392,16 @@ export default defineSchema({
     code: v.string(),
     expiresAt: v.number(),
   }).index("by_email", ["email"]),
+
+  // ── Sesiones de dispositivo ───────────────────────────────────────────────
+  // Cada dispositivo recibe un token secreto; solo se guarda su hash SHA-256.
+  sessions: defineTable({
+    userId: v.id("users"),
+    tokenHash: v.string(),
+    createdAt: v.number(),
+    source: v.string(), // "guest" | "legacy" | "email" | "google" | "apple" | "register"
+  }).index("by_tokenHash", ["tokenHash"])
+    .index("by_userId", ["userId"]),
 
   // ── Sistema de cuates (amigos) ────────────────────────────────────────────
   friendships: defineTable({

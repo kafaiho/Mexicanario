@@ -5,8 +5,14 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { SystemBars } from "react-native-edge-to-edge";
 import mobileAds, { AdsConsent, AdsConsentStatus } from "react-native-google-mobile-ads";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +21,8 @@ import config from "./convex/config";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { setupNotificationHandler } from "./src/services/notificationService";
-import { addCustomerInfoListener, initRevenueCat } from "./src/services/RevenueCatService";
+import { addCustomerInfoListener, identifyRevenueCatUser, initRevenueCat } from "./src/services/RevenueCatService";
+import { useUserAction } from "./src/hooks/useUserMutation";
 
 LogBox.ignoreLogs([
   "expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go",
@@ -60,30 +67,23 @@ const Stack = createStackNavigator();
 
 const EmptyComponent = () => null;
 
-/** Tab button with spring bounce + haptic + click sound */
-function JuicyTabButton({ children, onPress, accessibilityState, style, ...rest }) {
-  const scaleRef = React.useRef(new Animated.Value(1)).current;
-  const focused = accessibilityState?.selected;
+/** Tab button with 60 FPS Reanimated spring bounce + haptic + click sound */
+const JuicyTabButton = React.memo(function JuicyTabButton({ children, onPress, accessibilityState, style, ...rest }) {
+  const scale = useSharedValue(1);
 
-  const handlePressIn = () => {
-    Animated.spring(scaleRef, {
-      toValue: 0.85,
-      speed: 50,
-      bounciness: 0,
-      useNativeDriver: true,
-    }).start();
+  const handlePressIn = useCallback(() => {
+    scale.value = withTiming(0.85, { duration: 60 });
     tapLight();
     playSound("click");
-  };
+  }, []);
 
-  const handlePressOut = () => {
-    Animated.spring(scaleRef, {
-      toValue: 1,
-      speed: 28,
-      bounciness: 12,
-      useNativeDriver: true,
-    }).start();
-  };
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, { damping: 4, stiffness: 280 });
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <Pressable
@@ -93,12 +93,12 @@ function JuicyTabButton({ children, onPress, accessibilityState, style, ...rest 
       style={[{ flex: 1, alignItems: "center", justifyContent: "center" }, style]}
       {...rest}
     >
-      <Animated.View style={{ transform: [{ scale: scaleRef }], alignItems: "center", justifyContent: "center" }}>
+      <Reanimated.View style={[{ alignItems: "center", justifyContent: "center" }, animStyle]}>
         {children}
-      </Animated.View>
+      </Reanimated.View>
     </Pressable>
   );
-}
+});
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -302,7 +302,9 @@ function MainTabs() {
       />
 
       <Heriokio visible={showHvhu} onClose={() => setShowHvhu(false)} />
-      <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+      {showShop && (
+        <ShopScreen visible onClose={() => setShowShop(false)} />
+      )}
       <DisconnectModal
         visible={showDisconnect}
         onClose={() => setShowDisconnect(false)}
@@ -368,8 +370,7 @@ class RemoteConfigBoundary extends React.Component {
 
 function AppContent() {
   const { isAuthenticated, loading, error, retry, userId } = useAuth();
-  const autoFixDatabase = useMutation(api.patchCategories.autoFixDatabase);
-  const syncMexPlus = useMutation(api.shop.syncMexPlusEntitlement);
+  const verifyMexPlus = useUserAction(api.shop.verifyMexPlusEntitlement);
   const appState = useRef(AppState.currentState);
   const soundsLoaded = useRef(false);
 
@@ -443,9 +444,6 @@ function AppContent() {
       }
     })();
 
-    // Run the database fix silently in the background
-    autoFixDatabase().catch((e) => { if (__DEV__) console.log("Auto-fix skipped or failed:", e); });
-
     // Configure how notifications are displayed while the app is open
     setupNotificationHandler();
 
@@ -516,15 +514,16 @@ function AppContent() {
   // without requiring the user to re-open the app.
   useEffect(() => {
     if (!userId) return;
-    const unsub = addCustomerInfoListener(({ active, expiresAt }) => {
-      // Sync Plus status to Convex backend
-      syncMexPlus({ userId, expiresAt: active ? (expiresAt ?? undefined) : 0 })
-        .catch(() => { });
+    // RevenueCat app user id = Convex userId, so the backend can verify purchases.
+    identifyRevenueCatUser(userId);
+    const unsub = addCustomerInfoListener(({ active }) => {
+      // The backend re-reads the entitlement from RevenueCat (never trusts the client)
+      verifyMexPlus({ userId }).catch(() => { });
       // Cache Plus status locally so AdBanner can hide ads without a network call
       AsyncStorage.setItem("@mexicanario:mexPlusActive", active ? "1" : "0").catch(() => { });
     });
     return unsub;
-  }, [userId]);
+  }, [userId, verifyMexPlus]);
 
   if (loading) {
     return <LoadingScreen authReady={false} />;

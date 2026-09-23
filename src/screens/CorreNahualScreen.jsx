@@ -16,6 +16,7 @@ import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { notifyError, notifySuccess, tapLight } from "../services/haptics";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
+import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -76,7 +77,7 @@ export default function CorreNahualScreen({ navigation }) {
   const [tab,          setTab]          = useState("daily");
 
   // Convex
-  const submitScore = useMutation(api.nahual.submitScore);
+  const submitScore = useUserMutation(api.nahual.submitScore);
   const leaderboard = useQuery(
     api.nahual.getLeaderboard,
     gameState === S_OVER ? { type: tab } : "skip"
@@ -99,15 +100,29 @@ export default function CorreNahualScreen({ navigation }) {
   const scoreScale = useRef(new Animated.Value(1)).current;
   const shakeX     = useRef(new Animated.Value(0)).current;
 
+  // Real-time values updated by native listener for 60 FPS collision detection
+  const charYVal = useRef(0);
+  const obsXVal = useRef(width + 50);
+
+  useEffect(() => {
+    const subY = charY.addListener(({ value }) => { charYVal.current = value; });
+    const subX = obsX.addListener(({ value }) => { obsXVal.current = value; });
+    return () => {
+      charY.removeListener(subY);
+      obsX.removeListener(subX);
+    };
+  }, []);
+
   // ── Lanzar obstáculo ──────────────────────────────────────────────────────
   const launchObstacle = useCallback(() => {
     obsX.setValue(width + 50);
+    obsXVal.current = width + 50;
     const speed = Math.max(SPEED_MIN, SPEED_INITIAL - scoreRef.current * SPEED_STEP);
     obsAnimRef.current = Animated.timing(obsX, {
       toValue: -OBS_SIZE - 30,
       duration: speed,
       easing: Easing.linear,
-      useNativeDriver: false,
+      useNativeDriver: true,
     });
     obsAnimRef.current.start(({ finished }) => {
       if (finished && isPlayingRef.current) {
@@ -135,13 +150,13 @@ export default function CorreNahualScreen({ navigation }) {
         toValue: -JUMP_H,
         duration: JUMP_DUR,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
       Animated.timing(charY, {
         toValue: 0,
         duration: JUMP_DUR,
         easing: Easing.in(Easing.quad),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
     ]).start(() => { isJumpingRef.current = false; });
   }, []);
@@ -181,7 +196,9 @@ export default function CorreNahualScreen({ navigation }) {
     setDisplayScore(0);
     setGameState(S_PLAYING);
     charY.setValue(0);
+    charYVal.current = 0;
     obsX.setValue(width + 50);
+    obsXVal.current = width + 50;
     shakeX.setValue(0);
     launchObstacle();
   }, []);
@@ -194,8 +211,8 @@ export default function CorreNahualScreen({ navigation }) {
     }
     const checkCollision = () => {
       if (!isPlayingRef.current) return;
-      const cy = charY.__getValue();
-      const ox = obsX.__getValue();
+      const cy = charYVal.current;
+      const ox = obsXVal.current;
 
       const pLeft  = PLAYER_X + PLAYER_SIZE * 0.15;
       const pRight = PLAYER_X + PLAYER_SIZE * 0.85;

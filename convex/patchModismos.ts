@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, internalMutation } from "./_generated/server";
 
 // ── Normaliza: UPPERCASE sin acentos ─────────────────────────────────────────
 function norm(s: string) {
@@ -56,7 +56,7 @@ function getNewCategory(word: string): string {
  *
  * Ejecutar desde Convex Dashboard: patchModismos:patchModismos
  */
-export const patchModismos = mutation({
+export const patchModismos = internalMutation({
   args: {},
   handler: async (ctx) => {
     const allWords = await ctx.db.query("words").collect();

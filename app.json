@@ -3,7 +3,7 @@
     "name": "Mexicanario - Modismos MX",
     "slug": "mexicanario",
     "description": "Aprende modismos mexicanos jugando. Diccionario interactivo de jerga, slang y expresiones de México. +1250 palabras en 19 categorías, retos PvP, colecciones regionales, mascotas y minijuegos. ¡El Wordle mexicano! Juego de palabras trivia cultura mexicana.",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -32,6 +32,12 @@
       ],
       "expo-web-browser",
       "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.238037079938-uk6c2f89ni70vnu4fu6rmtnghnu3p14m"
+        }
+      ],
       [
         "expo-tracking-transparency",
         {
@@ -71,7 +77,7 @@
       }
     },
     "android": {
-      "versionCode": 24,
+      "versionCode": 25,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -81,9 +87,6 @@
         "com.google.android.gms.permission.AD_ID"
       ],
       "softwareKeyboardLayoutMode": "pan"
-    },
-    "androidNavigationBar": {
-      "visible": "sticky-immersive"
     },
     "web": {
       "favicon": "./assets/icon.png"

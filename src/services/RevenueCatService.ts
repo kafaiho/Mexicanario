@@ -336,6 +336,26 @@ export async function restorePurchases(): Promise<{
  * Finds the product in the current offering by product ID, then calls
  * purchasePackage and invokes onSuccess with the receipt token.
  */
+/**
+ * Precios reales de la tienda (Google Play / App Store) ya formateados en la
+ * moneda del jugador, por itemId. Devuelve {} si RevenueCat no está disponible.
+ */
+export async function getStorePrices(itemIds: string[]): Promise<Record<string, string>> {
+  if (!isConfigured()) return {};
+  try {
+    const offerings = await Purchases.getOfferings();
+    const packages = offerings.current?.availablePackages ?? [];
+    const prices: Record<string, string> = {};
+    for (const itemId of itemIds) {
+      const pkg = packages.find((p: any) => p.product.identifier === RC_PRODUCT_IDS[itemId]);
+      if (pkg?.product?.priceString) prices[itemId] = pkg.product.priceString;
+    }
+    return prices;
+  } catch {
+    return {};
+  }
+}
+
 export async function purchaseProduct(
   itemId: string,
   onSuccess: (transactionId: string) => Promise<void>,

@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  Vista previa de las mascotas 3D (src/components/Pet3D/petModels.js) en el navegador.
+  Sirve la raíz del proyecto por HTTP (los módulos no cargan desde file://):
+    npx serve .        o        python -m http.server 8765
+  y abre:
+    /scripts/pet3d-preview.html                         → las 18 etapas en cuadrícula
+    /scripts/pet3d-preview.html?pet=tecolote&stage=3    → una sola, fondo transparente,
+                                                          para exportar el PNG estático
+  Los PNG de assets/mascota/{tecolote,monarca,ayotl}/stageN.png se generan con
+  scripts/render-pet-sprites.sh a partir de esta página.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Mascotas 3D</title>
+<style>
+  html, body { margin: 0; background: transparent; font-family: system-ui, sans-serif; }
+  body.grid { background: #EEE5F2; padding: 12px; }
+  .grid main { display: grid; grid-template-columns: repeat(6, 200px); gap: 8px; }
+  .grid canvas { width: 200px; height: 200px; background: radial-gradient(#fff, #d9cde3); border-radius: 12px; }
+  .single canvas { display: block; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "../node_modules/three/build/three.module.js" } }
+</script>
+</head>
+<body>
+<main id="out"></main>
+<pre id="err" style="color:#b00020;white-space:pre-wrap"></pre>
+<script>
+  const showError = (m) => { document.getElementById('err').textContent += m + '\n'; };
+  window.addEventListener('error', (e) => showError(e.message + ' @ ' + e.filename + ':' + e.lineno));
+  window.addEventListener('unhandledrejection', (e) => showError(String(e.reason && e.reason.stack || e.reason)));
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { createPetController, PET3D_TYPES } from '../src/components/Pet3D/petModels.js';
+
+  const q = new URLSearchParams(location.search);
+  const single = q.get('pet');
+  const size = +(q.get('size') || (single ? 512 : 200));
+  document.body.className = single ? 'single' : 'grid';
+  const jobs = single
+    ? [[single, +(q.get('stage') || 1)]]
+    : PET3D_TYPES.flatMap((p) => [1, 2, 3, 4, 5, 6].map((s) => [p, s]));
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(size, size);
+  renderer.setClearColor(0x000000, 0);
+
+  for (const [pet, stage] of jobs) {
+    const ctrl = createPetController({
+      petType: pet, stage, framing: 'fit',
+      showFlame: q.get('flame') != null, showShadow: !single,
+    });
+    ctrl.setSize(size, size);
+    ctrl.setStreak(+(q.get('flame') || 0), q.get('status') || 'activa');
+    if (q.get('mood')) ctrl.setMood(q.get('mood'));
+    ctrl.setReduceMotion(true);             // pose de reposo: sin parpadeo ni aleteo a medias
+    ctrl.update(0.016);
+    renderer.render(ctrl.scene, ctrl.camera);
+    const img = document.createElement('canvas');
+    img.width = img.height = size;
+    img.getContext('2d').drawImage(renderer.domElement, 0, 0);
+    img.title = `${pet} · etapa ${stage}`;
+    document.getElementById('out').appendChild(img);
+    ctrl.dispose();
+  }
+  document.body.dataset.ready = '1';
+</script>
+</body>
+</html>

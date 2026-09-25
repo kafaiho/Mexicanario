@@ -9,10 +9,8 @@ export const COIN_ITEMS: Record<string, { label: string; currency: "coins" | "di
   hint_x5: { label: "Pistas x5", currency: "coins", price: 100, category: "powerups" },
   reveal_x3: { label: "Revelar x3", currency: "coins", price: 200, category: "powerups" },
   complete_x1: { label: "Completar x1", currency: "coins", price: 400, category: "powerups" },
-  synonym_x5: { label: "Pista frase x5", currency: "coins", price: 150, category: "powerups" },
-  pet_food_x5: { label: "Comida x5", currency: "coins", price: 80, category: "mascota" },
-  pet_toy: { label: "Juguete", currency: "diamonds", price: 3, category: "mascota" },
-  pet_candy: { label: "Dulce especial", currency: "diamonds", price: 5, category: "mascota" },
+  // Paquetes de trucos: un poco más baratos que pagarlos sueltos en el juego (25 y 30 varos c/u)
+  synonym_x5: { label: "Pista frase x5", currency: "coins", price: 120, category: "powerups" },
   streak_freeze_coins: { label: "Protector de Racha", currency: "coins", price: 400, category: "streak" },
   skin_mariachi: { label: "Traje de Mariachi", currency: "coins", price: 1500, category: "skins" },
   skin_charro: { label: "Charro de Jalisco", currency: "coins", price: 2000, category: "skins" },
@@ -21,21 +19,63 @@ export const COIN_ITEMS: Record<string, { label: string; currency: "coins" | "di
   skin_azteca: { label: "Guerrero Azteca", currency: "coins", price: 5000, category: "skins" },
 };
 
-// IAP products (real money) — RevenueCat product IDs
+// IAP products (real money) — RevenueCat product IDs.
+// rcProductId debe ser idéntico a RC_PRODUCT_IDS en src/services/RevenueCatService.ts
+// (lo verifica convex/iapCatalogParity.test.ts); si no, el servidor no encuentra la compra.
 export const IAP_ITEMS: Record<string, { label: string; currency: "real"; coins?: number; diamonds?: number; rcProductId: string }> = {
   coins_500: { label: "500 Monedas", currency: "real", coins: 500, rcProductId: "mx_coins_500" },
   coins_1200: { label: "1200 Monedas", currency: "real", coins: 1200, rcProductId: "mx_coins_1200" },
   coins_2000: { label: "2000 Monedas", currency: "real", coins: 2000, rcProductId: "mx_coins_2000" },
-  diamonds_100: { label: "100 Diamantes", currency: "real", diamonds: 100, rcProductId: "mx_diamonds_100" },
-  diamonds_300: { label: "300 Diamantes", currency: "real", diamonds: 300, rcProductId: "mx_diamonds_300" },
-  diamonds_800: { label: "800 Diamantes", currency: "real", diamonds: 800, rcProductId: "mx_diamonds_800" },
+  diamonds_100: { label: "100 Diamantes", currency: "real", diamonds: 100, rcProductId: "mx_diamond_100" },
+  diamonds_300: { label: "300 Diamantes", currency: "real", diamonds: 300, rcProductId: "300diamanteseste" },
+  diamonds_800: { label: "800 Diamantes", currency: "real", diamonds: 800, rcProductId: "800diamantes" },
   pass_mexica: { label: "Pase Mexica", currency: "real", coins: 1200, diamonds: 17, rcProductId: "mx_season_pass" },
 };
 
 const FREE_COINS_AMOUNT = 15;
 const FREE_COINS_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Beneficio mensual de Mexicanario Plus (lo que promete la tarjeta de la tienda)
+export const PLUS_MONTHLY_REWARD = { coins: 500, diamonds: 50 };
+
+/** "2026-09" en hora del centro de México (UTC-6). */
+function currentMonthIdCST(now = Date.now()): string {
+  const d = new Date(now - 6 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function plusStatus(user: any, now = Date.now()) {
+  const active = !!(user?.mexPlusExpiresAt && user.mexPlusExpiresAt > now);
+  return {
+    mexPlusActive: active,
+    mexPlusExpiresAt: active ? user.mexPlusExpiresAt : null,
+    plusRewardAvailable: active && user?.plusRewardMonthId !== currentMonthIdCST(now),
+  };
+}
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
+
+/**
+ * Señales ligeras para toda la app: ¿es Plus? (sin anuncios) y ¿hay algo gratis
+ * que reclamar en la tienda? (globo de la pestaña Tienda).
+ */
+export const getShopSignals = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    const now = Date.now();
+    const lastFree = (user as any).freeCoinsClaimedAt ?? 0;
+    const plus = plusStatus(user, now);
+    const freeCoinsReady = lastFree + FREE_COINS_COOLDOWN_MS <= now;
+    return {
+      ...plus,
+      freeCoinsReady,
+      hasSomethingToClaim: freeCoinsReady || plus.plusRewardAvailable,
+      activePetSkin: (user as any).activePetSkin ?? null, // traje puesto, igual en todos los dispositivos
+    };
+  },
+});
 
 export const getShopState = query({
   args: { userId: v.id("users") },
@@ -60,6 +100,9 @@ export const getShopState = query({
       coins: user.coins,
       diamonds: user.diamonds,
       powerups: (user as any).powerups ?? {},
+      purchasedSkins: (user as any).purchasedSkins ?? [],
+      activePetSkin: (user as any).activePetSkin ?? null,
+      ...plusStatus(user, now),
       freeCooldownRemaining,
       streakFreezeCount: (user as any).streakFreezeCount ?? 0,
       activePass: activePass
@@ -74,6 +117,43 @@ export const getShopState = query({
 });
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
+
+/**
+ * Regalo mensual de Mexicanario Plus: 500 varos y 50 diamantes una vez por mes
+ * calendario. La vigencia de Plus la fija el servidor al verificar con RevenueCat.
+ */
+export const claimPlusMonthlyReward = userMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new ConvexError("Usuario no encontrado");
+    const now = Date.now();
+    const status = plusStatus(user, now);
+    if (!status.mexPlusActive) throw new ConvexError("Necesitas Mexicanario Plus activo.");
+    if (!status.plusRewardAvailable) throw new ConvexError("Ya reclamaste el regalo de este mes.");
+
+    await ctx.db.patch(args.userId, {
+      coins: (user.coins ?? 0) + PLUS_MONTHLY_REWARD.coins,
+      diamonds: (user.diamonds ?? 0) + PLUS_MONTHLY_REWARD.diamonds,
+      plusRewardMonthId: currentMonthIdCST(now),
+    } as any);
+    return { coinsAwarded: PLUS_MONTHLY_REWARD.coins, diamondsAwarded: PLUS_MONTHLY_REWARD.diamonds };
+  },
+});
+
+/** Ponerle (o quitarle, con null) a la mascota un traje comprado. */
+export const equipPetSkin = userMutation({
+  args: { userId: v.id("users"), skinId: v.union(v.string(), v.null()) },
+  handler: async (ctx, { userId, skinId }) => {
+    const user = await ctx.db.get(userId);
+    if (!user) throw new ConvexError("Usuario no encontrado");
+    if (skinId && !((user as any).purchasedSkins ?? []).includes(skinId)) {
+      throw new ConvexError("Primero compra ese traje en la tienda.");
+    }
+    await ctx.db.patch(userId, { activePetSkin: skinId ?? undefined } as any);
+    return { activePetSkin: skinId };
+  },
+});
 
 /** Claim the daily free 10 coins (24h cooldown) */
 export const claimFreeCoins = userMutation({
@@ -116,15 +196,16 @@ export const buyWithCoins = userMutation({
     if (!user) throw new Error("User not found");
 
     const item = COIN_ITEMS[args.itemId];
-    if (!item) throw new Error("Item no encontrado: " + args.itemId);
+    if (!item) throw new ConvexError("Ese artículo ya no está en la tienda.");
 
     const now = Date.now();
 
+    // ConvexError: su texto sí llega a la app en producción (un Error normal se oculta)
     if (item.currency === "coins") {
-      if (user.coins < item.price) throw new Error("Monedas insuficientes");
+      if (user.coins < item.price) throw new ConvexError("Monedas insuficientes");
       await ctx.db.patch(args.userId, { coins: user.coins - item.price } as any);
     } else {
-      if (user.diamonds < item.price) throw new Error("Diamantes insuficientes");
+      if (user.diamonds < item.price) throw new ConvexError("Diamantes insuficientes");
       await ctx.db.patch(args.userId, { diamonds: user.diamonds - item.price } as any);
     }
 
@@ -155,9 +236,10 @@ export const buyWithCoins = userMutation({
     } else if (item.category === "skins") {
       // Unlock skin — store in user's purchased skins list
       const currentSkins: string[] = (user as any).purchasedSkins ?? [];
-      if (!currentSkins.includes(args.itemId)) {
-        await ctx.db.patch(args.userId, { purchasedSkins: [...currentSkins, args.itemId] } as any);
-      }
+      await ctx.db.patch(args.userId, {
+        purchasedSkins: currentSkins.includes(args.itemId) ? currentSkins : [...currentSkins, args.itemId],
+        activePetSkin: args.itemId, // recién comprado → puesto
+      } as any);
     }
 
     await ctx.db.insert("purchases", {

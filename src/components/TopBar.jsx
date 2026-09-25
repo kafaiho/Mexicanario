@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { NavigationContext } from "@react-navigation/native";
+import React, { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -15,7 +15,9 @@ import {
 import Reanimated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
+  withDelay,
   withSequence,
   withSpring,
   withTiming,
@@ -35,18 +37,15 @@ import PolíticadePrivacidad from "./PoliticadePrivacidad";
 import StreakBadge from "./StreakBadge";
 import StreakModal from "./StreakModal";
 import Terminosdeservio from "./Terminosdeservio";
-// ShopScreen loaded on-demand to break the TopBar ↔ ShopScreen circular dep
-let _ShopScreen = null;
-const getShopScreen = () => {
-  if (!_ShopScreen) _ShopScreen = require("../screens/ShopScreen").default;
-  return _ShopScreen;
-};
 import CuatesModal from "./CuatesModal";
 import FriendsModal from "./FriendsModal";
 import { tapMedium, comboBurst } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 import useDevMode from "../hooks/useDevMode";
+import useIsFocusedSafe from "../hooks/useIsFocusedSafe";
+import { useShop } from "../context/ShopContext";
 import { useUserMutation } from "../hooks/useUserMutation";
+import useRollingCounter from "../hooks/useRollingCounter";
 
 // ProfileScreen loaded on-demand (same pattern as ShopScreen)
 let _ProfileScreen = null;
@@ -82,14 +81,51 @@ const S = {
   tacoIcon: width * 0.042,
 };
 
+// "+N" que aparece bajo el pill mientras las monedas/diamantes van llegando
+function GainLabel({ gain, color }) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(6);
+
+  useEffect(() => {
+    if (!gain) return;
+    if (!gain.done) {
+      opacity.value = withTiming(1, { duration: 160 });
+      translateY.value = withSpring(0, { damping: 8, stiffness: 220 });
+    } else {
+      opacity.value = withDelay(350, withTiming(0, { duration: 380 }));
+      translateY.value = withDelay(350, withTiming(-12, { duration: 380 }));
+    }
+  }, [gain?.key, gain?.done]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  if (!gain) return null;
+  return (
+    <Reanimated.Text pointerEvents="none" style={[styles.gainLabel, { color }, animStyle]}>
+      {gain.text}
+    </Reanimated.Text>
+  );
+}
+
 /**
  * @param {{ navigation?: any, showHomeButton?: boolean }} props
  * @param {React.ForwardedRef<any>} ref
  */
-function TopBar({ navigation, showHomeButton = false }, ref) {
+function TopBar({ navigation: navigationProp, showHomeButton = false }, ref) {
+  // Si la pantalla no la pasa, usar la navegación de la pantalla donde está la barra
+  // (FriendsModal la necesita para abrir el juego al retar o aceptar un reto).
+  const screenNavigation = useContext(NavigationContext);
+  const navigation = navigationProp ?? screenNavigation;
   const coinPillRef    = useRef(null);
   const diamondPillRef = useRef(null);
   const bounceScale    = useSharedValue(1);
+  const diamondScale   = useSharedValue(1);
+  const reduceMotion   = useReducedMotion();
+  const [coinGain, setCoinGain]       = useState(null);
+  const [diamondGain, setDiamondGain] = useState(null);
 
   // ── Animaciones de botones izquierdos ────────────────────────────────────
   const settingsScale  = useSharedValue(1);
@@ -98,35 +134,76 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
   const tacosScale     = useSharedValue(1);
 
   useImperativeHandle(ref, () => ({
-    measureCoinPill: () => {
-      if (!coinPillRef.current) return Promise.resolve(null);
-      return new Promise((resolve) => {
-        let settled = false;
-        coinPillRef.current.measureInWindow((x, y, w, h) => {
-          settled = true;
-          resolve(h > 0 ? { x, y, w, h } : null);
-        });
-        setTimeout(() => { if (!settled) resolve(null); }, 300);
-      });
+    measureCoinPill: () => measurePill(coinPillRef),
+    measureDiamondPill: () => measurePill(diamondPillRef),
+    triggerBounce: () => bigBounce(bounceScale),
+
+    // ── Contador sincronizado con el vuelo de monedas ──
+    // holdCoins(total) → id; revealCoins(id, fraction) por cada moneda que llega;
+    // releaseCoins(id) al final (rebote grande + el "+N" se desvanece).
+    holdCoins: (total, opts) => {
+      const id = coinCounter.hold(total, opts);
+      if (id) setCoinGain({ key: id, text: `+${Math.round(total)}`, done: false });
+      return id;
     },
-    measureDiamondPill: () => {
-      if (!diamondPillRef.current) return Promise.resolve(null);
-      return new Promise((resolve) => {
-        let settled = false;
-        diamondPillRef.current.measureInWindow((x, y, w, h) => {
-          settled = true;
-          resolve(h > 0 ? { x, y, w, h } : null);
-        });
-        setTimeout(() => { if (!settled) resolve(null); }, 300);
-      });
+    revealCoins: (id, fraction) => {
+      coinCounter.reveal(id, fraction);
+      smallBump(bounceScale);
     },
-    triggerBounce: () => {
-      bounceScale.value = withSequence(
-        withTiming(1.28, { duration: 80, easing: Easing.out(Easing.cubic) }),
-        withSpring(1, { damping: 4, stiffness: 260 })
-      );
+    releaseCoins: (id) => {
+      coinCounter.release(id);
+      bigBounce(bounceScale);
+      setCoinGain((g) => (g && g.key === id ? { ...g, done: true } : g));
     },
+    holdDiamonds,
+    revealDiamonds,
+    releaseDiamonds,
   }));
+
+  function measurePill(pillRef) {
+    if (!pillRef.current) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let settled = false;
+      pillRef.current.measureInWindow((x, y, w, h) => {
+        settled = true;
+        resolve(h > 0 ? { x, y, w, h } : null);
+      });
+      setTimeout(() => { if (!settled) resolve(null); }, 300);
+    });
+  }
+
+  function holdDiamonds(total, opts) {
+    const id = diamondCounter.hold(total, opts);
+    if (id) setDiamondGain({ key: id, text: `+${Math.round(total)}`, done: false });
+    return id;
+  }
+
+  function revealDiamonds(id, fraction) {
+    diamondCounter.reveal(id, fraction);
+    smallBump(diamondScale);
+  }
+
+  function releaseDiamonds(id) {
+    diamondCounter.release(id);
+    bigBounce(diamondScale);
+    setDiamondGain((g) => (g && g.key === id ? { ...g, done: true } : g));
+  }
+
+  function bigBounce(sv) {
+    if (reduceMotion) return;
+    sv.value = withSequence(
+      withTiming(1.28, { duration: 80, easing: Easing.out(Easing.cubic) }),
+      withSpring(1, { damping: 4, stiffness: 260 })
+    );
+  }
+
+  function smallBump(sv) {
+    if (reduceMotion) return;
+    sv.value = withSequence(
+      withTiming(1.12, { duration: 45, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: 110, easing: Easing.out(Easing.quad) })
+    );
+  }
   const [showSettings, setShowSettings] = useState(false);
 
   const [showInvitar, setShowInvitar] = useState(false);
@@ -139,14 +216,16 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
   const [showSupport, setShowSupport] = useState(false);
   const [showPerfil, setShowPerfil] = useState(false);
   const [showMexicanario, setShowMexicanario] = useState(false);
-  const [showShop, setShowShop] = useState(false);
+  const { openShop } = useShop();
   const [showStreak, setShowStreak] = useState(false);
   const [showFriends,       setShowFriends]       = useState(false);
   const [showCuates,        setShowCuates]        = useState(false);
   const [showProfileScreen, setShowProfileScreen] = useState(false);
 
   const { user, userId } = useAuth();
-  const isFocused = useIsFocused();
+  const coinCounter    = useRollingCounter(user?.coins || 0, { ready: !!user, reduceMotion });
+  const diamondCounter = useRollingCounter(user?.diamonds || 0, { ready: !!user, reduceMotion });
+  const isFocused = useIsFocusedSafe();
 
   // Un solo resumen reactivo alimenta badge y avisos de cuates.
   const isLinked = !!(user?.email || user?.hasEmail || user?.googleId || user?.appleId);
@@ -210,6 +289,9 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
 
   const coinPillAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: bounceScale.value }],
+  }));
+  const diamondPillAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: diamondScale.value }],
   }));
 
   const settingsAnimStyle = useAnimatedStyle(() => ({
@@ -331,22 +413,32 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
         <View style={styles.row}>
           {/* Diamonds */}
           <View ref={diamondPillRef} collapsable={false}>
-            <TouchableOpacity style={styles.pill} onPress={() => { tapMedium(); setShowShop(true); }}>
-              <Image source={require("../../assets/icons/plus.png")} style={styles.plusIcon} />
-              <Text style={styles.pillText}>{fmt(user?.diamonds || 0)}</Text>
-              <Image source={require("../../assets/icons/diamond.png")} style={styles.pillIcon} />
-            </TouchableOpacity>
+            <Reanimated.View style={diamondPillAnimStyle}>
+              <TouchableOpacity
+                style={[styles.pill, diamondCounter.counting && styles.pillCounting]}
+                onPress={() => { tapMedium(); openShop("diamantes"); }}
+              >
+                <Image source={require("../../assets/icons/plus.png")} style={styles.plusIcon} />
+                <Text style={[styles.pillText, diamondCounter.counting && styles.pillTextCounting]}>{fmt(diamondCounter.value)}</Text>
+                <Image source={require("../../assets/icons/diamond.png")} style={styles.pillIcon} />
+              </TouchableOpacity>
+            </Reanimated.View>
+            <GainLabel gain={diamondGain} color="#0D8FB0" />
           </View>
 
           {/* Coins — outer View for reliable measureInWindow, inner Reanimated.View for bounce */}
           <View ref={coinPillRef} collapsable={false}>
             <Reanimated.View style={coinPillAnimStyle}>
-              <TouchableOpacity style={styles.pill} onPress={() => { tapMedium(); setShowShop(true); }}>
+              <TouchableOpacity
+                style={[styles.pill, coinCounter.counting && styles.pillCounting]}
+                onPress={() => { tapMedium(); openShop("varos"); }}
+              >
                 <Image source={require("../../assets/icons/plus.png")} style={styles.plusIcon} />
-                <Text style={styles.pillText}>{fmt(user?.coins || 0)}</Text>
+                <Text style={[styles.pillText, coinCounter.counting && styles.pillTextCounting]}>{fmt(coinCounter.value)}</Text>
                 <Image source={require("../../assets/icons/coin.png")} style={styles.pillIcon} />
               </TouchableOpacity>
             </Reanimated.View>
+            <GainLabel gain={coinGain} color="#B8620E" />
           </View>
         </View>
       </View>
@@ -374,8 +466,16 @@ function TopBar({ navigation, showHomeButton = false }, ref) {
       <PrivacyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} />
       <Mexicanometro visible={showMexicanario} onClose={() => setShowMexicanario(false)} />
-      {showShop && (() => { const ShopScreen = getShopScreen(); return <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />; })()}
-      <StreakModal visible={showStreak} onClose={() => setShowStreak(false)} />
+      <StreakModal
+        visible={showStreak}
+        onClose={() => setShowStreak(false)}
+        diamondSink={{
+          measure: () => measurePill(diamondPillRef),
+          hold: holdDiamonds,
+          reveal: revealDiamonds,
+          release: releaseDiamonds,
+        }}
+      />
       <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} onOpenProfile={() => { setShowFriends(false); setShowProfileScreen(true); }} navigation={navigation} />
       <CuatesModal  visible={showCuates}  onClose={() => setShowCuates(false)} onOpenProfile={() => { setShowCuates(false); setShowProfileScreen(true); }} />
       {showProfileScreen && (() => { const PS = getProfileScreen(); return <PS visible={showProfileScreen} onClose={() => setShowProfileScreen(false)} />; })()}
@@ -500,6 +600,23 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: S.pillFont,
     includeFontPadding: false,
+  },
+  pillCounting: {
+    borderColor: "#F8BE17",
+    backgroundColor: "#FFF1C9",
+  },
+  pillTextCounting: {
+    color: "#B8620E",
+  },
+  gainLabel: {
+    position: "absolute",
+    top: S.pillH + 2,
+    right: S.pillPadH,
+    fontSize: S.pillFont * 1.05,
+    fontWeight: "900",
+    textShadowColor: "rgba(255,255,255,0.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   pillIcon: {
     width: S.pillIcon,

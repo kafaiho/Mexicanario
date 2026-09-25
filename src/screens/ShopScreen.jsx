@@ -1,6 +1,5 @@
-import { useNavigation } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +18,6 @@ import { api } from "../../convex/_generated/api";
 import CoinFlyOverlay from "../components/CoinFlyOverlay";
 import CuatesModal from "../components/CuatesModal";
 import DiamondFlyOverlay from "../components/DiamondFlyOverlay";
-import DynamicBundleCard from "../components/DynamicBundleCard";
 import MiniMascot from "../components/MiniMascot";
 import PurchaseSuccessModal from "../components/PurchaseSuccessModal";
 import TopBar from "../components/TopBar";
@@ -30,13 +28,18 @@ import { useRewardedAd } from "../hooks/useRewardedAd";
 import { notifySuccess } from "../services/haptics";
 import {
   PAYWALL_RESULT,
+  getStorePrices,
   presentMexicanarioPlusPaywall,
   purchaseProduct,
   restorePurchases
 } from "../services/RevenueCatService";
+import SKIN_CONFIG from "../constants/skinConfig";
 import { FONTS } from "../theme/designTokens";
 import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 import { useUserAction, useUserMutation } from "../hooks/useUserMutation";
+import { serverErrorText } from "../utils/serverError";
+import usePetStore from "../store/usePetStore";
+import useEquipSkin from "../hooks/useEquipSkin";
 
 const { width, height } = Dimensions.get("window");
 
@@ -61,22 +64,42 @@ const WHEAT2 = "#F5DEB3";
 
 // ─── Catálogo mexicano ────────────────────────────────────────────────────────
 
-// "Diamantes" = packs de diamantes (dinero real) — IDs deben coincidir con IAP_ITEMS en convex/shop.ts
+// Packs con dinero real. id y qty deben coincidir con IAP_ITEMS en convex/shop.ts
+// (lo verifica convex/iapCatalogParity.test.ts). El precio sale de la tienda del
+// teléfono (Google Play / App Store) en la moneda del jugador.
 const DIAMANTES = [
-  { id: "diamonds_100", qty: 100, label: "diamantes", icon: "💎", price: "$ 4.900", currency: "real" },
-  { id: "diamonds_300", qty: 300, label: "diamantes", icon: "💎", price: "$ 11.900", currency: "real", badge: "POPULAR" },
-  { id: "diamonds_800", qty: 800, label: "diamantes", icon: "💎", price: "$ 24.900", currency: "real", badge: "MEJOR VALOR" },
+  { id: "diamonds_100", qty: 100, label: "diamantes", icon: "💎", currency: "real" },
+  { id: "diamonds_300", qty: 300, label: "diamantes", icon: "💎", currency: "real", badge: "POPULAR" },
+  { id: "diamonds_800", qty: 800, label: "diamantes", icon: "💎", currency: "real", badge: "MEJOR VALOR" },
 ];
 
 // "Varos" = packs de monedas (dinero real)
 const VAROS = [
-  { id: "coins_500", qty: 500, label: "varos", icon: "🪙", price: "$ 0.99 USD", currency: "real" },
-  { id: "coins_1200", qty: 1500, label: "varos", icon: "🪙", price: "$ 1.99 USD", currency: "real", badge: "POPULAR" },
-  { id: "coins_2000", qty: 4000, label: "varos", icon: "🪙", price: "$ 4.99 USD", currency: "real" },
-  { id: "coins_9000", qty: 9000, label: "varos", icon: "🪙", price: "$ 9.99 USD", currency: "real" },
-  { id: "coins_20000", qty: 20000, label: "varos", icon: "🪙", price: "$ 19.99 USD", currency: "real" },
-  { id: "coins_60000", qty: 60000, label: "varos", icon: "🪙", price: "$ 49.99 USD", currency: "real", badge: "MEJOR VALOR" },
+  { id: "coins_500", qty: 500, label: "varos", icon: "🪙", currency: "real" },
+  { id: "coins_1200", qty: 1200, label: "varos", icon: "🪙", currency: "real", badge: "POPULAR" },
+  { id: "coins_2000", qty: 2000, label: "varos", icon: "🪙", currency: "real", badge: "MEJOR VALOR" },
 ];
+// Pase Mexica: paquete del mes (IAP pass_mexica). coins/diamonds = IAP_ITEMS en convex/shop.ts
+const PASE_MEXICA = {
+  id: "pass_mexica", label: "Pase Mexica", qty: 1, icon: "🏛️", currency: "real",
+  coins: 1200, diamonds: 17,
+};
+const REAL_ITEM_IDS = [...VAROS, ...DIAMANTES, PASE_MEXICA].map((item) => item.id);
+
+// Trucos para el juego (COIN_ITEMS en convex/shop.ts). El juego gasta primero estos.
+const TRUCOS = [
+  { id: "hint_x5", qty: 5, label: "pistas de letra", icon: "💡", price: "100", currency: "coins", badge: "AHORRA 25", inventoryKey: "hints" },
+  { id: "synonym_x5", qty: 5, label: "pistas de frase", icon: "💬", price: "120", currency: "coins", badge: "AHORRA 30", inventoryKey: "synonyms" },
+];
+
+// Trajes para la mascota (precios de COIN_ITEMS en convex/shop.ts)
+const TRAJES = [
+  { id: "skin_mariachi", price: 1500 },
+  { id: "skin_charro", price: 2000 },
+  { id: "skin_lucha", price: 2500 },
+  { id: "skin_catrina", price: 3500 },
+  { id: "skin_azteca", price: 5000 },
+].map((skin) => ({ ...skin, qty: 1, currency: "coins", icon: SKIN_CONFIG[skin.id].emoji, label: SKIN_CONFIG[skin.id].label }));
 
 // ─── Artículos en monedas (tienda interna) ────────────────────────────────────
 
@@ -123,7 +146,7 @@ function SectionBanner({ title }) {
   );
 }
 
-// BundleCard estático removido (Usando DynamicBundleCard)
+// El paquete destacado es el Pase Mexica (PASE_MEXICA), un producto real de la tienda.
 
 // ─── Free coins section ───────────────────────────────────────────────────────
 function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, onPressCuates }) {
@@ -186,7 +209,7 @@ function GratisSection({ cooldownMs, onClaim, onWatchAd, adReady, adAvailable, o
 }
 
 // ─── 3-column item grid card ──────────────────────────────────────────────────
-const ItemCard = React.memo(function ItemCard({ item, onBuy }) {
+const ItemCard = React.memo(function ItemCard({ item, onBuy, storePrice }) {
   return (
     <TouchableOpacity style={s.itemCard} onPress={() => onBuy(item)} activeOpacity={0.85}>
       {item.badge && (
@@ -209,31 +232,92 @@ const ItemCard = React.memo(function ItemCard({ item, onBuy }) {
         </View>
       ) : (
         <View style={s.itemPriceReal}>
-          <Text style={s.itemPriceRealText}>{item.price}</Text>
+          <Text style={s.itemPriceRealText}>{storePrice ?? "Comprar"}</Text>
         </View>
       )}
     </TouchableOpacity>
   );
 });
 
-const ItemRow = React.memo(function ItemRow({ items, onBuy }) {
+const ItemRow = React.memo(function ItemRow({ items, onBuy, prices }) {
   return (
     <View style={s.itemRow}>
       {items.map((item) => (
-        <ItemCard key={item.id} item={item} onBuy={onBuy} />
+        <ItemCard key={item.id} item={item} onBuy={onBuy} storePrice={prices?.[item.id]} />
       ))}
     </View>
   );
 });
 
+// ─── Traje de mascota ─────────────────────────────────────────────────────────
+function SkinCard({ skin, owned, equipped, onBuy, onEquip }) {
+  const cfg = SKIN_CONFIG[skin.id];
+  return (
+    <TouchableOpacity
+      style={[s.skinCard, { borderColor: cfg.borderColor }, owned && { backgroundColor: cfg.bgColor + "33" }]}
+      onPress={() => (owned ? onEquip(skin) : onBuy(skin))}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={owned ? `${skin.label}, ${equipped ? "puesto" : "ponérselo"}` : `Comprar ${skin.label} por ${skin.price} varos`}
+    >
+      {equipped && (
+        <View style={s.skinBadge}><Text style={s.skinBadgeText}>PUESTO</Text></View>
+      )}
+      <Text style={s.skinIcon}>{cfg.emoji}</Text>
+      <Text style={s.skinLabel}>{skin.label}</Text>
+      {owned ? (
+        <Text style={s.skinPrice}>{equipped ? "✓ Tuyo" : "Ponérselo"}</Text>
+      ) : (
+        <View style={s.skinPriceRow}>
+          <Image source={require("../../assets/icons/coin.png")} style={s.itemCoinIcon} />
+          <Text style={s.skinPrice}>{skin.price.toLocaleString()}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main ShopScreen ──────────────────────────────────────────────────────────
-export default function ShopScreen({ visible, onClose, hideTopBar = false, autoSinAnuncios = false }) {
-  const navigation = useNavigation();
+/**
+ * Tienda. Se abre desde cualquier parte con useShop().openShop(sección):
+ * "varos" | "diamantes" | "racha" | "trajes" | "plus" (ver ShopContext).
+ */
+export default function ShopScreen({ visible, onClose, hideTopBar = false, initialSection = null, sectionRequest = 0 }) {
   const [buying, setBuying] = useState(false);
   const [shopMascotState, setShopMascotState] = useState("idle");
   const [shopMascotBubble, setShopMascotBubble] = useState(null);
   const [successItem, setSuccessItem] = useState(null);
   const [cuatesVisible, setCuatesVisible] = useState(false);
+  const [prices, setPrices] = useState({});
+  const activeSkin = usePetStore((st) => st.activeSkin);
+  const setActiveSkin = useEquipSkin();
+
+  // Desplazarse a una sección (al abrir desde otro lado o al faltar saldo)
+  const scrollRef = useRef(null);
+  const sectionY = useRef({});
+  const pendingSection = useRef(initialSection);
+  const scrollToSection = (key) => {
+    const y = sectionY.current[key];
+    if (y == null) { pendingSection.current = key; return; }
+    pendingSection.current = null;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  };
+  const onSectionLayout = (key) => (e) => {
+    sectionY.current[key] = e.nativeEvent.layout.y;
+    if (pendingSection.current === key) setTimeout(() => scrollToSection(key), 250);
+  };
+
+  // Si ya estaba abierta y piden otra sección, desplazarse a ella
+  useEffect(() => {
+    if (initialSection) scrollToSection(initialSection);
+  }, [sectionRequest]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let alive = true;
+    getStorePrices(REAL_ITEM_IDS).then((p) => { if (alive) setPrices(p); });
+    return () => { alive = false; };
+  }, [visible]);
 
   const { userId } = useAuth();
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
@@ -244,24 +328,12 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
   const buyWithCoins = useUserMutation(api.shop.buyWithCoins);
   const applyIAPPurchase = useUserAction(api.shop.applyIAPPurchase);
   const verifyMexPlus = useUserAction(api.shop.verifyMexPlusEntitlement);
+  const claimPlusMonthlyReward = useUserMutation(api.shop.claimPlusMonthlyReward);
   const buyPetFood = useUserMutation(api.pet.buyPetFood);
   const buyStreakFreeze = useUserMutation(api.streaks.buyStreakFreeze);
   const updateUserCurrency = useUserMutation(api.users.updateUserCurrency);
 
   const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
-
-  // Auto-trigger the Sin Anuncios subscription dialog when opened from the ads button
-  useEffect(() => {
-    if (!visible || !autoSinAnuncios) return;
-    const t = setTimeout(() => {
-      Alert.alert(
-        "🚫📺 Sin Anuncios por 1 mes",
-        "Disfruta de Mexicanario sin interrupciones.\n\nPrecio: $5.00 USD / mes (al cambio de tu país)\n\nDisponible cuando la app esté en Google Play.",
-        [{ text: "¡Ya mero!" }]
-      );
-    }, 300);
-    return () => clearTimeout(t);
-  }, [visible, autoSinAnuncios]);
 
   if (!visible) return null;
 
@@ -351,6 +423,17 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           try {
             const r = await applyIAPPurchase({ userId, itemId: item.id, transactionId });
             notifySuccess();
+            const coinsGranted = r.coinsGranted ?? 0;
+            if (coinsGranted > 0) {
+              const c = getCoinPillFallback();
+              triggerCoinFly({
+                fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+                fromY: height * 0.6,
+                toX: c.x + c.w / 2,
+                toY: c.y + c.h / 2,
+                coins: coinsGranted,
+              });
+            }
             const t = getDiamondPillFallback();
             const diamonds = r.diamondsGranted ?? 0;
             if (diamonds > 0) {
@@ -364,7 +447,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
             }
             setSuccessItem(item);
           } catch (e) {
-            Alert.alert("¡Aguas!", e.message ?? "No se pudo procesar la compra");
+            Alert.alert("¡Aguas!", serverErrorText(e, "No se pudo procesar la compra. Intenta de nuevo."));
           } finally {
             setBuying(false);
           }
@@ -386,11 +469,18 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
         if (item.id === "streak_freeze") {
           await buyStreakFreeze({ userId });
         } else {
-          await buyPetFood({ userId, foodType: item.id });
+          const res = await buyPetFood({ userId, foodType: item.id });
+          if (res && res.success === false) throw new Error(res.error || "No se pudo comprar");
+          usePetStore.getState().alimentar(item.id, res?.bondIncrease ?? 0); // energía + vínculo
         }
       }
 
       notifySuccess(); // vibración al comprar
+      if (item.id.startsWith("skin_")) {
+        usePetStore.getState().setActiveSkin(item.id); // el servidor ya lo dejó puesto
+        Alert.alert("¡Qué elegancia! " + item.icon, `Tu mascota ya trae puesto el traje de ${item.label}.`);
+        return;
+      }
       const showModal = item.currency === "diamonds" || item.id === "streak_freeze_coins";
       if (showModal) {
         setSuccessItem(item);
@@ -404,7 +494,20 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
       setShopMascotState("sad");
       setShopMascotBubble("Ay...");
       setTimeout(() => { setShopMascotState("idle"); setShopMascotBubble(null); }, 2500);
-      Alert.alert("¡Aguas!", e.message ?? "No se pudo comprar");
+      const msg = serverErrorText(e, "");
+      if (/Monedas insuficientes/i.test(msg)) {
+        Alert.alert("Te faltan varos 🪙", "Consigue más varos gratis o en paquete.", [
+          { text: "Ahorita no", style: "cancel" },
+          { text: "Conseguir varos", onPress: () => scrollToSection("varos") },
+        ]);
+      } else if (/Diamantes insuficientes/i.test(msg)) {
+        Alert.alert("Te faltan diamantes 💎", "Consigue diamantes para comprar esto.", [
+          { text: "Ahorita no", style: "cancel" },
+          { text: "Ver diamantes", onPress: () => scrollToSection("diamantes") },
+        ]);
+      } else {
+        Alert.alert("¡Aguas!", msg || "No se pudo comprar. Intenta de nuevo.");
+      }
     } finally {
       setBuying(false);
     }
@@ -464,12 +567,34 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
     }
   }
 
-  function handleBuyDynamicBundle(bundle) {
-    Alert.alert(
-      "¡Paquete " + bundle.title + "!",
-      "Este paquete estará disponible mediante RevenueCat cuando la app llegue a producción.\n\nContiene " + bundle.rewards.map(r => r.qty + " " + (r.id === "coins" ? "Monedas" : r.id === "diamonds" ? "Diamantes" : "Trucos")).join(", ") + ".",
-      [{ text: "¡Ya mero!" }]
-    );
+  // Regalo mensual de Mexicanario Plus
+  async function handleClaimPlusReward() {
+    if (!userId || buying) return;
+    setBuying(true);
+    try {
+      const r = await claimPlusMonthlyReward({ userId });
+      notifySuccess();
+      const c = getCoinPillFallback();
+      triggerCoinFly({
+        fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+        fromY: height * 0.6,
+        toX: c.x + c.w / 2,
+        toY: c.y + c.h / 2,
+        coins: r.coinsAwarded,
+      });
+      const d = getDiamondPillFallback();
+      triggerDiamondFly({
+        fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
+        fromY: height * 0.6,
+        toX: d.x + d.w / 2,
+        toY: d.y + d.h / 2,
+        diamonds: r.diamondsAwarded,
+      });
+    } catch (e) {
+      Alert.alert("Regalo Plus", String(e?.data ?? e?.message ?? "No se pudo reclamar"));
+    } finally {
+      setBuying(false);
+    }
   }
 
   return (
@@ -497,6 +622,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
         </View>
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
@@ -505,8 +631,36 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
             <Text style={s.headerTitle}>Tienda</Text>
           </View>
 
-          {/* Bundle rotativo dinámico */}
-          <DynamicBundleCard onBuy={handleBuyDynamicBundle} />
+          {/* Pase Mexica — paquete destacado del mes */}
+          <TouchableOpacity
+            style={s.paseCard}
+            activeOpacity={0.9}
+            disabled={!!activePass}
+            onPress={() => handleBuyItem(PASE_MEXICA)}
+            accessibilityRole="button"
+            accessibilityLabel={`Pase Mexica: ${PASE_MEXICA.coins} varos y ${PASE_MEXICA.diamonds} diamantes${prices[PASE_MEXICA.id] ? ` por ${prices[PASE_MEXICA.id]}` : ""}`}
+          >
+            <View style={s.paseTag}><Text style={s.paseTagText}>🏛️ PASE DEL MES</Text></View>
+            <Text style={s.paseTitle}>Pase Mexica</Text>
+            <View style={s.paseRewards}>
+              <View style={s.paseReward}>
+                <Image source={require("../../assets/icons/coin.png")} style={s.paseRewardIcon} />
+                <Text style={s.paseRewardText}>{PASE_MEXICA.coins.toLocaleString()}</Text>
+              </View>
+              <Text style={s.pasePlus}>+</Text>
+              <View style={s.paseReward}>
+                <Image source={require("../../assets/icons/diamond.png")} style={s.paseRewardIcon} />
+                <Text style={s.paseRewardText}>{PASE_MEXICA.diamonds}</Text>
+              </View>
+            </View>
+            {activePass ? (
+              <Text style={s.paseActive}>✅ Ya lo tienes · se renueva en {formatPassCountdown(activePass.expiresAt)}</Text>
+            ) : (
+              <View style={s.paseBtn}>
+                <Text style={s.paseBtnText}>{prices[PASE_MEXICA.id] ?? "Comprar"}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           {/* Gratis */}
           <SectionBanner title="Gratis" />
@@ -520,16 +674,51 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           />
 
           {/* Varos (coin packs) */}
-          <SectionBanner title="Varos" />
-          <ItemRow items={VAROS.slice(0, 3)} onBuy={handleBuyItem} />
-          <ItemRow items={VAROS.slice(3, 6)} onBuy={handleBuyItem} />
+          <View onLayout={onSectionLayout("varos")}>
+            <SectionBanner title="Varos" />
+          </View>
+          <ItemRow items={VAROS} onBuy={handleBuyItem} prices={prices} />
 
           {/* Diamantes */}
-          <SectionBanner title="Diamantes" />
-          <ItemRow items={DIAMANTES} onBuy={handleBuyItem} />
+          <View onLayout={onSectionLayout("diamantes")}>
+            <SectionBanner title="Diamantes" />
+          </View>
+          <ItemRow items={DIAMANTES} onBuy={handleBuyItem} prices={prices} />
+
+          {/* Trucos para el juego */}
+          <View onLayout={onSectionLayout("trucos")}>
+            <SectionBanner title="Trucos 💡" />
+          </View>
+          <ItemRow items={TRUCOS} onBuy={handleBuyItem} />
+          <Text style={s.trucosOwned}>
+            En tu morral: 💡 {shopState?.powerups?.hints ?? 0} de letra · 💬 {shopState?.powerups?.synonyms ?? 0} de frase.
+            El juego las usa antes de cobrarte varos.
+          </Text>
+
+          {/* Trajes para la mascota */}
+          <View onLayout={onSectionLayout("trajes")}>
+            <SectionBanner title="Trajes para tu mascota 🎭" />
+          </View>
+          <View style={s.skinsGrid}>
+            {TRAJES.map((skin) => {
+              const owned = (shopState?.purchasedSkins ?? []).includes(skin.id);
+              return (
+                <SkinCard
+                  key={skin.id}
+                  skin={skin}
+                  owned={owned}
+                  equipped={owned && activeSkin === skin.id}
+                  onBuy={handleBuyItem}
+                  onEquip={(sk) => setActiveSkin(activeSkin === sk.id ? null : sk.id)}
+                />
+              );
+            })}
+          </View>
 
           {/* Protector de Racha */}
-          <SectionBanner title="Proteger Racha 🛡️" />
+          <View onLayout={onSectionLayout("racha")}>
+            <SectionBanner title="Proteger Racha 🛡️" />
+          </View>
           <View style={s.protectorCard}>
             <View style={s.protectorIconWrap}>
               <Text style={s.protectorIcon}>🛡️</Text>
@@ -563,7 +752,9 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
           </View>
 
           {/* Mexicanario Plus */}
-          <SectionBanner title="Mexicanario Plus ⭐" />
+          <View onLayout={onSectionLayout("plus")}>
+            <SectionBanner title="Mexicanario Plus ⭐" />
+          </View>
           <View style={s.plusCard}>
             {/* Header */}
             <View style={s.plusHeader}>
@@ -592,7 +783,7 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
                 <Text style={s.plusRowIcon}>🪙</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={s.plusRowTitle}>500 monedas al mes</Text>
-                  <Text style={s.plusRowDesc}>Entregadas al activar cada mes</Text>
+                  <Text style={s.plusRowDesc}>Reclama tu regalo aquí cada mes</Text>
                 </View>
               </View>
               <View style={s.plusRow}>
@@ -604,15 +795,32 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, autoS
               </View>
             </View>
 
-            {/* CTA */}
-            <TouchableOpacity
-              style={s.plusBtn}
-              activeOpacity={0.85}
-              onPress={handleSubscribePlus}
-            >
-              <Text style={s.plusBtnText}>Suscribirme — $4.99 USD / mes</Text>
-            </TouchableOpacity>
-            <Text style={s.plusDisclaimer}>Cancela cuando quieras · Sin permanencia</Text>
+            {/* CTA: suscribirse, o reclamar el regalo del mes si ya es Plus */}
+            {shopState?.mexPlusActive ? (
+              <>
+                <Text style={s.plusActiveText}>
+                  ⭐ Eres Plus hasta el {new Date(shopState.mexPlusExpiresAt).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}
+                </Text>
+                {shopState.plusRewardAvailable ? (
+                  <TouchableOpacity style={s.plusBtn} activeOpacity={0.85} onPress={handleClaimPlusReward}>
+                    <Text style={s.plusBtnText}>🎁 Reclamar regalo del mes — 🪙500 💎50</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={s.plusDisclaimer}>✅ Ya reclamaste el regalo de este mes. ¡Vuelve el próximo!</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={s.plusBtn}
+                  activeOpacity={0.85}
+                  onPress={handleSubscribePlus}
+                >
+                  <Text style={s.plusBtnText}>Suscribirme a Plus</Text>
+                </TouchableOpacity>
+                <Text style={s.plusDisclaimer}>Cancela cuando quieras · Sin permanencia</Text>
+              </>
+            )}
           </View>
 
           {/* Restaurar Compras — requerido por Apple */}
@@ -973,6 +1181,67 @@ const s = StyleSheet.create({
     textAlign: "center",
     marginBottom: 14,
   },
+  plusActiveText: {
+    fontFamily: FONTS.bodyBold,
+    color: "#5C2800",
+    fontSize: width * 0.035,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+
+  // Pase Mexica (paquete destacado)
+  paseCard: {
+    backgroundColor: "#6A1B9A",
+    borderRadius: width * 0.05,
+    borderWidth: 2,
+    borderColor: GOLD,
+    borderBottomWidth: 6,
+    borderBottomColor: "#4A148C",
+    padding: width * 0.04,
+    marginBottom: height * 0.02,
+    alignItems: "center",
+  },
+  paseTag: {
+    backgroundColor: GOLD,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  paseTagText: { fontFamily: FONTS.bodyBold, color: ACTION_TEXT, fontSize: width * 0.028, letterSpacing: 0.6 },
+  paseTitle: { fontFamily: FONTS.display, color: "#fff", fontSize: width * 0.07, marginBottom: 8 },
+  paseRewards: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  paseReward: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  paseRewardIcon: { width: width * 0.06, height: width * 0.06, resizeMode: "contain" },
+  paseRewardText: { fontFamily: FONTS.display, color: "#fff", fontSize: width * 0.05 },
+  pasePlus: { fontFamily: FONTS.display, color: GOLD, fontSize: width * 0.05 },
+  paseBtn: {
+    backgroundColor: ACTION_BG,
+    borderRadius: 14,
+    borderBottomWidth: 4,
+    borderBottomColor: ACTION_BORDER,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+  },
+  paseBtnText: { fontFamily: FONTS.bodyBold, color: ACTION_TEXT, fontSize: width * 0.042 },
+  paseActive: { fontFamily: FONTS.bodyBold, color: "#E1BEE7", fontSize: width * 0.032, textAlign: "center" },
+
+  trucosOwned: {
+    fontFamily: FONTS.body,
+    color: "#5C2800",
+    fontSize: width * 0.03,
+    textAlign: "center",
+    marginTop: -4,
+    marginBottom: 14,
+  },
 
   sinAnunciosCard: {
     backgroundColor: WHEAT,
@@ -1130,6 +1399,9 @@ const s = StyleSheet.create({
   skinIcon: { fontSize: 28, marginBottom: 4 },
   skinLabel: { fontFamily: FONTS.bodyBold, fontSize: width * 0.028, color: "#5C2800", textAlign: "center", marginBottom: 6 },
   skinPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     backgroundColor: "#FFEAAC",
     borderRadius: 8,
     paddingHorizontal: 8,

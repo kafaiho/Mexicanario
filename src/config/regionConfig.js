@@ -16,7 +16,7 @@ const MACRO_REGIONS = [
   macro('nacional', 'Nacional', '🦅', '#006847', ['Todo México', 'Nacional', 'Infantil', 'Juvenil', 'Escuela', 'Callejero', 'Tradicional', 'Familiar', 'Feria', 'Colonial']),
   macro('cdmx', 'Chilango', '🚇', '#C62828', ['CDMX', 'Ciudad de México', 'Distrito Federal', 'DF']),
   macro('norte', 'Norteño', '🏜️', '#6D4C41', ['Norte', 'Chihuahua', 'Sinaloa', 'Sonora', 'Baja California', 'Baja California Sur', 'Nuevo León', 'Coahuila', 'Tamaulipas', 'Durango', 'Zacatecas', 'Frontera Norte', 'Sierra Madre']),
-  macro('jalisco', 'De Occidente', '🎺', '#2E7D32', ['Jalisco', 'Occidente', 'Centro-Occidente']),
+  macro('jalisco', 'De Occidente', '🎺', '#2E7D32', ['Jalisco', 'Colima', 'Occidente', 'Centro-Occidente']),
   macro('veracruz', 'Veracruzano', '🎺', '#1565C0', ['Veracruz']),
   macro('oaxaca', 'Oaxaqueño', '🍫', '#E65100', ['Oaxaca']),
   macro('centro', 'Del Centro', '🏛️', '#5D4037', ['Centro', 'Estado de México', 'Morelos', 'Hidalgo', 'Puebla', 'Tlaxcala']),

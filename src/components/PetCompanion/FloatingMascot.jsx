@@ -10,15 +10,31 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
+import { normalizePetType } from '../../config/petTypes';
+import Pet3DView from '../Pet3D/Pet3DView';
+import { supports3D } from '../Pet3D/petModels';
 import StageCropped from './StageCropped';
 import PetParticles from './PetParticles';
+import PetMoodIndicator from './PetMoodIndicator';
+import { MOOD_POSE } from './petAnimations';
 
 /**
- * FloatingMascot — 60 FPS Reanimated mascot companion with live breathing,
- * squash & stretch physics, particle burst, and dynamic shadow.
+ * FloatingMascot — mascota de la pantalla Mascota.
+ * Tecolote, Monarca y Ayotl se dibujan en 3D (giran con el dedo, reaccionan al
+ * tocarlas y llevan la llama de la racha). El Nahual sigue en 2D con Reanimated:
+ * respiración, squash & stretch, partículas y sombra.
  */
-function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, active = true }) {
+function FloatingMascot({
+  petType, stage = 1, size = 160, onTap, activeSkin, active = true, mood = 'happy',
+  showFlame = false, streakDays = 0, streakStatus = 'activa',
+}) {
+  const type = normalizePetType(petType);
+  const use3D = supports3D(type);
+  const reduceMotion = useReducedMotion();
+  const [tapKey, setTapKey] = useState(0);
+  const pose = MOOD_POSE[mood] ?? MOOD_POSE.happy;
   const floatY = useSharedValue(0);
   const squashX = useSharedValue(1);
   const squashY = useSharedValue(1);
@@ -27,7 +43,7 @@ function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, act
 
   // ── 60 FPS Idle float loop + gentle breathing/sway (UI thread) ───────────
   useEffect(() => {
-    if (!active) {
+    if (!active || use3D) {
       cancelAnimation(floatY);
       cancelAnimation(rotateVal);
       floatY.value = 0;
@@ -36,8 +52,8 @@ function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, act
     }
     floatY.value = withRepeat(
       withSequence(
-        withTiming(-12, { duration: 1500, easing: Easing.inOut(Easing.cubic) }),
-        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.cubic) })
+        withTiming(-12, { duration: 1500 * pose.breath, easing: Easing.inOut(Easing.cubic) }),
+        withTiming(0, { duration: 1500 * pose.breath, easing: Easing.inOut(Easing.cubic) })
       ),
       -1,
       false
@@ -55,12 +71,13 @@ function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, act
       cancelAnimation(floatY);
       cancelAnimation(rotateVal);
     };
-  }, [active]);
+  }, [active, use3D, pose.breath]);
 
   // ── Tap bounce with squash, stretch & wobble ───────────────────────────────
   const handlePress = useCallback(() => {
     // Trigger particle burst
     setBurstKey((k) => k + 1);
+    setTapKey((k) => k + 1);
 
     // Squash down
     squashX.value = withSequence(
@@ -104,6 +121,34 @@ function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, act
     };
   });
 
+  const staticPet = (
+    <StageCropped petType={type} stage={stage} size={size} activeSkin={activeSkin} mood={mood} />
+  );
+
+  if (use3D) {
+    return (
+      <Pressable onPress={handlePress} style={styles.container} accessibilityRole="button" accessibilityLabel="Acariciar a tu mascota">
+        {burstKey > 0 ? <PetParticles key={burstKey} stage={stage} count={9} /> : null}
+        <Pet3DView
+          petType={type}
+          stage={stage}
+          size={size}
+          active={active}
+          reduceMotion={reduceMotion}
+          interactive
+          mood={mood}
+          reaction={tapKey ? 'tap' : null}
+          reactionKey={tapKey}
+          showFlame={showFlame}
+          streakDays={streakDays}
+          streakStatus={streakStatus}
+          fallback={staticPet}
+        />
+        <PetMoodIndicator mood={mood} size={size} reduceMotion={!active} />
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       onPress={handlePress}
@@ -116,7 +161,11 @@ function FloatingMascot({ petType, stage = 1, size = 160, onTap, activeSkin, act
 
       {/* Mascot with float + squash/stretch + sway */}
       <Animated.View style={mascotStyle}>
-        <StageCropped petType={petType} stage={stage} size={size} activeSkin={activeSkin} />
+        {/* Postura de ánimo: encogida y más apagada si tiene hambre/triste/sueño */}
+        <View style={{ opacity: pose.opacity, transform: [{ translateY: pose.y * size }, { scale: pose.scale }] }}>
+          {staticPet}
+        </View>
+        <PetMoodIndicator mood={mood} size={size} reduceMotion={!active} />
       </Animated.View>
 
       {/* Dynamic ground shadow */}

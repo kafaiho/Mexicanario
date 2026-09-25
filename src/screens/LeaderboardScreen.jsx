@@ -437,10 +437,17 @@ function getWeekIdCST() {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const cst = new Date(utc + (-6 * 60 * 60 * 1000));
-  const jan4 = new Date(cst.getFullYear(), 0, 4);
-  const dayOfYear = Math.floor((cst.getTime() - jan4.getTime()) / 86400000) + 4;
-  const weekNum = Math.ceil(dayOfYear / 7);
-  return `${cst.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+  return isoWeekIdCST(cst);
+}
+
+// Copia de convex/weekId.ts (semana ISO, lunes a domingo); weekId.test.ts las compara.
+export function isoWeekIdCST(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((d.getTime() - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
 function getMonthIdCST() {

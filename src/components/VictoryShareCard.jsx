@@ -11,7 +11,7 @@ import StageCropped from "./PetCompanion/StageCropped";
  *   example    – example sentence (truncated to 80 chars)
  *   region     – region string
  *   comboCount – max combo (badge shown if >= 3)
- *   petType    – pet type string ("ajolote" | "xolo" | "alebrije" | ...)
+ *   petType    – pet type string ("tecolote" | "monarca" | "ayotl" | ...)
  *   stage      – pet stage 1-6
  *   activeSkin – skin ID or null
  *   style      – extra style (e.g. position: absolute, left: -9999)

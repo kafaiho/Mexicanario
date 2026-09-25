@@ -542,3 +542,65 @@ export const migrateCatalogBatch = internalMutation({
     };
   },
 });
+
+/**
+ * Registros legados repetidos (p. ej. «QUÉ OSO» y «¡Qué oso!») comparten la misma
+ * clave normalizada y el catálogo no puede decidir cuál actualizar. Se conserva uno
+ * y a los demás se les aparta la clave; no se borra nada y sus niveles v1 siguen igual.
+ */
+export function pickLegacyKeeper<T extends { _id: any; isRetired?: unknown; meaning?: unknown }>(matches: readonly T[]): T {
+  const score = (doc: T) => (doc.isRetired === true ? 0 : 1_000_000) + (typeof doc.meaning === "string" ? doc.meaning.length : 0);
+  return [...matches].sort((a, b) => score(b) - score(a) || String(a._id).localeCompare(String(b._id)))[0];
+}
+
+export const separateDuplicateLegacyKeys = internalMutation({
+  args: { dryRun: v.boolean(), cursor: v.optional(v.number()), batchSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const sliced = sliceCatalogOperations(CATALOG_OPERATIONS, args.cursor ?? 0, normalizeCatalogBatchSize(args.batchSize));
+    const separated: Array<{ word: string; kept: string; moved: string[] }> = [];
+    for (const operation of sliced.operations) {
+      const key = normalizeWordKey(operation.entry.word);
+      const matches = await ctx.db.query("words")
+        .withIndex("by_normalized_word_key", (q) => q.eq("normalizedWordKey", key))
+        .take(10);
+      if (matches.length < 2) continue;
+      const keeper = pickLegacyKeeper(matches);
+      const others = matches.filter((doc) => doc._id !== keeper._id);
+      if (!args.dryRun) {
+        for (const doc of others) await ctx.db.patch(doc._id, { normalizedWordKey: `${key} legado ${doc._id}` });
+      }
+      separated.push({ word: operation.entry.word, kept: keeper.word, moved: others.map((doc) => doc.word) });
+    }
+    return { status: "ok" as const, dryRun: args.dryRun, nextCursor: sliced.nextCursor, isDone: sliced.isDone, separated };
+  },
+});
+
+/**
+ * Recorre todos los lotes en el servidor: primero aparta claves legadas repetidas
+ * y después aplica el catálogo. Con dryRun no escribe nada. Devuelve totales y
+ * las palabras en conflicto, si quedara alguna.
+ */
+export const runCatalogMigration = internalAction({
+  args: { dryRun: v.boolean(), batchSize: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const api: any = (internal as any).migrations.migrateMexicoVivido;
+    const separated: Array<{ word: string; kept: string; moved: string[] }> = [];
+    for (let cursor = 0, done = false; !done;) {
+      const page: any = await ctx.runMutation(api.separateDuplicateLegacyKeys, { dryRun: args.dryRun, cursor, batchSize: args.batchSize });
+      separated.push(...page.separated);
+      done = page.isDone;
+      cursor = page.nextCursor;
+    }
+    const totals = { patched: 0, inserted: 0, retired: 0, unchanged: 0, conflicts: 0, levelRepairs: 0 };
+    const conflictWords: string[] = [];
+    for (let cursor = 0, done = false; !done;) {
+      const page: any = await ctx.runMutation(api.migrateCatalogBatch, { dryRun: args.dryRun, cursor, batchSize: args.batchSize });
+      if (page.status !== "ok") return { status: page.status, cursor, separated, ...totals };
+      for (const key of Object.keys(totals) as Array<keyof typeof totals>) totals[key] += page[key];
+      conflictWords.push(...page.details.filter((detail: { result: string }) => detail.result === "conflict").map((detail: { word: string }) => detail.word));
+      done = page.isDone;
+      cursor = page.nextCursor;
+    }
+    return { status: "ok" as const, dryRun: args.dryRun, separated, conflictWords, ...totals };
+  },
+});

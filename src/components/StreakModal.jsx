@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from "convex/react";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
   Modal,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -18,10 +19,19 @@ import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { comboBurst, notifySuccess, tapLight } from "../services/haptics";
 import usePetStore, { getStage } from "../store/usePetStore";
-import { playPetSound } from "../utils/soundManager";
+import { playPetSound, playSound } from "../utils/soundManager";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import StageCropped from "./PetCompanion/StageCropped";
+import Pet3DView from "./Pet3D/Pet3DView";
+import { flameStatusFor, normalizePetType } from "../config/petTypes";
 import { useUserMutation } from "../hooks/useUserMutation";
+import { STREAK_MILESTONES, getStreakPhrase } from "../config/streakRewards";
+import { useReducedMotion } from "react-native-reanimated";
+import useCountUp from "../hooks/useCountUp";
+import useDiamondFly from "../hooks/useDiamondFly";
+import { REAL_WIDTH } from "../utils/tabletSetup";
+import ConfettiBurst from "./ConfettiBurst";
+import DiamondFlyOverlay from "./DiamondFlyOverlay";
 
 const { width, height } = Dimensions.get("window");
 
@@ -33,16 +43,19 @@ const GOALS = [
   { days: 50, diamonds: 350 },
 ];
 
-const MILESTONES = [
-  { days: 7, diamonds: 35, petStage: "Cría 🫧" },
-  { days: 14, diamonds: 140, petStage: "Juvenil 🦎" },
-  { days: 30, diamonds: 210, petStage: "Guardián ✨" },
-  { days: 50, diamonds: 350, petStage: "Mítico 🐉" },
-  { days: 100, diamonds: 500 },
-  { days: 365, diamonds: 2000 },
-];
+const MILESTONES = STREAK_MILESTONES;
 
-export default function StreakModal({ visible, onClose }) {
+// Pill de diamantes del TopBar cuando no nos pasan cómo medirlo (p. ej. MascotaScreen)
+const getDiamondPillFallback = () => {
+  const topPad = Platform.OS === "ios" ? 52 : 36;
+  return { x: REAL_WIDTH - 16 - 110 - 10 - 90, y: topPad, w: 90, h: 36 };
+};
+
+/**
+ * @param diamondSink opcional (lo pasa TopBar): { measure, hold, reveal, release }
+ *   para que los 💎 de un hito vuelen al pill y el número suba en sincronía.
+ */
+export default function StreakModal({ visible, onClose, diamondSink = null }) {
   const { userId } = useAuth();
   const streakData = useQuery(
     api.streaks.getStreakStatus,
@@ -75,9 +88,11 @@ export default function StreakModal({ visible, onClose }) {
     ? Math.min(overlaySize.h * 0.92, overlaySize.w * 0.88)
     : overlaySize.h * 0.85;
 
+  const reduceMotion = useReducedMotion();
+
   // Fire pulse animation
   useEffect(() => {
-    if (visible && streakData?.currentStreak > 0) {
+    if (visible && streakData?.currentStreak > 0 && !reduceMotion) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(fireScale, { toValue: 1.15, duration: 800, useNativeDriver: true }),
@@ -86,7 +101,7 @@ export default function StreakModal({ visible, onClose }) {
       ).start();
     }
     return () => fireScale.stopAnimation();
-  }, [visible, streakData?.currentStreak]);
+  }, [visible, streakData?.currentStreak, reduceMotion]);
 
   // Mascot breathing/floating animation
   useEffect(() => {
@@ -114,11 +129,13 @@ export default function StreakModal({ visible, onClose }) {
 
   // Always read petType from Convex (source of truth); fall back to local store
   const vinculo = usePetStore((s) => s.vinculo);
+  const activeSkin = usePetStore((s) => s.activeSkin);
   const storedPetType = usePetStore((s) => s.petType);
   const caricia = usePetStore((s) => s.caricia);
   const tapsTodayCount = usePetStore((s) => s.tapsTodayCount);
   const lastTapDate = usePetStore((s) => s.lastTapDate);
-  const petType = petState?.petType ?? storedPetType;
+  const petType = normalizePetType(petState?.petType ?? storedPetType);
+  const [mascotTapKey, setMascotTapKey] = useState(0);
   const stage = getStage(vinculo);
 
   // How many taps remain today (max 10)
@@ -133,26 +150,76 @@ export default function StreakModal({ visible, onClose }) {
   const claimedMilestones = streakData?.claimedMilestones ?? [];
   const freezeCount = streakData?.streakFreezeCount ?? 0;
 
+  // ── Entrada: el número cuenta desde 0 y los días aparecen uno tras otro ──
+  const streakShown = useCountUp(streak, { active: visible, delay: 250, duration: 900, reduceMotion });
+  const dayAnims = useMemo(() => Array.from({ length: 7 }, () => new Animated.Value(0)), []);
+  useEffect(() => {
+    if (!visible || weekDays.length === 0) return undefined;
+    if (reduceMotion) { dayAnims.forEach((a) => a.setValue(1)); return undefined; }
+    dayAnims.forEach((a) => a.setValue(0));
+    const anim = Animated.sequence([
+      Animated.delay(350),
+      Animated.stagger(70, dayAnims.map((a) =>
+        Animated.spring(a, { toValue: 1, friction: 5, tension: 150, useNativeDriver: true })
+      )),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [visible, weekDays.length, reduceMotion]);
+
+  // Botón "Reclamar" late mientras haya un hito sin cobrar (anticipación)
+  const hasClaimable = MILESTONES.some((ms) => streak >= ms.days && !claimedMilestones.includes(ms.days));
+  const claimPulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    claimPulse.setValue(0);
+    if (!visible || !hasClaimable || reduceMotion) return undefined;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(claimPulse, { toValue: 1, duration: 550, useNativeDriver: true }),
+      Animated.timing(claimPulse, { toValue: 0, duration: 550, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [visible, hasClaimable, reduceMotion]);
+  const claimScale = claimPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
+
+  // ── Cobro de hito: confeti + diamantes volando al contador ──
+  const milestoneRefs = useRef({});
+  const [burst, setBurst] = useState({ key: 0, x: 0, y: 0 });
+  const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
+
+  const celebrateMilestone = async (days, amount) => {
+    const node = milestoneRefs.current[days];
+    const src = await new Promise((res) => {
+      const fallback = { x: overlaySize.w / 2, y: overlaySize.h / 2 };
+      if (!node) { res(fallback); return; }
+      let done = false;
+      node.measureInWindow((x, y, w, h) => {
+        done = true;
+        res(h > 0 ? { x: x + w - 50, y: y + h / 2 } : fallback);
+      });
+      setTimeout(() => { if (!done) res(fallback); }, 250);
+    });
+    setBurst((b) => ({ key: b.key + 1, x: src.x, y: src.y }));
+    if (!amount) return;
+    const measured = await diamondSink?.measure?.();
+    const target = measured && measured.h > 0 ? measured : getDiamondPillFallback();
+    const holdId = diamondSink?.hold?.(amount) ?? null;
+    triggerDiamondFly({
+      fromX: src.x,
+      fromY: src.y,
+      toX: target.x + target.w / 2,
+      toY: target.y + target.h / 2,
+      diamonds: amount,
+      onLanded: holdId ? (f) => diamondSink?.reveal?.(holdId, f) : undefined,
+      onAllArrived: holdId ? () => diamondSink?.release?.(holdId) : undefined,
+    });
+  };
+
   // ── Greeting message based on streak ──────────────────────────────────────
-  const greetMsg = (() => {
-    if (!petState?.hasPet) return null;
-    const s = streak;
-    if (s === 0) return "¡Ándale, empiézale! 👊 Hoy es tu día cero, ¡mañana ya vas con todo!";
-    if (s === 1) return "¡Ya arrancaste, pa'rriba! 🔥 ¡El primer paso es el que más cuesta!";
-    if (s === 2) return "¡Dos días pa'dentro! 🌶️ ¡Ya te picó el gusto, cuate, no pares!";
-    if (s === 3) return "¡Tres días y sin parar! ✨ ¡Ya te enganchaste, wey, tú puedes!";
-    if (s <= 6) return `¡${s} días, qué neto! 🤙 ¡Estás que ardes, sigue así!`;
-    if (s === 7) return "🎉 ¡Una semana enterita! ¡Te ganaste un taco de campeón, cuate!";
-    if (s <= 13) return `¡${s} días! 💥 ¡Eres más neto que el pozole de un domingo!`;
-    if (s === 14) return "🏆 ¡Dos semanas! ¡Qué chido eres, ya eres de los meros meros!";
-    if (s <= 29) return `¡${s} días! 🚀 ¡Eso sí está de pelos, no te vayas a rajar!`;
-    if (s === 30) return "🥇 ¡Un mes entero! ¡Eso se celebra con tamales y atole, campeón!";
-    if (s <= 49) return `¡${s} días! 🔥 ¡Más picante que el chile de tu abuela, no te rajes!`;
-    if (s === 50) return "🌈 ¡50 días! ¡Ya eres leyenda pura de Mexicanario, compa!";
-    return `¡${s} días! 🌮 ¡Más neto que el jitomate del mercado, sigue echándole!`;
-  })();
+  const greetMsg = petState?.hasPet ? getStreakPhrase(streak) : null;
 
   const handleTapMascot = () => {
+    setMascotTapKey((k) => k + 1);
     if (!petState?.hasPet) return;
     tapsLeft > 0 ? notifySuccess() : tapLight();
     playPetSound("happy", petType);
@@ -189,8 +256,11 @@ export default function StreakModal({ visible, onClose }) {
     if (!userId) return;
     setClaimingMilestone(days);
     try {
-      await claimMilestone({ userId, milestoneDays: days });
+      const result = await claimMilestone({ userId, milestoneDays: days });
       comboBurst(10); // vibración intensa al alcanzar un hito de racha
+      playSound("milestone");
+      const fallbackAmount = MILESTONES.find((m) => m.days === days)?.diamonds ?? 0;
+      celebrateMilestone(days, result?.diamondsAwarded ?? fallbackAmount);
     } catch (e) {
       console.log("Error claiming milestone:", e);
     }
@@ -255,7 +325,19 @@ export default function StreakModal({ visible, onClose }) {
                       ]
                     },
                   ]}>
-                    <StageCropped petType={petType} stage={stage} size={120} />
+                    <Pet3DView
+                      petType={petType}
+                      stage={stage}
+                      size={130}
+                      active={visible}
+                      reduceMotion={reduceMotion}
+                      showFlame
+                      streakDays={streak}
+                      streakStatus={flameStatusFor(streakData)}
+                      reaction={mascotTapKey ? "tap" : null}
+                      reactionKey={mascotTapKey}
+                      fallback={<StageCropped petType={petType} stage={stage} size={120} />}
+                    />
                   </Animated.View>
                 </TouchableOpacity>
                 {/* Daily tap hint */}
@@ -275,7 +357,12 @@ export default function StreakModal({ visible, onClose }) {
                 🔥
               </Animated.Text>
             )}
-            <Text style={styles.streakNumber}>{streak}</Text>
+            <View style={styles.streakRow}>
+              <Text style={styles.streakNumber}>{streakShown}</Text>
+              {petState?.hasPet && streak > 0 && (
+                <Animated.Text style={[styles.streakFlame, { transform: [{ scale: fireScale }] }]}>🔥</Animated.Text>
+              )}
+            </View>
             <Text style={styles.streakLabel}>
               {streak === 1 ? "día de racha" : "días de racha"}
             </Text>
@@ -323,13 +410,22 @@ export default function StreakModal({ visible, onClose }) {
             {/* ── Weekly Calendar ───────────────────────────── */}
             <View style={styles.weekRow}>
               {weekDays.map((day, i) => (
-                <View
+                <Animated.View
                   key={i}
                   style={[
                     styles.dayCircle,
                     { width: daySize, height: daySize, borderRadius: daySize / 2 },
                     day.played && styles.dayPlayed,
                     day.isToday && !day.played && styles.dayToday,
+                    dayAnims[i] && {
+                      opacity: dayAnims[i],
+                      transform: [{
+                        scale: dayAnims[i].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [day.played ? 0.3 : 0.7, 1],
+                        }),
+                      }],
+                    },
                   ]}
                 >
                   {day.played ? (
@@ -345,7 +441,7 @@ export default function StreakModal({ visible, onClose }) {
                       {day.label}
                     </Text>
                   )}
-                </View>
+                </Animated.View>
               ))}
             </View>
 
@@ -401,7 +497,12 @@ export default function StreakModal({ visible, onClose }) {
               const canClaim = streak >= ms.days && !isClaimed;
               const isReached = streak >= ms.days;
               return (
-                <View key={ms.days} style={[styles.milestoneRow, isReached && styles.milestoneReached]}>
+                <View
+                  key={ms.days}
+                  ref={(node) => { milestoneRefs.current[ms.days] = node; }}
+                  collapsable={false}
+                  style={[styles.milestoneRow, isReached && styles.milestoneReached]}
+                >
                   <View style={styles.milestoneInfo}>
                     <Text style={styles.milestoneDays}>
                       🔥 {ms.days} días
@@ -414,17 +515,19 @@ export default function StreakModal({ visible, onClose }) {
                   {isClaimed ? (
                     <Text style={styles.milestoneClaimed}>✅</Text>
                   ) : canClaim ? (
-                    <TouchableOpacity
-                      style={styles.milestoneClaimBtn}
-                      onPress={() => handleClaimMilestone(ms.days)}
-                      disabled={claimingMilestone === ms.days}
-                    >
-                      <Text style={styles.milestoneClaimText}>
-                        {claimingMilestone === ms.days
-                          ? "..."
-                          : "Reclamar"}
-                      </Text>
-                    </TouchableOpacity>
+                    <Animated.View style={{ transform: [{ scale: claimScale }] }}>
+                      <TouchableOpacity
+                        style={styles.milestoneClaimBtn}
+                        onPress={() => handleClaimMilestone(ms.days)}
+                        disabled={claimingMilestone === ms.days}
+                      >
+                        <Text style={styles.milestoneClaimText}>
+                          {claimingMilestone === ms.days
+                            ? "..."
+                            : "Reclamar 💎"}
+                        </Text>
+                      </TouchableOpacity>
+                    </Animated.View>
                   ) : (
                     <Text style={styles.milestoneLocked}>🔒</Text>
                   )}
@@ -438,7 +541,12 @@ export default function StreakModal({ visible, onClose }) {
             <Text style={styles.closeBtnText}>Continuar</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Confeti al cobrar un hito */}
+        <ConfettiBurst burstKey={burst.key} style={{ left: burst.x, top: burst.y }} count={24} distance={140} />
       </View>
+
+      <DiamondFlyOverlay diamonds={flyDiamonds} particles={diamondParticles} onDiamondArrived={onDiamondArrived} />
 
       {/* StreakShareCard — rendered offscreen for image capture, never visible to user */}
       <StreakShareCard
@@ -446,6 +554,7 @@ export default function StreakModal({ visible, onClose }) {
         streak={streak}
         petType={petType}
         stage={stage}
+        activeSkin={activeSkin}
         style={{ position: "absolute", left: -9999, top: 0 }}
       />
     </Modal>
@@ -481,8 +590,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   mascotWrap: {
-    width: 120,
-    height: 120,
+    width: 130,
+    height: 130,
     alignSelf: "center",
   },
   tapBubble: {
@@ -538,6 +647,16 @@ const styles = StyleSheet.create({
   fireEmoji: {
     fontSize: width * 0.2,
     textAlign: "center",
+  },
+  streakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  streakFlame: {
+    fontSize: width * 0.09,
+    marginTop: -height * 0.01,
   },
   streakNumber: {
     fontSize: width * 0.14,

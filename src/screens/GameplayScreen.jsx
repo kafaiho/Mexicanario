@@ -35,13 +35,17 @@ import JuicyButton from "../components/JuicyButton";
 import MexicanarioModal from "../components/MexicanarioModal";
 import OnboardingTooltip from "../components/OnboardingTooltip";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
+import { WRONG_PHRASES, comboPhrase } from "../components/PetCompanion/petMood";
 import StageCropped from "../components/PetCompanion/StageCropped";
+import StreakCelebration from "../components/StreakCelebration";
+import { getMilestoneForDay } from "../config/streakRewards";
 import SupportModal from "../components/SupportModal";
 import TermsModal from "../components/TermsModal";
 import RankUpOverlay from "../components/RankUpOverlay";
 import FriendToast from "../components/FriendToast";
 import TopBar from "../components/TopBar";
 import { getRank, getRankIndex, didRankUp } from "../config/xpRanks";
+import { normalizePetType } from "../config/petTypes";
 import VictoryModal from "../components/VictoryModal";
 import VictoryShareCard from "../components/VictoryShareCard";
 import WheelModal from "../components/WheelModal";
@@ -64,7 +68,7 @@ import { useKeyboardLayout } from "../hooks/useKeyboardLayout";
 import { getBackspaceTargetIndex, getCursorAfterHint } from "../utils/gameplayKeyboard";
 import { compareWordsFlexibly, normalizeWordForDisplay, stripUntypable } from "../utils/textUtils";
 import { buildTileRows, censorWordInText, isWordPlayable, rowLetterCount } from "../utils/wordPresentation";
-import ShopScreen from "./ShopScreen";
+import { useShop } from "../context/ShopContext";
 import { useUserMutation } from "../hooks/useUserMutation";
 
 
@@ -332,7 +336,6 @@ export default function GameplayScreen({ navigation, route }) {
   const showRegisterLure  = openModal === 'registerLure';
   const showCuatesReg     = openModal === 'cuatesReg';
   const showCoinsModal    = openModal === 'coinsModal';
-  const showShop          = openModal === 'shop';
   const showExitPrompt    = openModal === 'exitPrompt';
   const promptedLevelsRef = useRef(new Set());
   const [pendingAction, setPendingAction] = useState(null); // which power-up was attempted when coins ran out
@@ -357,7 +360,12 @@ export default function GameplayScreen({ navigation, route }) {
 
   // Refs para coin fly
   const topBarRef = useRef(null);
-  const victoryRewardRef = useRef(null);
+  const victoryRewardRef = useRef(null);   // pill de monedas del modal de victoria (origen del vuelo)
+  const victoryDiamondRef = useRef(null);  // pill de diamantes del modal de victoria
+  // Reservas del contador del TopBar para el premio de victoria, creadas cuando
+  // updateUserCurrency resuelve (así el pill no sube antes de que lleguen las monedas).
+  const victoryHoldRef = useRef(null);
+  const victoryFlownRef = useRef(false); // el vuelo de esta victoria ya salió (no reservar tarde)
   const victoryShareRef = useRef(null);
 
   // Coin fly — dos instancias: una para la pantalla principal, otra para el modal de victoria
@@ -391,6 +399,35 @@ export default function GameplayScreen({ navigation, route }) {
   const getDiamondPillTarget = async () => {
     const measured = await topBarRef.current?.measureDiamondPill();
     return (measured && measured.h > 0) ? measured : getDiamondPillFallback();
+  };
+
+  // Vuela monedas al pill del TopBar: el número sube moneda por moneda.
+  // Llamar después de que la mutación que otorga las monedas resolvió.
+  // holdId: id de una reserva ya creada; null = sin reserva; undefined = reservar ahora.
+  const flyCoinsToPill = async ({ trigger, fromX, fromY, coins, holdId }) => {
+    const id = holdId !== undefined ? holdId : topBarRef.current?.holdCoins?.(coins);
+    const target = await getCoinPillTarget();
+    trigger({
+      fromX, fromY,
+      toX: target.x + target.w / 2,
+      toY: target.y + target.h / 2,
+      coins,
+      onLanded: id ? (f) => topBarRef.current?.revealCoins?.(id, f) : undefined,
+      onAllArrived: () => (id ? topBarRef.current?.releaseCoins?.(id) : topBarRef.current?.triggerBounce()),
+    });
+  };
+
+  const flyDiamondsToPill = async ({ trigger, fromX, fromY, diamonds, holdId }) => {
+    const id = holdId !== undefined ? holdId : topBarRef.current?.holdDiamonds?.(diamonds);
+    const target = await getDiamondPillTarget();
+    trigger({
+      fromX, fromY,
+      toX: target.x + target.w / 2,
+      toY: target.y + target.h / 2,
+      diamonds,
+      onLanded: id ? (f) => topBarRef.current?.revealDiamonds?.(id, f) : undefined,
+      onAllArrived: id ? () => topBarRef.current?.releaseDiamonds?.(id) : undefined,
+    });
   };
 
   // Rewarded ad para el modal de monedas
@@ -434,6 +471,9 @@ export default function GameplayScreen({ navigation, route }) {
   const [wordStartTime, setWordStartTime] = useState(Date.now());
   const [isFirstWordToday, setIsFirstWordToday] = useState(false);
   const [streakCount, setStreakCount] = useState(0);
+  // Celebración de racha: se muestra al cerrar la victoria (o de inmediato si no hay victoria abierta)
+  const [streakCelebration, setStreakCelebration] = useState(null);
+  const pendingStreakCelebrationRef = useRef(null);
 
   // Game state
   const [guess, setGuess] = useState([]);
@@ -469,10 +509,14 @@ export default function GameplayScreen({ navigation, route }) {
   const challengeModeParam = route?.params?.challengeMode ?? false;
   const challengeIdParam = route?.params?.challengeId ?? null;
   const challengeWordParam = route?.params?.challengeWord ?? null;
+  // "challenger" = juega primero y envía el reto; si no, responde un reto recibido
+  const isChallenger = route?.params?.challengeRole === "challenger";
+  const challengeFriendName = route?.params?.challengeFriendName ?? null;
   const [isChallengeMode, setIsChallengeMode] = useState(!!challengeModeParam);
   const [challengeStartTime, setChallengeStartTime] = useState(null);
   const [challengeResult, setChallengeResult] = useState(null);
   const respondToChallengeMut = useUserMutation(api.friends.respondToChallenge);
+  const submitChallengerResultMut = useUserMutation(api.friends.submitChallengerResult);
   const { userId, user } = useAuth();
 
   // Map repaso mode — replaying a completed level from the map (no progress change)
@@ -539,9 +583,11 @@ export default function GameplayScreen({ navigation, route }) {
   // Mascota state for GameMascot reactions
   const [mascotaReaction, setMascotaReaction] = useState("idle");
   const [mascotaBubble, setMascotaBubble] = useState(null);
+  const [mascotaReactionKey, setMascotaReactionKey] = useState(0);
   const mascotaH = 100 + ((petState?.stage ?? 1) - 1) * 12;
   const mascotaW = (petState?.stage ?? 1) >= 3 ? 120 : 100;
   const mascotaTimer = useRef(null);
+  const { openShop } = useShop();
   const { acierto: bondAcierto, error: bondError } = usePetStore();
 
   // Long-press repeat delete
@@ -584,6 +630,7 @@ export default function GameplayScreen({ navigation, route }) {
 
   const triggerMascota = (state, bubble) => {
     setMascotaReaction(state);
+    setMascotaReactionKey((k) => k + 1); // repite la animación aunque el estado no cambie
     if (bubble) setMascotaBubble(bubble);
     clearTimeout(mascotaTimer.current);
     mascotaTimer.current = setTimeout(() => {
@@ -625,48 +672,78 @@ export default function GameplayScreen({ navigation, route }) {
 
   const totalLevels = levelInfo?.totalLevels ?? 50;
 
-  // Disparar coin fly y diamond fly cuando se abre el modal de victoria
+  // Mostrar la celebración de racha pendiente en cuanto se cierra la victoria
+  useEffect(() => {
+    if (showLevelUp || !pendingStreakCelebrationRef.current) return;
+    const t = setTimeout(() => {
+      if (!mountedRef.current || !pendingStreakCelebrationRef.current) return;
+      setStreakCelebration(pendingStreakCelebrationRef.current);
+      pendingStreakCelebrationRef.current = null;
+    }, 350);
+    return () => clearTimeout(t);
+  }, [showLevelUp]);
+
+  const handleStreakCelebrationClose = (point) => {
+    const c = streakCelebration;
+    setStreakCelebration(null);
+    if (!c || !(c.coins > 0)) return;
+    // Esperar a que el modal se desvanezca y luego volar las monedas al contador
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      flyCoinsToPill({
+        trigger: triggerMainCoin,
+        fromX: point?.x ?? coinCenterX,
+        fromY: point?.y ?? coinCenterY,
+        coins: c.coins,
+        holdId: c.coinHoldId,
+      });
+    }, 250);
+  };
+
+  // Disparar coin fly y diamond fly cuando se abre el modal de victoria.
+  // Espera a que los pills del modal entren y cuenten (VictoryModal ≈1.2 s) y
+  // entonces las monedas salen de cada pill hacia el TopBar.
   useEffect(() => {
     if (!showLevelUp) return;
     const hasCoins = levelUpReward?.coins > 0;
     const hasDiamonds = levelUpReward?.diamonds > 0;
     if (!hasCoins && !hasDiamonds) return;
+    let fired = false;
+    const measureCenter = (ref, fallback) => new Promise((res) => {
+      if (!ref.current) { res(fallback); return; }
+      let done = false;
+      ref.current.measureInWindow((x, y, w, h) => {
+        done = true;
+        res(h > 0 ? { x: x + w / 2, y: y + h / 2 } : fallback);
+      });
+      setTimeout(() => { if (!done) res(fallback); }, 300);
+    });
     const timer = setTimeout(async () => {
-      // Medir fuente: el pill de recompensa dentro del modal
-      let srcX = coinCenterX;
-      let srcY = coinCenterY * 1.36;
-      if (victoryRewardRef.current) {
-        await new Promise((res) => {
-          let done = false;
-          victoryRewardRef.current.measureInWindow((x, y, w, h) => {
-            done = true;
-            if (h > 0) { srcX = x + w / 2; srcY = y + h / 2; }
-            res();
-          });
-          setTimeout(() => { if (!done) res(); }, 300);
-        });
-      }
+      fired = true;
+      victoryFlownRef.current = true;
+      const holds = victoryHoldRef.current;
+      victoryHoldRef.current = null;
+      const fallback = { x: coinCenterX, y: coinCenterY * 1.36 };
       if (hasCoins) {
-        const target = await getCoinPillTarget();
-        triggerVictoryCoin({
-          fromX: srcX, fromY: srcY,
-          toX: target.x + target.w / 2,
-          toY: target.y + target.h / 2,
-          coins: levelUpReward.coins,
-          onAllArrived: () => topBarRef.current?.triggerBounce(),
-        });
+        const src = await measureCenter(victoryRewardRef, fallback);
+        flyCoinsToPill({ trigger: triggerVictoryCoin, fromX: src.x, fromY: src.y, coins: levelUpReward.coins, holdId: holds?.coins ?? null });
       }
       if (hasDiamonds) {
-        const target = await getDiamondPillTarget();
-        triggerVictoryDiamond({
-          fromX: srcX, fromY: srcY,
-          toX: target.x + target.w / 2,
-          toY: target.y + target.h / 2,
-          diamonds: levelUpReward.diamonds,
-        });
+        const src = await measureCenter(victoryDiamondRef, fallback);
+        flyDiamondsToPill({ trigger: triggerVictoryDiamond, fromX: src.x, fromY: src.y, diamonds: levelUpReward.diamonds, holdId: holds?.diamonds ?? null });
       }
-    }, 350);
-    return () => clearTimeout(timer);
+    }, 1150);
+    return () => {
+      clearTimeout(timer);
+      victoryFlownRef.current = true; // la victoria cerró: una respuesta tardía ya no debe reservar
+      // Cerró la victoria antes del vuelo: suelta las reservas para que el pill muestre el saldo real
+      if (!fired && victoryHoldRef.current) {
+        const holds = victoryHoldRef.current;
+        victoryHoldRef.current = null;
+        if (holds.coins) topBarRef.current?.releaseCoins?.(holds.coins);
+        if (holds.diamonds) topBarRef.current?.releaseDiamonds?.(holds.diamonds);
+      }
+    };
   }, [showLevelUp]);
 
   // ─── Animations ─────────────────────────────────────────────────────────────
@@ -803,6 +880,7 @@ export default function GameplayScreen({ navigation, route }) {
         setWordRegion(challengeWordParam.region || "");
         setWordPathId(challengeWordParam.pathId || null);
         setWordPlaceId(challengeWordParam.placeId || null);
+        setChallengeStartTime(Date.now()); // el cronómetro del reto empieza con la palabra
         const initial = Array.from(wordUp).map((ch) => (ch === " " ? " " : ""));
         setGuess(initial);
         const firstNonSpace = initial.findIndex((ch) => ch !== " ");
@@ -1049,17 +1127,22 @@ export default function GameplayScreen({ navigation, route }) {
           // celebrate() already called above at line 1041 — don't double-call
           notifySuccess();
           triggerMascota("celebrating", "¡Reto completado!");
-          const elapsedMs = Date.now() - (challengeStartTime || Date.now());
+          // Mínimo 1 s: el servidor rechaza tiempos imposibles
+          const elapsedMs = Math.max(1000, Date.now() - (challengeStartTime || Date.now()));
+          const challengeArgs = {
+            challengeId: challengeIdParam,
+            userId,
+            attempts: Math.min(10, attempts + 1), // attempts cuenta errores; se envía el total
+            timeMs: elapsedMs,
+          };
           try {
-            const result = await respondToChallengeMut({
-              challengeId: challengeIdParam,
-              userId,
-              attempts: attempts + 1, // attempts is 0-based errors, send total
-              timeMs: elapsedMs,
-            });
+            const result = isChallenger
+              ? await submitChallengerResultMut(challengeArgs)
+              : await respondToChallengeMut(challengeArgs);
             setChallengeResult(result);
           } catch (e) {
-            console.warn("Challenge respond error:", e);
+            console.warn("Challenge result error:", e);
+            setChallengeResult({ error: String(e?.data ?? e?.message ?? "No se pudo guardar el reto") });
           }
           setVictorySnap({
             word: originalWord || mexicanWord,
@@ -1088,7 +1171,7 @@ export default function GameplayScreen({ navigation, route }) {
           playSound(newCombo >= 3 ? "combo" : "correct");
           if (newCombo >= 3) {
             comboBurst(newCombo);
-            triggerMascota("celebrating", `x${newCombo} Combo!`);
+            triggerMascota("combo", comboPhrase(newCombo));
           } else {
             notifySuccess();
             const today = new Date().toISOString().slice(0, 10);
@@ -1163,6 +1246,7 @@ export default function GameplayScreen({ navigation, route }) {
         // can silently fail on Android if celebrate() animation callbacks don't settle.
         // A failed-word review is served before the pending level; solving it
         // must not advance (and silently skip) that level.
+        victoryFlownRef.current = false;
         const completion = isReviewMode
           ? Promise.resolve({ success: true, levelUp: false })
           : completeLevelMutation({
@@ -1177,7 +1261,16 @@ export default function GameplayScreen({ navigation, route }) {
               completedLevelsRef.current += 1;
               const totalCoins = displayReward.coins; // includes zone bonus; 0 if powerup used
               if (totalCoins > 0 || displayReward.diamonds > 0) {
-                updateUserCurrency({ userId, coins: totalCoins, diamonds: displayReward.diamonds }).catch(() => { });
+                updateUserCurrency({ userId, coins: totalCoins, diamonds: displayReward.diamonds })
+                  .then(() => {
+                    if (!mountedRef.current || victoryFlownRef.current) return;
+                    const bar = topBarRef.current;
+                    victoryHoldRef.current = {
+                      coins: totalCoins > 0 ? (bar?.holdCoins?.(totalCoins, { holdMs: 5000 }) ?? null) : null,
+                      diamonds: displayReward.diamonds > 0 ? (bar?.holdDiamonds?.(displayReward.diamonds, { holdMs: 5000 }) ?? null) : null,
+                    };
+                  })
+                  .catch(() => { });
               }
               gainPetXp({ userId }).catch(() => { });
               // XP cultural: base + bonos por combo, racha, sesión y velocidad
@@ -1233,7 +1326,26 @@ export default function GameplayScreen({ navigation, route }) {
                     setStreakCount(streakResult.streak);
                     setBoostActive(true);
                     setTimeout(() => { if (mountedRef.current) setBoostActive(false); }, 1500);
-                    playSound("streak");
+                    const streakCoins = streakResult.coinsAdded ?? 0;
+                    const celebration = {
+                      streak: streakResult.streak,
+                      coins: streakCoins,
+                      isPinata: !!streakResult.isPinata,
+                      shieldSaved: !!streakResult.shieldSaved,
+                      milestone: streakResult.unclaimedMilestones?.includes(streakResult.streak)
+                        ? getMilestoneForDay(streakResult.streak)
+                        : null,
+                      // Las monedas del día ya están en el backend: el pill las
+                      // retiene hasta que vuelen al cerrar la celebración.
+                      coinHoldId: streakCoins > 0
+                        ? topBarRef.current?.holdCoins?.(streakCoins, { holdMs: 120000 })
+                        : null,
+                    };
+                    if (backHandlerStateRef.current.showLevelUp) {
+                      pendingStreakCelebrationRef.current = celebration;
+                    } else {
+                      setStreakCelebration(celebration);
+                    }
                   }
                   // Request notification permission at streak >= 3 (high-momentum moment)
                   const currentStreak = streakResult.streak ?? 0;
@@ -1246,7 +1358,7 @@ export default function GameplayScreen({ navigation, route }) {
                     rescheduleAfterPlay({
                       streakDays: currentStreak,
                       petName: petState?.petName ?? '',
-                      petType: petState?.petType ?? 'ajolote',
+                      petType: normalizePetType(petState?.petType),
                     }).catch(() => { });
                   }
                 })
@@ -1261,7 +1373,7 @@ export default function GameplayScreen({ navigation, route }) {
         shakeRow();
         playSound("wrong");
         notifyError();
-        triggerMascota("sad", "¡Ay!");
+        triggerMascota("sad", pickRandom(WRONG_PHRASES));
         if (!isMapReview) bondError(); // -3 vínculo por error
         if (nextAttempts === 3 && adReady && !isMapReview) {
           setShowRewardedOffer(true);
@@ -1466,9 +1578,12 @@ export default function GameplayScreen({ navigation, route }) {
       }
     }
     if (emptyIndices.length === 0) return;
-    if (!checkCoins(HINT_COST, "reveal")) return;
+    // Primero se gastan las pistas compradas en la tienda; si no hay, cuesta HINT_COST
+    const hasHintInInventory = (powerupInventory.hints ?? 0) > 0;
+    if (!hasHintInInventory && !checkCoins(HINT_COST, "reveal")) return;
     usedPowerupRef.current = true;
-    updateUserCurrency({ userId, coins: -HINT_COST, diamonds: 0 }).catch(() => { });
+    if (hasHintInInventory) usePowerupMutation({ userId, powerupType: "hints" }).catch(() => { });
+    else updateUserCurrency({ userId, coins: -HINT_COST, diamonds: 0 }).catch(() => { });
     const randomIndex = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
     const correctLetter = mexicanWord[randomIndex];
     // Mascota "elige" la letra — pequeño delay para dar sensación de búsqueda
@@ -1766,10 +1881,12 @@ export default function GameplayScreen({ navigation, route }) {
               currentWord={mexicanWord || null}
               gameBubble={mascotaBubble}
               reduceMotion={reduceMotionEnabled}
+              reactionKey={mascotaReactionKey}
               reaction={
-                mascotaReaction === 'celebrating' ? 'correct'
-                  : mascotaReaction === 'sad' ? 'wrong'
-                    : null
+                mascotaReaction === 'combo' ? 'combo'
+                  : mascotaReaction === 'celebrating' ? 'correct'
+                    : mascotaReaction === 'sad' ? 'wrong'
+                      : null
               }
             />
           </PetErrorBoundary>
@@ -1827,7 +1944,9 @@ export default function GameplayScreen({ navigation, route }) {
               <Text style={styles.synonymBtnIcon}>💡</Text>
               <Text style={styles.synonymBtnText}>Pista de frase</Text>
               <View style={styles.synonymBtnCost}>
-                <Text style={styles.synonymBtnCostText}>🪙 {SYNONYM_COST}</Text>
+                <Text style={styles.synonymBtnCostText}>
+                  {(powerupInventory.synonyms ?? 0) > 0 ? `🎒 ${powerupInventory.synonyms}` : `🪙 ${SYNONYM_COST}`}
+                </Text>
               </View>
             </TouchableOpacity>
           )}
@@ -1927,11 +2046,15 @@ export default function GameplayScreen({ navigation, route }) {
                 style={[styles.powerUpBtn, dynamicStyles.powerUpButton, styles.powerUpReveal]}
                 onPress={handleReveal}
                 accessibilityRole="button"
-                accessibilityLabel={`Revelar una letra por ${HINT_COST} monedas`}
+                accessibilityLabel={(powerupInventory.hints ?? 0) > 0
+                  ? `Revelar una letra, te quedan ${powerupInventory.hints} pistas`
+                  : `Revelar una letra por ${HINT_COST} monedas`}
               >
                 <Text style={styles.powerUpBtnLabel}>A</Text>
                 <View style={styles.powerUpCost}>
-                  <Text style={styles.powerUpCostText}>🪙{HINT_COST}</Text>
+                  <Text style={styles.powerUpCostText}>
+                    {(powerupInventory.hints ?? 0) > 0 ? `🎒${powerupInventory.hints}` : `🪙${HINT_COST}`}
+                  </Text>
                 </View>
               </TouchableOpacity>
 
@@ -2041,7 +2164,7 @@ export default function GameplayScreen({ navigation, route }) {
           }}
         />}
         {showMexicanario && <MexicanarioModal visible onClose={() => setOpenModal(null)} />}
-        {showWheel && <WheelModal visible onClose={() => setOpenModal(null)} onOpenShop={() => { setOpenModal('shop'); }} />}
+        {showWheel && <WheelModal visible onClose={() => setOpenModal(null)}  />}
         {showTerms && <TermsModal visible onClose={() => setOpenModal(null)} />}
         {showSupport && <SupportModal visible onClose={() => setOpenModal(null)} />}
         {showAdRemoval && <AdRemovalModal visible onClose={() => setOpenModal(null)} />}
@@ -2246,15 +2369,7 @@ export default function GameplayScreen({ navigation, route }) {
                           }
                           setOpenModal(null);
                           setPendingAction(null);
-                          const target = await getCoinPillTarget();
-                          triggerMainCoin({
-                            fromX: coinCenterX,
-                            fromY: coinCenterY,
-                            toX: target.x + target.w / 2,
-                            toY: target.y + target.h / 2,
-                            coins: 25,
-                            onAllArrived: () => topBarRef.current?.triggerBounce(),
-                          });
+                          flyCoinsToPill({ trigger: triggerMainCoin, fromX: coinCenterX, fromY: coinCenterY, coins: 25 });
                         }}
                       >
                         <Text style={styles.coinsOptionBtnText}>
@@ -2290,15 +2405,7 @@ export default function GameplayScreen({ navigation, route }) {
                           }
                           setOpenModal(null);
                           setPendingAction(null);
-                          const target = await getCoinPillTarget();
-                          triggerMainCoin({
-                            fromX: coinCenterX,
-                            fromY: coinCenterY,
-                            toX: target.x + target.w / 2,
-                            toY: target.y + target.h / 2,
-                            coins: 50,
-                            onAllArrived: () => topBarRef.current?.triggerBounce(),
-                          });
+                          flyCoinsToPill({ trigger: triggerMainCoin, fromX: coinCenterX, fromY: coinCenterY, coins: 50 });
                         }
                       } catch (e) {
                         console.error("Share error:", e);
@@ -2329,15 +2436,7 @@ export default function GameplayScreen({ navigation, route }) {
                         }
                         setOpenModal(null);
                         setPendingAction(null);
-                        const target = await getCoinPillTarget();
-                        triggerMainCoin({
-                          fromX: coinCenterX,
-                          fromY: coinCenterY,
-                          toX: target.x + target.w / 2,
-                          toY: target.y + target.h / 2,
-                          coins: 40,
-                          onAllArrived: () => topBarRef.current?.triggerBounce(),
-                        });
+                        flyCoinsToPill({ trigger: triggerMainCoin, fromX: coinCenterX, fromY: coinCenterY, coins: 40 });
                       });
                       if (!shown) {
                         // Ad no disponible en Expo Go — dar monedas directamente en dev
@@ -2345,14 +2444,7 @@ export default function GameplayScreen({ navigation, route }) {
                           updateUserCurrency({ userId, coins: 40 }).then(async () => {
                             setOpenModal(null);
                             setPendingAction(null);
-                            const target = await getCoinPillTarget();
-                            triggerMainCoin({
-                              fromX: coinCenterX, fromY: coinCenterY,
-                              toX: target.x + target.w / 2,
-                              toY: target.y + target.h / 2,
-                              coins: 40,
-                              onAllArrived: () => topBarRef.current?.triggerBounce(),
-                            });
+                            flyCoinsToPill({ trigger: triggerMainCoin, fromX: coinCenterX, fromY: coinCenterY, coins: 40 });
                           });
                         }
                       }
@@ -2368,7 +2460,7 @@ export default function GameplayScreen({ navigation, route }) {
               {/* Ir a la Tienda */}
               <TouchableOpacity
                 style={styles.coinsShopBtn}
-                onPress={() => { setPendingAction(null); setOpenModal('shop'); }}
+                onPress={() => { setPendingAction(null); setOpenModal(null); openShop("varos", { afterModal: true }); }}
               >
                 <Text style={styles.coinsShopBtnText}>🛒 Ir a la Tienda</Text>
               </TouchableOpacity>
@@ -2381,21 +2473,21 @@ export default function GameplayScreen({ navigation, route }) {
           </View>
         </Modal>
 
-        {showShop && <ShopScreen visible onClose={() => setOpenModal(null)} />}
 
         {/* Victory screen — extracted to VictoryModal component */}
         {showLevelUp && <VictoryModal
           visible
           onContinue={() => {
             setShowLevelUp(false);
-            if (isChallengeMode) { navigation.navigate("MainMenu"); return; }
+            if (isChallengeMode) { navigation.navigate("Main"); return; }
             if (isMapReview) { navigation.navigate("Map"); return; }
-            if (victorySnap?.isLastLevel) { navigation.navigate("MainMenu"); return; }
-            if (completedLevelsRef.current % 5 === 0 && completedLevelsRef.current > 0) { showInterstitial(); }
+            if (victorySnap?.isLastLevel) { navigation.navigate("Main"); return; }
+            // Anuncio cada 5 niveles, salvo con Mexicanario Plus (beneficio "sin anuncios")
+            if (completedLevelsRef.current % 5 === 0 && completedLevelsRef.current > 0 && !shopState?.mexPlusActive) { showInterstitial(); }
             skipNextInitRef.current = false;
             initGame();
           }}
-          onHome={() => { setShowLevelUp(false); navigation.navigate("MainMenu"); }}
+          onHome={() => { setShowLevelUp(false); navigation.navigate("Main"); }}
           onShare={handleShare}
           isMapReview={isMapReview}
           isReviewMode={isReviewMode}
@@ -2403,7 +2495,8 @@ export default function GameplayScreen({ navigation, route }) {
           petHasPet={petState?.hasPet}
           maxCombo={maxCombo}
           victoryPhrase={isChallengeMode
-            ? (challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado")
+            ? (challengeResult?.sent ? `¡Reto enviado a ${challengeFriendName ?? "tu cuate"}!`
+              : challengeResult?.isWinner ? "¡Ganaste el reto!" : "Reto completado")
             : getCulturalVictoryPhrase(
                 victoryLevel,
                 victorySnap.pathId ?? ((isReviewMode || isMapReview) ? undefined : levelInfo?.pathId),
@@ -2420,6 +2513,8 @@ export default function GameplayScreen({ navigation, route }) {
           coins={levelUpReward?.coins || 0}
           isChallengeMode={isChallengeMode}
           challengeResult={challengeResult}
+          coinSourceRef={victoryRewardRef}
+          diamondSourceRef={victoryDiamondRef}
           flyOverlay={
             <>
               <CoinFlyOverlay coins={victoryCoins} particles={victoryCoinParticles} onCoinArrived={onVictoryCoinArrived} />
@@ -2439,7 +2534,7 @@ export default function GameplayScreen({ navigation, route }) {
           onPress={() => setShowRewardedOffer(false)}
         >
           <View style={styles.rewardedOfferCard} onStartShouldSetResponder={() => true}>
-            <StageCropped petType={petState?.petType ?? "ajolote"} stage={petState?.stage ?? 1} size={90} />
+            <StageCropped petType={normalizePetType(petState?.petType)} stage={petState?.stage ?? 1} size={90} />
             <Text style={styles.rewardedOfferTitle}>
               Tu {petState?.petName || "mascota"} quiere ayudarte 🥺
             </Text>
@@ -2461,6 +2556,13 @@ export default function GameplayScreen({ navigation, route }) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ¡Tu racha subió! — primera palabra del día */}
+      <StreakCelebration
+        visible={!!streakCelebration}
+        data={streakCelebration}
+        onClose={handleStreakCelebrationClose}
+      />
 
       {/* Main coin fly — shown when no modal is open (ad reward flow) */}
       <CoinFlyOverlay coins={mainCoins} particles={mainCoinParticles} onCoinArrived={onMainCoinArrived} />
@@ -2493,6 +2595,7 @@ export default function GameplayScreen({ navigation, route }) {
         comboCount={maxCombo}
         petType={petState?.petType}
         stage={petState?.stage ?? 1}
+        activeSkin={usePetStore.getState().activeSkin}
         style={{ position: "absolute", left: -9999, top: 0 }}
       />
 

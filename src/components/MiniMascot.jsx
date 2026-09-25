@@ -4,19 +4,9 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import { getStreakTier, MINI_STREAK_VISUALS } from "../mascota/streakVisuals";
+import { petEmoji } from "../config/petTypes";
 
-// Pet emoji map – mirrors MascotaScreen PET_TYPES
-const PET_EMOJIS = {
-  ajolote:  ["🥚", "🫧", "🦎", "🦎✨", "🐉"],
-  xolo:     ["🥚", "🐾", "🐕", "🐕✨", "🦊"],
-  alebrije: ["🥚", "🦋", "🎭", "🎭✨", "🦄"],
-};
-
-function getPetEmoji(petType, stage) {
-  const emojis = PET_EMOJIS[petType];
-  if (!emojis) return "🐾";
-  return emojis[Math.min(stage, 4)] || "🐾";
-}
+const getPetEmoji = (petType, stage) => petEmoji(petType, stage, "🐾");
 
 /**
  * Lightweight 2D mascot using emoji + RN Animated.

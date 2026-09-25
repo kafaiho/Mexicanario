@@ -10,6 +10,7 @@ import Animated, {
   cancelAnimation,
   withSequence,
   withSpring,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 import {
@@ -17,6 +18,7 @@ import {
   CELEBRATE_SPRING,
   CELEBRATE_TRANSLATE_Y,
   PARALLAX,
+  MOOD_POSE,
   SAD_DROOP,
   SHADOW_OPACITY_RANGE,
   SHADOW_SCALEX_RANGE,
@@ -34,12 +36,13 @@ import {
  * Props:
  *   assets   – { body, wings?, aura? } sources
  *   stage    – 1-6
- *   mood     – 'idle' | 'happy' | 'sad' | 'neutral' | 'joyful'
- *   reaction – 'correct' | 'wrong' | null
+ *   mood     – 'joyful' | 'happy' | 'hungry' | 'sad' | 'sleepy' (ver petMood.js)
+ *   reaction – 'correct' | 'combo' | 'wrong' | null
+ *   reactionKey – cambia en cada evento para repetir la misma reacción
  *   size     – container size in dp
  *   skin     – text/emoji or image source for regional accessory
  */
-function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = false }) {
+function PetSprite({ assets, stage, mood, reaction, reactionKey = 0, size, skin, reduceMotion = false }) {
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
   // ── Shared values ────────────────────────────────────────────────────────
@@ -49,6 +52,13 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
   const squashY = useSharedValue(1.0);
   const sadY = useSharedValue(0);
   const sadScaleV = useSharedValue(1.0);
+  const spin = useSharedValue(0);
+  // Postura según ánimo (persistente, no una reacción)
+  const pose = MOOD_POSE[mood] ?? MOOD_POSE.happy;
+  const moodY = useSharedValue(0);
+  const moodScale = useSharedValue(1.0);
+  const moodOpacity = useSharedValue(1.0);
+  const moodHop = useSharedValue(0);
   // Parallax per layer (oscillate up/down)
   const bodyParallax = useSharedValue(0);
   const wingsParallax = useSharedValue(0);
@@ -61,15 +71,43 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
       breathScale.value = 1;
       return undefined;
     }
+    const duration = BREATHING.duration * pose.breath;
     breathScale.value = withRepeat(
       withSequence(
-        withTiming(BREATHING.to, { duration: BREATHING.duration, easing: BREATHING.easing }),
-        withTiming(1.0, { duration: BREATHING.duration, easing: BREATHING.easing })
+        withTiming(BREATHING.to, { duration, easing: BREATHING.easing }),
+        withTiming(1.0, { duration, easing: BREATHING.easing })
       ),
       -1,
       false
     );
-  }, [reduceMotion, breathScale]);
+  }, [reduceMotion, breathScale, pose.breath]);
+
+  // ── Postura de ánimo: encogida si tiene hambre/triste/sueño, brincos si está feliz ──
+  useEffect(() => {
+    const animate = (sv, to) => {
+      if (reduceMotion) sv.value = to;
+      else sv.value = withTiming(to, { duration: 600, easing: Easing.inOut(Easing.ease) });
+    };
+    animate(moodY, pose.y * size);
+    animate(moodScale, pose.scale);
+    animate(moodOpacity, pose.opacity);
+
+    cancelAnimation(moodHop);
+    moodHop.value = 0;
+    if (pose.hop && !reduceMotion) {
+      moodHop.value = withRepeat(
+        withSequence(
+          withDelay(2600, withTiming(-size * 0.12, { duration: 160, easing: Easing.out(Easing.quad) })),
+          withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }),
+          withTiming(-size * 0.06, { duration: 120, easing: Easing.out(Easing.quad) }),
+          withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })
+        ),
+        -1,
+        false
+      );
+    }
+    return () => cancelAnimation(moodHop);
+  }, [mood, size, reduceMotion, pose, moodY, moodScale, moodOpacity, moodHop]);
 
   // ── Parallax loops (phase-offset per layer via inverted start) ───────────
   useEffect(() => {
@@ -139,6 +177,19 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
     );
   }, []);
 
+  // ── Combo: salto más alto + giro completo ─────────────────────────────────
+  const triggerCombo = useCallback(() => {
+    triggerCelebrate();
+    celebrateY.value = withSequence(
+      withTiming(CELEBRATE_TRANSLATE_Y * 1.8, { duration: 220, easing: Easing.out(Easing.quad) }),
+      withSpring(0, CELEBRATE_SPRING)
+    );
+    spin.value = 0;
+    spin.value = withTiming(360, { duration: 520, easing: Easing.inOut(Easing.cubic) }, () => {
+      spin.value = 0;
+    });
+  }, [triggerCelebrate]);
+
   // ── Sad droop ────────────────────────────────────────────────────────────
   const triggerSad = useCallback(() => {
     sadY.value = withTiming(SAD_DROOP.translateY, { duration: SAD_DROOP.duration, easing: SAD_DROOP.easing });
@@ -163,6 +214,8 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
       cancelAnimation(squashY);
       cancelAnimation(sadY);
       cancelAnimation(sadScaleV);
+      cancelAnimation(spin);
+      spin.value = 0;
       celebrateY.value = 0;
       squashX.value = 1;
       squashY.value = 1;
@@ -170,10 +223,11 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
       sadScaleV.value = 1;
       return undefined;
     }
-    if (reaction === 'correct') triggerCelebrate();
+    if (reaction === 'combo') triggerCombo();
+    else if (reaction === 'correct') triggerCelebrate();
     else if (reaction === 'wrong') triggerSad();
     return undefined;
-  }, [reaction, reduceMotion, triggerCelebrate, triggerSad]);
+  }, [reaction, reactionKey, reduceMotion, triggerCelebrate, triggerCombo, triggerSad]);
 
   // ── Shadow (derived from breathScale) ────────────────────────────────────
   const shadowOpacity = useDerivedValue(() =>
@@ -190,10 +244,12 @@ function PetSprite({ assets, stage, mood, reaction, size, skin, reduceMotion = f
   }));
 
   const bodyStyle = useAnimatedStyle(() => ({
+    opacity: moodOpacity.value,
     transform: [
-      { scaleX: breathScale.value * squashX.value },
-      { scaleY: breathScale.value * squashY.value * sadScaleV.value },
-      { translateY: bodyParallax.value + celebrateY.value + sadY.value },
+      { translateY: bodyParallax.value + celebrateY.value + sadY.value + moodY.value + moodHop.value },
+      { rotate: `${spin.value}deg` },
+      { scaleX: breathScale.value * squashX.value * moodScale.value },
+      { scaleY: breathScale.value * squashY.value * sadScaleV.value * moodScale.value },
     ],
   }));
 

@@ -1,4 +1,4 @@
-import { getCulturalPath } from "./mexicoZones";
+import { getCulturalPath, getCulturalSegment } from "./mexicoZones";
 
 export const NEUTRAL_CULTURAL_PATH = Object.freeze({
   id: null,
@@ -38,15 +38,23 @@ export function buildCulturalMapItems(allLevels, culturalOrderVersion, waveSize 
   }
   let lastPathKey;
   let waveIdx = 0;
+  let banner = null;
   allLevels.forEach((level, index) => {
     const path = getExplicitPath(level.pathId);
     const zone = path ?? NEUTRAL_CULTURAL_PATH;
     const pathKey = path?.id ?? "__neutral__";
     if (pathKey !== lastPathKey) {
-      items.push({ type: "path", key: `path-${index}-${pathKey}`, path, zone });
+      // Cada tramo (camino + vuelta) tiene su propio encabezado en el mapa.
+      const segment = path ? getCulturalSegment(level.editorialOrder) : null;
+      banner = {
+        type: "path", key: `path-${index}-${pathKey}`, path, zone,
+        round: segment?.round ?? null, firstIndex: index + 1, levelCount: 0,
+      };
+      items.push(banner);
       lastPathKey = pathKey;
       waveIdx = 0;
     }
+    banner.levelCount += 1;
     items.push({ type: "level", key: `level-${index}-${level.levelNumber ?? index + 1}`, level, path, zone, waveIdx: waveIdx % waveSize, displayIndex: index + 1 });
     waveIdx += 1;
   });

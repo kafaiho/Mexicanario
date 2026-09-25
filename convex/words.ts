@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import { completedWordIds, getOrderedLevels } from "./levelOrdering";
+import { completedWordIds, dictionaryEntries, dictionaryLetter, getOrderedLevels } from "./levelOrdering";
 import { insertNewLevel } from "./levelWrites";
 
 // Get all words
@@ -12,6 +12,7 @@ export const getAllWords = query({
 });
 
 // Get all words with unlocked status based on user progress
+// @deprecated — lo usan versiones viejas de la app; las nuevas usan getDictionary
 export const getWordsWithProgress = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -29,6 +30,29 @@ export const getWordsWithProgress = query({
       ...w,
       unlocked: done.has(w._id.toString()),
     }));
+  },
+});
+
+// Mexicanario (diccionario): palabras descubiertas + cuántas faltan en el camino del jugador
+export const getDictionary = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    const currentLevel = user?.currentLevel ?? 1;
+
+    const allLevels = await ctx.db.query("levels").collect();
+    const allWords = await ctx.db.query("words").collect();
+
+    // Mismo orden que el juego para que el desbloqueo coincida con los niveles
+    const ordered = getOrderedLevels(allLevels, allWords, args.userId.toString(), user?.culturalOrderVersion ?? 1);
+    const { unlocked, lockedByLetter, lockedCount, total } = dictionaryEntries(ordered, allWords, currentLevel);
+
+    return {
+      words: unlocked.map((w) => ({ _id: w._id, word: w.word, meaning: w.meaning, example: w.example, letter: dictionaryLetter(w.word) })),
+      lockedByLetter,
+      lockedCount,
+      total,
+    };
   },
 });
 

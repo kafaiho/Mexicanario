@@ -46,6 +46,13 @@ for (const entry of MEXICO_VIVIDO_WORDS.filter(({ relatedConceptId }) => related
   assert(target, `la relación conceptual de ${entry.word} debe apuntar a una entrada existente`);
   assert.equal(target.relatedConceptId, entry.conceptId, `la relación entre ${entry.word} y ${target.word} debe ser recíproca`);
 }
+// Dos niveles con la misma pista dejan dos respuestas válidas (pasó con tsotsil y tseltal).
+const clueKey = (value) => normalizePreservingEnye(value).replace(/[^a-z0-9ñ]+/g, ' ').trim();
+const clues = MEXICO_VIVIDO_WORDS.map(({ meaning }) => clueKey(meaning));
+assert.strictEqual(new Set(clues).size, clues.length, 'cada nivel necesita una pista propia');
+// Ritmo del recorrido: sin muros de palabras difíciles seguidas.
+const longestHardRun = Math.max(0, ...(MEXICO_VIVIDO_WORDS.map(({ difficulty }) => difficulty).join('').match(/3+/g) || []).map((run) => run.length));
+assert(longestHardRun <= 6, `racha de ${longestHardRun} palabras de dificultad 3 seguidas`);
 const orders = MEXICO_VIVIDO_WORDS.map(({ order }) => order);
 assert.deepStrictEqual(orders, [...orders].sort((a, b) => a - b), 'el catálogo debe estar ordenado');
 assert.strictEqual(new Set(orders).size, orders.length, 'los órdenes deben ser únicos');
@@ -98,11 +105,28 @@ assert(new Set(reviewedContexts.map(([, review]) => review.category)).size >= 4,
 
 const expectedPaths = {
   'pelota mixteca': 'mexico-profundo', ulama: 'mexico-profundo',
-  'juego de pelota mesoamericano': 'mexico-profundo', 'televisión a color': 'mexico-profundo',
+  'juego de pelota mesoamericano': 'mexico-profundo', 'Guillermo González Camarena': 'mexico-profundo',
   'lucha libre': 'feria-verbena', cibercafé: 'calle-barrio',
 };
 for (const [word, pathId] of Object.entries(expectedPaths)) {
   assert.strictEqual(MEXICO_VIVIDO_WORDS.find((entry) => entry.word === word)?.pathId, pathId, `${word} pertenece a ${pathId}`);
+}
+
+// Ampliación 2026-09: todo lo publicado es familiar y las exclusiones documentadas no regresan.
+const { EXPANSION, LEGACY_EXCLUSIONS } = require('../../shared/mexicoVividoExpansion');
+assert(MEXICO_VIVIDO_WORDS.every(({ rating }) => rating === 'familiar'), 'el catálogo es para todas las edades');
+assert(MEXICO_VIVIDO_WORDS.every(({ sourceNote }) => sourceNote === undefined || typeof sourceNote === 'string'), 'sourceNote siempre es texto');
+assert.strictEqual(
+  MEXICO_VIVIDO_WORDS.length,
+  // 205 del primer catálogo (206 menos regiomontano, que duplicaba a regio) + ampliación.
+  205 + Object.values(EXPANSION).reduce((sum, entries) => sum + entries.length, 0),
+  'cada palabra de la ampliación se publica exactamente una vez',
+);
+for (const [reasonId, { reason, words: excluded }] of Object.entries(LEGACY_EXCLUSIONS)) {
+  assert(reason && excluded.length, `la exclusión ${reasonId} necesita motivo y palabras`);
+  for (const word of excluded) {
+    assert(!words.includes(normalizePreservingEnye(word)), `${word} está excluida (${reasonId}) y no puede publicarse`);
+  }
 }
 
 assert(Array.isArray(REMOVED_WORDS) && REMOVED_WORDS.length > 0, 'debe documentar retiradas');

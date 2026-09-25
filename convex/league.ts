@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 
+import { isoWeekId } from "./weekId";
 // ── Division metadata ───────────────────────────────────────────────────────
 
 export const DIVISIONS = [
@@ -52,10 +53,7 @@ function getTodayCST(): string {
 /** Get ISO week ID like "2026-W09" from a CST date */
 function getWeekId(date?: Date): string {
   const d = date ?? nowCST();
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const dayOfYear = Math.floor((d.getTime() - jan4.getTime()) / 86400000) + 4;
-  const weekNum = Math.ceil(dayOfYear / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+  return isoWeekId(d);
 }
 
 /** Get the Monday 00:00 CST of the current week as epoch ms */

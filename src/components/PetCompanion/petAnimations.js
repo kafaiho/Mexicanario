@@ -47,6 +47,17 @@ export const SAD_DROOP = {
   easing: Easing.out(Easing.ease),
 };
 
+// ── Postura persistente según ánimo (ver petMood.js) ────────────────────────
+// y: desplazamiento vertical (fracción del tamaño), breath: multiplicador del
+// periodo de respiración, hop: brinquitos periódicos de alegría.
+export const MOOD_POSE = {
+  joyful: { y: 0,     scale: 1.0,  opacity: 1.0,  breath: 0.7, hop: true  },
+  happy:  { y: 0,     scale: 1.0,  opacity: 1.0,  breath: 1.0, hop: false },
+  hungry: { y: 0.04,  scale: 0.95, opacity: 1.0,  breath: 1.2, hop: false },
+  sad:    { y: 0.06,  scale: 0.92, opacity: 0.9,  breath: 1.4, hop: false },
+  sleepy: { y: 0.07,  scale: 0.94, opacity: 0.8,  breath: 1.8, hop: false },
+};
+
 // ── Shadow derivado del breathing ────────────────────────────────────────────
 export const SHADOW_OPACITY_RANGE = [0.12, 0.30]; // [reposo, exhale]
 export const SHADOW_SCALEX_RANGE  = [1.06, 0.94]; // escala inversa al cuerpo

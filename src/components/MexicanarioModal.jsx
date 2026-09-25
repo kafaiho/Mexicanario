@@ -8,29 +8,26 @@ const { width, height } = Dimensions.get('window');
 
 export default function MexicanarioModal({ visible, onClose }) {
   const { userId, user } = useAuth();
-  const words = useQuery(
-    api.words.getWordsWithProgress,
+  const dictionary = useQuery(
+    api.words.getDictionary,
     userId ? { userId } : "skip"
   );
 
-  if (!words) return null;
+  if (!dictionary) return null;
 
-  const unlockedCount = words.filter((w) => w.unlocked).length;
-  const totalCount = words.length;
+  // Descubiertas completas; de las bloqueadas solo llega cuántas hay por letra
+  const { words, lockedByLetter = {}, total: totalCount } = dictionary;
+  const unlockedCount = words.length;
 
-  // Sort alphabetically
-  const sorted = [...words].sort((a, b) => a.word.localeCompare(b.word));
+  // Agrupa las descubiertas por su letra (el servidor ya la calcula igual que las bloqueadas)
+  const grouped = {};
+  for (const word of [...words].sort((a, b) => a.word.localeCompare(b.word, 'es'))) {
+    (grouped[word.letter] ??= []).push(word);
+  }
 
-  // Group by first letter
-  const grouped = sorted.reduce((groups, word) => {
-    const raw = word.word.charAt(0).toUpperCase();
-    const letter = (raw === 'Ñ') ? 'Ñ' : raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (!groups[letter]) groups[letter] = [];
-    groups[letter].push(word);
-    return groups;
-  }, {});
-
-  const alphabet = Object.keys(grouped).sort();
+  // Todas las letras que tienen palabras (descubiertas o no), en orden del abecedario
+  const alphabet = [...new Set([...Object.keys(grouped), ...Object.keys(lockedByLetter)])]
+    .sort((a, b) => (a === '#') - (b === '#') || a.localeCompare(b, 'es'));
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -65,32 +62,40 @@ export default function MexicanarioModal({ visible, onClose }) {
             </View>
 
             {/* Alphabetical word list */}
-            {alphabet.map((letter) => (
+            {alphabet.map((letter) => {
+              const found = grouped[letter] ?? [];
+              const locked = lockedByLetter[letter] ?? 0;
+              return (
               <View key={letter} style={styles.letterSection}>
-                <Text style={styles.letterHeader}>{letter}</Text>
-                {grouped[letter].map((word, index) => (
-                  <View
-                    key={word._id || index}
-                    style={[styles.wordCard, !word.unlocked && styles.wordCardLocked]}
-                  >
-                    {word.unlocked ? (
-                      <>
-                        <Text style={styles.wordTitle}>{word.word}</Text>
-                        <Text style={styles.definition}>{word.meaning}</Text>
-                        {word.example ? (
-                          <Text style={styles.example}>"{word.example}"</Text>
-                        ) : null}
-                      </>
-                    ) : (
-                      <View style={styles.lockedRow}>
-                        <Text style={styles.lockIcon}>🔒</Text>
-                        <Text style={styles.lockedText}>Adivina la palabra para descubrirla</Text>
-                      </View>
-                    )}
+                <View style={styles.letterHeaderRow}>
+                  <Text style={styles.letterHeader}>{letter}</Text>
+                  <Text style={styles.letterCount}>{found.length} / {found.length + locked}</Text>
+                </View>
+                {found.map((word, index) => (
+                  <View key={word._id || index} style={styles.wordCard}>
+                    <Text style={styles.wordTitle}>{word.word}</Text>
+                    <Text style={styles.definition}>{word.meaning}</Text>
+                    {word.example ? (
+                      <Text style={styles.example}>"{word.example}"</Text>
+                    ) : null}
                   </View>
                 ))}
+                {/* Las que faltan de esta letra: una sola fila para no dibujar cientos de tarjetas */}
+                {locked > 0 && (
+                  <View style={[styles.wordCard, styles.wordCardLocked]}>
+                    <View style={styles.lockedRow}>
+                      <Text style={styles.lockIcon}>🔒</Text>
+                      <Text style={styles.lockedText}>
+                        {locked === 1
+                          ? '1 palabra por descubrir. ¡Adivínala jugando!'
+                          : `${locked} palabras por descubrir. ¡Adivínalas jugando!`}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
-            ))}
+              );
+            })}
 
             {totalCount === 0 && (
               <View style={styles.noResults}>
@@ -138,7 +143,9 @@ const styles = StyleSheet.create({
   bookImage: { width: width * 0.2, height: width * 0.2 },
 
   letterSection: { marginBottom: height * 0.025 },
-  letterHeader: { fontSize: width * 0.053, fontWeight: 'bold', color: '#8B4513', marginBottom: height * 0.012 },
+  letterHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: height * 0.012 },
+  letterHeader: { fontSize: width * 0.053, fontWeight: 'bold', color: '#8B4513' },
+  letterCount: { fontSize: width * 0.032, fontWeight: 'bold', color: '#A0522D' },
 
   wordCard: {
     backgroundColor: '#F5DEB3',
@@ -158,7 +165,7 @@ const styles = StyleSheet.create({
 
   lockedRow: { flexDirection: 'row', alignItems: 'center', gap: width * 0.02 },
   lockIcon: { fontSize: width * 0.053 },
-  lockedText: { color: '#A08060', fontSize: width * 0.034, fontStyle: 'italic' },
+  lockedText: { flex: 1, color: '#A08060', fontSize: width * 0.034, fontStyle: 'italic' },
 
   noResults: { alignItems: 'center', paddingVertical: height * 0.025 },
   noResultsText: { fontSize: width * 0.042, color: '#8B4513', fontStyle: 'italic' },

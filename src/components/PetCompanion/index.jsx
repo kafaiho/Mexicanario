@@ -1,9 +1,15 @@
+import { useIsFocused } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
-import usePetStore, { getMood, getStage } from '../../store/usePetStore';
+import { normalizePetType } from '../../config/petTypes';
+import usePetStore, { getStage, SKIN_CONFIG } from '../../store/usePetStore';
 import { playPetSound } from '../../utils/soundManager';
 import { PARTICLE_DURATION } from './petAnimations';
-import { FALLBACK_ASSETS, PET_ASSETS, STAGE_SIZES, getRegionSkin } from './petAssets';
+import Pet3DView from '../Pet3D/Pet3DView';
+import { supports3D } from '../Pet3D/petModels';
+import { STAGE_SIZES, bodyForMood, getRegionSkin, getStageAssets } from './petAssets';
+import PetMoodIndicator from './PetMoodIndicator';
+import { usePetMood } from './petMood';
 import PetParticles from './PetParticles';
 import PetSprite from './PetSprite';
 
@@ -14,25 +20,31 @@ const KEYBOARD_HEIGHT = Math.min(250, height * 0.37);
  * PetCompanion — orquesta el sprite animado + partículas + store.
  *
  * Props:
- *   reaction  – 'correct' | 'wrong' | null  (driven by GameplayScreen)
+ *   reaction  – 'correct' | 'combo' | 'wrong' | null  (driven by GameplayScreen)
+ *   reactionKey – cambia en cada evento del juego para repetir la reacción
  *   compact   – boolean (true = flotando sobre teclado, false = pantalla completa)
  *   region    – string (e.g., 'CDMX', 'Norte') for regional accessories
  */
-export default function PetCompanion({ reaction = null, compact = false, region = null, reduceMotion = false }) {
+export default function PetCompanion({ reaction = null, reactionKey = 0, compact = false, region = null, reduceMotion = false }) {
   const vinculo = usePetStore((s) => s.vinculo);
-  const petType = usePetStore((s) => s.petType);
+  const petType = normalizePetType(usePetStore((s) => s.petType));
   const caricia = usePetStore((s) => s.caricia);
+  const isFocused = useIsFocused();
 
   const stage = getStage(vinculo);
-  const mood = getMood(vinculo);
+  const { mood } = usePetMood();
 
   // Resolve assets for this pet type + stage
-  const typeAssets = (PET_ASSETS[petType] ?? FALLBACK_ASSETS)[stage] ?? (FALLBACK_ASSETS[stage] ?? FALLBACK_ASSETS[1]);
+  const stageAssets = getStageAssets(petType, stage);
+  const moodBody = bodyForMood(stageAssets, mood);
+  const typeAssets = moodBody === stageAssets.body ? stageAssets : { ...stageAssets, body: moodBody };
 
   const sizes = STAGE_SIZES[stage] ?? STAGE_SIZES[1];
   const size = compact ? sizes.compact : sizes.full;
 
-  const skin = getRegionSkin(region);
+  // El traje comprado se ve siempre; si no hay, un detalle de la región de la palabra
+  const activeSkin = usePetStore((s) => s.activeSkin);
+  const skin = (activeSkin && SKIN_CONFIG[activeSkin]?.emoji) || getRegionSkin(region);
 
   // Tap reaction — triggers celebrate animation on the sprite
   const [tapReaction, setTapReaction] = useState(null);
@@ -51,17 +63,32 @@ export default function PetCompanion({ reaction = null, compact = false, region 
   // Particles burst on correct answer (game) or tap
   const [particlesVisible, setParticlesVisible] = useState(false);
   useEffect(() => {
-    if (reaction === 'correct' && !reduceMotion) {
+    if ((reaction === 'correct' || reaction === 'combo') && !reduceMotion) {
       setParticlesVisible(true);
       const t = setTimeout(() => setParticlesVisible(false), PARTICLE_DURATION + 100);
       return () => clearTimeout(t);
     }
     setParticlesVisible(false);
     return undefined;
-  }, [reaction, reduceMotion]);
+  }, [reaction, reactionKey, reduceMotion]);
 
   // Active reaction: game reaction takes priority, tap fills in otherwise
   const activeReaction = reaction || tapReaction;
+
+  // Tecolote, Monarca y Ayotl en 3D; con movimiento reducido (o el Nahual) queda el sprite 2D
+  const use3D = supports3D(petType) && !reduceMotion;
+  const sprite = (
+    <PetSprite
+      assets={typeAssets}
+      stage={stage}
+      mood={mood}
+      reaction={activeReaction}
+      reactionKey={reactionKey}
+      size={size}
+      skin={skin}
+      reduceMotion={reduceMotion}
+    />
+  );
 
   return (
     <TouchableOpacity
@@ -70,16 +97,23 @@ export default function PetCompanion({ reaction = null, compact = false, region 
       style={compact ? styles.compact : styles.full}
     >
       <View style={{ width: size, height: size }}>
-        <PetSprite
-          assets={typeAssets}
-          stage={stage}
-          mood={mood}
-          reaction={activeReaction}
-          size={size}
-          skin={skin}
-          reduceMotion={reduceMotion}
-        />
-        {particlesVisible && !reduceMotion && <PetParticles stage={stage} />}
+        {use3D ? (
+          <Pet3DView
+            petType={petType}
+            stage={stage}
+            size={size}
+            active={isFocused}
+            mood={mood}
+            reaction={activeReaction}
+            reactionKey={reactionKey}
+            fps={30}
+            fallback={sprite}
+          />
+        ) : sprite}
+        <PetMoodIndicator mood={mood} size={size} reduceMotion={reduceMotion} />
+        {particlesVisible && !reduceMotion && (
+          <PetParticles key={reactionKey} stage={stage} count={reaction === 'combo' ? 14 : 8} />
+        )}
       </View>
     </TouchableOpacity>
   );

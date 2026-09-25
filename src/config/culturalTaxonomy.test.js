@@ -25,8 +25,8 @@ const expectedCollectionIds = [
 
 assert.deepEqual(CULTURAL_PATHS.map(({ id }) => id), expectedPathIds);
 assert.deepEqual(COLLECTIONS.map(({ id }) => id), expectedCollectionIds);
-assert.equal(PLACES.length, 20);
-assert.equal(PLACE_REGIONS.length, 20);
+assert.equal(PLACES.length, 37);
+assert.equal(PLACE_REGIONS.length, 37);
 assert.equal(resolvePlace('Sinaloa').id, 'sinaloa');
 assert.equal(getMacroKey('Sinaloa'), 'norte');
 
@@ -88,12 +88,20 @@ const legacyGroups = {
   chiapas: ['Sur'],
   guerrero: ['Pacífico', 'Costas'],
 };
+const STATE_PLACES = {
+  Sinaloa: 'sinaloa', Chihuahua: 'chihuahua', Sonora: 'sonora', 'Baja California': 'baja-california',
+  Coahuila: 'coahuila', Durango: 'durango', Zacatecas: 'zacatecas', 'Estado de México': 'estado-de-mexico',
+  Morelos: 'morelos', Hidalgo: 'hidalgo', Tlaxcala: 'tlaxcala', Guanajuato: 'guanajuato',
+  'Querétaro': 'queretaro', Aguascalientes: 'aguascalientes', 'San Luis Potosí': 'san-luis-potosi',
+  'Baja California Sur': 'baja-california-sur', Tamaulipas: 'tamaulipas',
+};
 assert.ok(Array.isArray(LEGACY_REGIONS));
 for (const [key, rawRegions] of Object.entries(legacyGroups)) {
   for (const raw of rawRegions) {
     assert.equal(getMacroKey(raw), key, `${raw} must preserve its legacy group`);
     assert.equal(getRegionMeta(raw).key, key);
-    if (raw === 'Sinaloa') assert.equal(resolvePlace(raw).id, 'sinaloa');
+    // Los estados son lugares explícitos; las regiones amplias siguen sin clasificar.
+    if (STATE_PLACES[raw]) assert.equal(resolvePlace(raw).id, STATE_PLACES[raw]);
     else assert.equal(resolvePlace(raw).id, 'unclassified', `${raw} must not become an explicit place`);
   }
 }

@@ -158,7 +158,12 @@
       "Bash(eas submit:*)",
       "Bash(npm info:*)",
       "Bash(node -e \"console.log\\(require\\(''./node_modules/react-native-screens/package.json''\\).version\\)\")",
-      "Bash(eas build:cancel)"
+      "Bash(eas build:cancel)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:support.google.com)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(eas update:*)"
     ]
   }
 }

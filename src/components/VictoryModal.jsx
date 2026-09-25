@@ -10,8 +10,11 @@ import {
   View,
 } from "react-native";
 import * as Speech from "expo-speech";
+import { useReducedMotion } from "react-native-reanimated";
+import useCountUp from "../hooks/useCountUp";
 
 const CONFETTI_COUNT = 10;
+const REWARD_DELAY = 450; // ms tras abrir: entran los pills de recompensa
 const CONFETTI_COLORS = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#FF922B", "#CC5DE8", "#F06595", "#74C0FC"];
 
 /**
@@ -38,6 +41,8 @@ const CONFETTI_COLORS = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#FF922B", 
  *   victoryCoins      number
  *   victoryCoinParticles  array
  *   onCoinArrived     () => void
+ *   coinSourceRef     ref — se asigna al pill de monedas (origen del vuelo al TopBar)
+ *   diamondSourceRef  ref — se asigna al pill de diamantes
  *   isLastLevel       boolean
  */
 export default function VictoryModal({
@@ -64,7 +69,36 @@ export default function VictoryModal({
   onChallengeFriend = null,
   isChallengeMode = false,
   challengeResult = null,
+  coinSourceRef = null,
+  diamondSourceRef = null,
 }) {
+  const reduceMotion = useReducedMotion();
+  // Recompensas: entran una por una y el número cuenta desde 0
+  const pillAnims = useMemo(() => [0, 1, 2].map(() => new Animated.Value(0)), []);
+  const coinsShown = useCountUp(coins, { active: visible, delay: REWARD_DELAY + 150, duration: 600, reduceMotion });
+  const diamondsShown = useCountUp(diamonds, { active: visible, delay: REWARD_DELAY + 300, duration: 600, reduceMotion });
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    if (reduceMotion) { pillAnims.forEach((a) => a.setValue(1)); return undefined; }
+    pillAnims.forEach((a) => a.setValue(0));
+    const anim = Animated.sequence([
+      Animated.delay(REWARD_DELAY),
+      Animated.stagger(150, pillAnims.map((a) =>
+        Animated.spring(a, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true })
+      )),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [visible, reduceMotion]);
+
+  const pillStyle = (a) => ({
+    opacity: a,
+    transform: [
+      { scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) },
+      { translateY: a.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
+    ],
+  });
   const confettiAnims = useMemo(
     () =>
       Array(CONFETTI_COUNT)
@@ -217,7 +251,25 @@ export default function VictoryModal({
           ) : null}
 
           {/* Challenge result */}
-          {isChallengeMode && challengeResult && (
+          {isChallengeMode && challengeResult?.sent && (
+            <View style={s.challengeResultCard}>
+              <Text style={s.challengeResultTitle}>⚔️ ¡Reto enviado a {challengeResult.friendName}!</Text>
+              <Text style={s.challengeStatVal}>
+                Tu marca: {challengeResult.attempts} {challengeResult.attempts === 1 ? "intento" : "intentos"} · {Math.round(challengeResult.timeMs / 1000)} s
+              </Text>
+              <Text style={[s.challengeReward, { color: "#F8BE17" }]}>
+                Tiene 24 h para superarte. Si gana tu cuate, se lleva las 100 monedas.
+              </Text>
+            </View>
+          )}
+          {isChallengeMode && challengeResult?.error && (
+            <View style={s.challengeResultCard}>
+              <Text style={s.challengeResultTitle}>⚠️ No se pudo guardar el reto</Text>
+              <Text style={s.challengeStatVal}>{challengeResult.error}</Text>
+            </View>
+          )}
+
+          {isChallengeMode && challengeResult && !challengeResult.sent && !challengeResult.error && (
             <View style={s.challengeResultCard}>
               <Text style={s.challengeResultTitle}>
                 {challengeResult.isWinner ? "🏆 ¡Ganaste el reto!" : "😢 Perdiste el reto"}
@@ -280,19 +332,23 @@ export default function VictoryModal({
 
           {/* Rewards row */}
           <View style={s.rewardRow}>
-            <View style={s.rewardPill}>
+            <Animated.View style={[s.rewardPill, pillStyle(pillAnims[0])]}>
               <Text style={{ fontSize: 16 }}>🐾</Text>
               <Text style={s.rewardText}>+Vínculo</Text>
-            </View>
+            </Animated.View>
             {coins > 0 && (
-              <View style={s.rewardPill}>
-                <Image source={require("../../assets/icons/coin.png")} style={s.rewardIcon} />
-                <Text style={s.rewardText}>+{coins}</Text>
+              <View ref={coinSourceRef} collapsable={false}>
+                <Animated.View style={[s.rewardPill, s.rewardPillGold, pillStyle(pillAnims[1])]}>
+                  <Image source={require("../../assets/icons/coin.png")} style={s.rewardIcon} />
+                  <Text style={[s.rewardText, s.rewardTextGold]}>+{coinsShown}</Text>
+                </Animated.View>
               </View>
             )}
-            <View style={s.rewardPill}>
-              <Image source={require("../../assets/icons/diamond.png")} style={s.rewardIcon} />
-              <Text style={s.rewardText}>+{diamonds}</Text>
+            <View ref={diamondSourceRef} collapsable={false}>
+              <Animated.View style={[s.rewardPill, pillStyle(pillAnims[2])]}>
+                <Image source={require("../../assets/icons/diamond.png")} style={s.rewardIcon} />
+                <Text style={s.rewardText}>+{diamondsShown}</Text>
+              </Animated.View>
             </View>
           </View>
         </View>
@@ -497,7 +553,13 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
   },
-  rewardText: { color: "#FFE4B5", fontWeight: "700", fontSize: 14 },
+  rewardText: { color: "#FFE4B5", fontWeight: "700", fontSize: 14, minWidth: 28 },
+  rewardPillGold: {
+    backgroundColor: "rgba(248,190,23,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(248,190,23,0.6)",
+  },
+  rewardTextGold: { color: "#FFD54F", fontWeight: "900" },
   rewardIcon: { width: 18, height: 18, resizeMode: "contain" },
 
   // Buttons

@@ -1,163 +1,126 @@
 /**
- * DailyRewardModal — Sistema de recompensa diaria (7 días)
+ * DailyRewardModal — "¡Tu premio de hoy!" (vista previa del premio diario unificado)
  *
- * Día 1: 10 varos  · Día 2: 15  · Día 3: 20  · Día 4: 25
- * Día 5: 30 varos  · Día 6: 40  · Día 7: 🪅 Piñata (50-200 aleatorio)
+ * Solo hay un premio diario y lo paga el servidor: recordDailyPlay lo entrega
+ * al acertar la primera palabra del día (ciclo de 7 días: 10·15·20·25·30·35
+ * varos y piñata de 50-200 el día 7; ver convex/streakMath.ts). Al abrir la app
+ * este modal muestra lo que te espera y te manda a jugar para cobrarlo; el cobro
+ * se celebra en StreakCelebration.
  *
- * Lógica:
- * - Si el usuario no ha reclamado hoy → mostrar modal
- * - Si la última reclamación fue ayer → avanzar día (1-7 en ciclo)
- * - Si pasaron 2+ días sin reclamar → resetear a día 1
+ * Se muestra una vez al día, solo si todavía no has jugado hoy.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Easing,
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 import { api } from "../../convex/_generated/api";
+import { getDailyStreakReward } from "../config/streakRewards";
 import { useAuth } from "../context/AuthContext";
-import { notifySuccess } from "../services/haptics";
-import { playSound } from "../utils/soundManager";
-import { useUserMutation } from "../hooks/useUserMutation";
+import { tapLight, tapMedium } from "../services/haptics";
 
 const { width } = Dimensions.get("window");
 const CARD_W = Math.min(width * 0.88, 380);
 
-const STORAGE_KEY_DATE = "@mexicanario_daily_reward_date";
-const STORAGE_KEY_DAY  = "@mexicanario_daily_reward_day";
+const STORAGE_KEY_SEEN = "@mexicanario_daily_preview_date";
+// Clave del sistema anterior (cobro local): solo sirve para saber que no es la primera vez
+const LEGACY_KEY_DATE = "@mexicanario_daily_reward_date";
 
-const DAY_REWARDS = [5, 8, 10, 12, 15, 18, null]; // null = Piñata (día 7)
-const DAY_LABELS  = ["Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "🪅 Día 7"];
+const CYCLE = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, ...getDailyStreakReward(day) }));
 
-function getPiñataReward() {
-  return Math.floor(Math.random() * 76) + 25; // 25-100
-}
-
-function getTodayString() {
-  return new Date().toISOString().slice(0, 10);
-}
-function getYesterdayString() {
+function getLocalDayString() {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
 /**
- * Hook to manage daily reward state. Returns { shouldShow, currentDay, claimReward }
- * Call checkDailyReward() on mount (after userId is available).
+ * Decide si mostrar la vista previa del premio de hoy.
+ * Returns { shouldShow, status, dismiss }
  */
 export function useDailyReward() {
-  const [shouldShow, setShouldShow] = useState(false);
-  const [currentDay, setCurrentDay] = useState(1); // 1-7
-  const [rewardCoins, setRewardCoins] = useState(0);
-  const [claimed, setClaimed] = useState(false);
-
   const { userId } = useAuth();
-  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
+  const status = useQuery(api.streaks.getStreakStatus, userId ? { userId } : "skip");
+  const [shouldShow, setShouldShow] = useState(false);
+  const checkedRef = useRef(false);
+  const hasStatus = status !== undefined;
 
-  const check = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const lastDate = await AsyncStorage.getItem(STORAGE_KEY_DATE);
-      const lastDayStr = await AsyncStorage.getItem(STORAGE_KEY_DAY);
-      const today = getTodayString();
-      const yesterday = getYesterdayString();
+  useEffect(() => {
+    if (!userId || !hasStatus || checkedRef.current) return undefined;
+    checkedRef.current = true;
+    // Pequeña pausa para que la app termine de cargar visualmente
+    const timer = setTimeout(async () => {
+      try {
+        if (!status || status.playedToday || !status.todayReward) return;
+        const today = getLocalDayString();
+        const [seen, legacy] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEY_SEEN),
+          AsyncStorage.getItem(LEGACY_KEY_DATE),
+        ]);
+        if (seen === today) return;
+        await AsyncStorage.setItem(STORAGE_KEY_SEEN, today);
+        // Primera vez que abre la app: no interrumpir el onboarding
+        if (!seen && !legacy) return;
+        setShouldShow(true);
+      } catch (_) {/* ignore storage errors */}
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [userId, hasStatus]);
 
-      // Already claimed today
-      if (lastDate === today) return;
+  const dismiss = useCallback(() => setShouldShow(false), []);
 
-      // First-ever launch: don't show DailyReward — let onboarding run undisturbed.
-      // The reward will appear on day 2 when lastDate exists.
-      if (!lastDate) {
-        await AsyncStorage.setItem(STORAGE_KEY_DATE, today);
-        await AsyncStorage.setItem(STORAGE_KEY_DAY, "1");
-        return;
-      }
-
-      let nextDay = 1;
-      if (lastDate === yesterday) {
-        // Consecutive day — advance
-        nextDay = lastDayStr ? Math.min(parseInt(lastDayStr, 10) % 7 + 1, 7) : 1;
-      }
-      // else: 2+ days missed → reset to 1
-
-      const coins = DAY_REWARDS[nextDay - 1] ?? getPiñataReward();
-      setCurrentDay(nextDay);
-      setRewardCoins(coins);
-      setShouldShow(true);
-    } catch (_) {/* ignore storage errors */}
-  }, [userId]);
-
-  const claim = useCallback(async () => {
-    if (!userId || claimed) return;
-    try {
-      const today = getTodayString();
-      // Use the already-computed rewardCoins from check() — don't re-roll piñata
-      const coinsActual = rewardCoins || (DAY_REWARDS[currentDay - 1] ?? 10);
-      await AsyncStorage.setItem(STORAGE_KEY_DATE, today);
-      await AsyncStorage.setItem(STORAGE_KEY_DAY, String(currentDay));
-      await updateCurrency({ userId, coins: coinsActual, diamonds: 0 });
-      setClaimed(true);
-      playSound("milestone");
-      notifySuccess();
-    } catch (_) {/* ignore */}
-  }, [userId, currentDay, claimed, updateCurrency]);
-
-  const dismiss = useCallback(() => {
-    setShouldShow(false);
-    setClaimed(false);
-  }, []);
-
-  return { shouldShow, currentDay, rewardCoins, claimed, check, claim, dismiss };
+  return { shouldShow, status, dismiss };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function DailyRewardModal({ visible, currentDay, rewardCoins, claimed, onClaim, onDismiss }) {
+export default function DailyRewardModal({ visible, status, onPlay, onDismiss }) {
+  const reduceMotion = useReducedMotion();
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
-  const piñataAnim = useRef(new Animated.Value(0)).current;
-  const coinsAnim = useRef(new Animated.Value(0)).current;
+  const idleLoop = useRef(new Animated.Value(0)).current; // bob del encabezado + pulso del día de hoy
 
   useEffect(() => {
-    if (visible) {
-      scaleAnim.setValue(0.7);
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 6,
-        tension: 120,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
+    if (!visible) return undefined;
+    idleLoop.setValue(0);
+    if (reduceMotion) { scaleAnim.setValue(1); return undefined; }
+    scaleAnim.setValue(0.7);
+    Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 120, useNativeDriver: true }).start();
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(idleLoop, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(idleLoop, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [visible, reduceMotion]);
 
-  useEffect(() => {
-    if (claimed) {
-      // Piñata burst animation
-      Animated.sequence([
-        Animated.timing(piñataAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.timing(piñataAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(piñataAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]).start();
-      Animated.timing(coinsAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    } else {
-      piñataAnim.setValue(0);
-      coinsAnim.setValue(0);
-    }
-  }, [claimed]);
+  const reward = status?.todayReward;
+  if (!reward) return null;
 
-  const isLastDay = currentDay === 7;
+  const currentStreak = status?.currentStreak ?? 0;
+  const { cycleDay, isPinata, coins, pinataRange, nextStreak } = reward;
+  const daysToPinata = 7 - cycleDay;
 
-  const claimBtnScale = piñataAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
-  const coinsOpacity = coinsAnim;
+  const subtitle = reward.streakWillReset
+    ? "¡Nueva racha! Empieza hoy y vuelve a subir 🔥"
+    : currentStreak > 0
+      ? `Juega hoy y tu racha sube a ${nextStreak} 🔥`
+      : "Acierta tu primera palabra del día y cóbralo";
+
+  const headerBob = idleLoop.interpolate({ inputRange: [0, 1], outputRange: [0, -6] });
+  const headerSwing = idleLoop.interpolate({ inputRange: [0, 1], outputRange: ["-6deg", "6deg"] });
+  const todayPulse = idleLoop.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1.16] });
+
+  const handlePlay = () => { tapMedium(); onPlay?.(); };
+  const handleLater = () => { tapLight(); onDismiss?.(); };
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
@@ -165,72 +128,71 @@ export default function DailyRewardModal({ visible, currentDay, rewardCoins, cla
         <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.emoji}>🎁</Text>
-            <Text style={styles.title}>¡Recompensa Diaria!</Text>
-            <Text style={styles.subtitle}>Entra todos los días y acumula varos</Text>
+            <Animated.Text
+              style={[
+                styles.emoji,
+                isPinata && styles.emojiPinata,
+                { transform: [{ translateY: isPinata ? 0 : headerBob }, { rotate: isPinata ? headerSwing : "0deg" }] },
+              ]}
+            >
+              {isPinata ? "🪅" : "🎁"}
+            </Animated.Text>
+            <Text style={styles.title}>¡Tu premio de hoy!</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
 
-          {/* Day grid */}
+          {reward.shieldsWillSave && (
+            <View style={styles.shieldPill}>
+              <Text style={styles.shieldText}>🛡️ Tus escudos protegieron tu racha</Text>
+            </View>
+          )}
+
+          {/* Ciclo de 7 días */}
           <View style={styles.grid}>
-            {DAY_LABELS.map((label, i) => {
-              const dayNum = i + 1;
-              const isToday = dayNum === currentDay;
-              const isPast = dayNum < currentDay;
-              const coins = DAY_REWARDS[i];
+            {CYCLE.map(({ day, coins: dayCoins, isPinata: dayIsPinata }) => {
+              const isToday = day === cycleDay;
+              const isPast = day < cycleDay;
               return (
-                <View
-                  key={dayNum}
+                <Animated.View
+                  key={day}
                   style={[
                     styles.dayCell,
                     isPast && styles.dayCellPast,
+                    dayIsPinata && styles.dayCellPiñata,
                     isToday && styles.dayCellToday,
-                    dayNum === 7 && styles.dayCellPiñata,
+                    isToday && { transform: [{ scale: todayPulse }] },
                   ]}
                 >
-                  <Text style={styles.dayLabel}>{label}</Text>
-                  <Text style={styles.dayCoins}>
-                    {dayNum === 7 ? "🪅" : `🪙 ${coins}`}
-                  </Text>
+                  <Text style={styles.dayLabel}>{dayIsPinata ? "🪅 Día 7" : `Día ${day}`}</Text>
+                  <Text style={styles.dayCoins}>{dayIsPinata ? "🪅" : `🪙 ${dayCoins}`}</Text>
                   {isPast && <Text style={styles.checkmark}>✓</Text>}
-                </View>
+                </Animated.View>
               );
             })}
           </View>
 
-          {/* Reward display */}
-          <Animated.View style={[styles.rewardBanner, claimed && { opacity: coinsOpacity }]}>
-            {isLastDay ? (
-              <Text style={styles.rewardText}>
-                {claimed ? `🪅 ¡Piñata! +${rewardCoins} varos` : "🪅 ¡Piñata sorpresa!"}
-              </Text>
-            ) : (
-              <Text style={styles.rewardText}>
-                {claimed ? `✅ +${rewardCoins} varos añadidos` : `🪙 +${rewardCoins} varos hoy`}
-              </Text>
-            )}
-          </Animated.View>
-
-          {/* CTA */}
-          {!claimed ? (
-            <Animated.View style={{ transform: [{ scale: claimBtnScale }] }}>
-              <TouchableOpacity style={styles.claimBtn} onPress={onClaim} activeOpacity={0.8}>
-                <Text style={styles.claimBtnText}>
-                  {isLastDay ? "🪅 ¡Romper la Piñata!" : "🙌 ¡Reclamar recompensa!"}
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          ) : (
-            <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.8}>
-              <Text style={styles.dismissBtnText}>¡Órale, gracias! 👊</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Streak reminder */}
-          {!claimed && (
-            <Text style={styles.streakHint}>
-              ⚡ No rompas la racha — vuelve mañana por más
+          {/* Premio de hoy */}
+          <View style={[styles.rewardBanner, isPinata && styles.rewardBannerPinata]}>
+            <Text style={styles.rewardText}>
+              {isPinata
+                ? `🪅 ¡Hoy toca piñata! ${pinataRange[0]}–${pinataRange[1]} varos`
+                : `🪙 +${coins} varos te esperan`}
             </Text>
-          )}
+          </View>
+
+          <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.8} accessibilityRole="button">
+            <Text style={styles.playBtnText}>🎮 ¡Jugar y cobrar!</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleLater} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }} accessibilityRole="button">
+            <Text style={styles.laterText}>Más tarde</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.hint}>
+            {daysToPinata > 0
+              ? `Se cobra al acertar tu primera palabra · faltan ${daysToPinata} ${daysToPinata === 1 ? "día" : "días"} para la 🪅`
+              : "Se cobra al acertar tu primera palabra del día"}
+          </Text>
         </Animated.View>
       </View>
     </Modal>
@@ -260,11 +222,16 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emoji: {
     fontSize: 42,
+    lineHeight: 52,
     marginBottom: 4,
+  },
+  emojiPinata: {
+    fontSize: 54,
+    lineHeight: 64,
   },
   title: {
     fontSize: 22,
@@ -278,6 +245,16 @@ const styles = StyleSheet.create({
     marginTop: 3,
     textAlign: "center",
   },
+  shieldPill: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#7CB87A",
+    borderWidth: 1.5,
+    borderRadius: 99,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 10,
+  },
+  shieldText: { color: "#2E7D32", fontSize: 12, fontWeight: "800" },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -306,7 +283,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFEAAC",
     borderColor: "#F8BE17",
     borderWidth: 2.5,
-    transform: [{ scale: 1.08 }],
   },
   dayCellPiñata: {
     backgroundColor: "#FFCCE0",
@@ -342,49 +318,47 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
+  rewardBannerPinata: {
+    backgroundColor: "#4A1030",
+    borderWidth: 2,
+    borderColor: "#E0559A",
+  },
   rewardText: {
     fontSize: 16,
     fontWeight: "900",
     color: "#F8BE17",
     textAlign: "center",
   },
-  claimBtn: {
+  playBtn: {
     backgroundColor: "#D36B1E",
     borderRadius: 14,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    marginBottom: 10,
+    marginBottom: 8,
     shadowColor: "#8B4513",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
   },
-  claimBtnText: {
+  playBtnText: {
     fontSize: 16,
     fontWeight: "900",
     color: "#FFF",
     textAlign: "center",
     letterSpacing: 0.3,
   },
-  dismissBtn: {
-    backgroundColor: "#7CB87A",
-    borderRadius: 14,
-    paddingHorizontal: 28,
-    paddingVertical: 13,
-    marginBottom: 10,
+  laterText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#8B5E3C",
+    paddingVertical: 4,
   },
-  dismissBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#FFF",
-    textAlign: "center",
-  },
-  streakHint: {
+  hint: {
     fontSize: 11,
     color: "#8B5E3C",
     textAlign: "center",
     opacity: 0.8,
-    marginTop: 2,
+    marginTop: 6,
   },
 });

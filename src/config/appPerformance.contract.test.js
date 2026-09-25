@@ -11,6 +11,7 @@ const mainMenuSource = fs.readFileSync('src/screens/MainMenuScreen.jsx', 'utf8')
 const usersSource = fs.readFileSync('convex/users.ts', 'utf8');
 const mascotaSource = fs.readFileSync('src/screens/MascotaScreen.jsx', 'utf8');
 const floatingMascotSource = fs.readFileSync('src/components/PetCompanion/FloatingMascot.jsx', 'utf8');
+const shopContextSource = fs.readFileSync('src/context/ShopContext.jsx', 'utf8');
 
 assert.doesNotMatch(
   appSource,
@@ -38,11 +39,16 @@ assert.doesNotMatch(topBarSource, /api\.friends\.getUnreadFriendNotifications/);
 
 assert.doesNotMatch(gameplaySource, /api\.levels\.getAllLevels/);
 assert.doesNotMatch(mainMenuSource, /api\.levels\.getAllLevels/);
+// Una sola tienda para toda la app, montada solo mientras está abierta.
 assert.match(
-  mainMenuSource,
-  /\{showShop\s*&&\s*\(\s*<ShopScreen\b/,
-  'La tienda del menú debe desmontarse al cerrarla',
+  shopContextSource,
+  /\{shop\.open\s*&&\s*\(\s*<ShopScreen\b/,
+  'La tienda debe desmontarse al cerrarla',
 );
+for (const [name, source] of [['App', appSource], ['MainMenu', mainMenuSource], ['TopBar', topBarSource], ['Gameplay', gameplaySource], ['Mascota', mascotaSource]]) {
+  assert.doesNotMatch(source, /<ShopScreen\b/, `${name} debe abrir la tienda con useShop() en lugar de montar otra copia`);
+}
+assert.match(appSource, /<ShopProvider>/, 'App debe envolver la navegación con ShopProvider');
 assert.match(usersSource, /levelGroups/);
 assert.match(usersSource, /totalLevels/);
 assert.match(
@@ -57,11 +63,6 @@ assert.match(mascotaSource, /const isFocused = useIsFocused\(\)/);
 assert.match(mascotaSource, /<FloatingMascot[\s\S]*?active=\{isFocused\}/);
 assert.match(floatingMascotSource, /cancelAnimation\(floatY\)/);
 
-assert.match(
-  appSource,
-  /\{showShop\s*&&\s*\(\s*<ShopScreen\b/,
-  'La tienda debe montarse solamente cuando está abierta',
-);
 
 const tickBody = wheelSource.match(/tickRef\.current\s*=\s*setInterval\([\s\S]*?\},\s*1000\s*\)/)?.[0] ?? '';
 assert.ok(tickBody, 'WheelModal debe conservar su actualización visual cada segundo');

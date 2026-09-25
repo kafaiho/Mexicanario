@@ -1,4 +1,5 @@
 ﻿import Constants from "expo-constants";
+import { normalizePetType } from "../config/petTypes";
 
 const isExpoGo = Constants.appOwnership === "expo";
 let Audio = null;
@@ -125,7 +126,9 @@ export async function preloadSounds() {
 const _lastPlay = {};
 const _THROTTLE = 35; // ms — prevents echo from overlapping async calls
 
-export async function playSound(name) {
+// rate > 1 sube el tono (sin corrección de pitch) — usado para el "tin-tin-tin"
+// ascendente de las monedas al llegar al contador.
+export async function playSound(name, rate = 1) {
   if (!Audio || !sfxEnabled) return;
 
   // Throttle: skip if same sound played <35ms ago (prevents echo)
@@ -137,7 +140,7 @@ export async function playSound(name) {
     const sound = await ensureSoundLoaded(name);
     if (!sound) return;
     // replayAsync = atomic stop + play from 0 (single native bridge call)
-    await sound.replayAsync({ shouldPlay: true, positionMillis: 0 });
+    await sound.replayAsync({ shouldPlay: true, positionMillis: 0, rate, shouldCorrectPitch: false });
   } catch (_) { }
 }
 
@@ -147,20 +150,22 @@ export async function playSound(name) {
 export function playPetSound(event, petType) {
   if (!Audio) return;
   // event: 'happy' | 'sad' | 'levelup'
-  // petType: 'ajolote' | 'alebrije' | 'xolo' | 'nahual_norte' | 'nahual_sur' | 'nahual_urbano'
+  // petType: 'tecolote' | 'monarca' | 'ayotl' | 'nahual_*' (acepta los tipos anteriores)
   if (event === "sad") {
     playSound("pet_sad");
   } else if (event === "levelup") {
     playSound("pet_levelup");
   } else if (event === "happy" && petType) {
-    // Nahual variants map to base pet sounds (no dedicated files)
-    const NAHUAL_SOUND_MAP = {
+    // Sin archivos propios todavía: cada mascota usa el sonido de la mascota a la que reemplazó
+    const PET_SOUND_MAP = {
+      tecolote: "pet_xolo",
+      monarca: "pet_alebrije",
+      ayotl: "pet_ajolote",
       nahual_norte: "pet_xolo",
       nahual_sur: "pet_ajolote",
       nahual_urbano: "pet_alebrije",
     };
-    const soundKey = NAHUAL_SOUND_MAP[petType] ?? `pet_${petType}`;
-    playSound(soundKey);
+    playSound(PET_SOUND_MAP[normalizePetType(petType)] ?? "pet_alebrije");
   } else {
     playSound("pet_alebrije");
   }

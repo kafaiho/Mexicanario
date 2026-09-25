@@ -30,11 +30,14 @@ import DailyMissionsWidget from "../components/DailyMissionsWidget";
 import GiftModel from "../components/gift";
 import MexicanarioModal from "../components/MexicanarioModal";
 import OnboardingTooltip from "../components/OnboardingTooltip";
+import EvolutionCeremony from "../components/PetCompanion/EvolutionCeremony";
+import PetRebirthNotice from "../components/PetCompanion/PetRebirthNotice";
+import { PET_TYPES } from "../config/petTypes";
 import SinAnuncios from "../components/SinAnuncios";
 import TermsModal from "../components/TermsModal";
 import TopBar from "../components/TopBar";
 import WheelModal from "../components/WheelModal";
-import { getCulturalPathProgress } from "../config/mexicoZones";
+import { getCulturalPathProgress, getCulturalSegmentSize } from "../config/mexicoZones";
 import { getCurrentPathPresentation } from "../config/culturalPathSelection";
 import { useAuth } from "../context/AuthContext";
 import useDevMode from "../hooks/useDevMode";
@@ -44,7 +47,6 @@ import { presentMexicanarioPlusPaywall } from "../services/RevenueCatService";
 import usePetStore from "../store/usePetStore";
 import { playSound } from "../utils/soundManager";
 import { REAL_HEIGHT, REAL_WIDTH } from "../utils/tabletSetup";
-import ShopScreen from "./ShopScreen";
 import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
@@ -79,8 +81,6 @@ function getGroupName(idx, firstWord) { return firstWord || GROUP_NAMES[idx % GR
 export default function MainMenuScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [showWheel, setShowWheel] = useState(false);
-  const [showShop, setShowShop] = useState(false);
-  const [showAds, setShowAds] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showGift, setShowGift] = useState(false);
   const [showSinAnuncios, setShowSinAnuncios] = useState(false);
@@ -152,7 +152,7 @@ export default function MainMenuScreen({ navigation }) {
   const resetLevelDev = useUserMutation(api.devTools.resetLevelDev);
   const switchPetType = useUserMutation(api.devTools.switchPetType);
 
-  const DEV_PET_TYPES = ["ajolote", "xolo", "alebrije"];
+  const DEV_PET_TYPES = PET_TYPES.map((p) => p.id);
   const [devPetIdx, setDevPetIdx] = useState(0);
 
   const flatRef = useRef(null);
@@ -322,7 +322,7 @@ export default function MainMenuScreen({ navigation }) {
               {isActive && (() => {
                 const zone = getCurrentPathPresentation(levelInfo);
                 const zoneProgress = zone.isNeutral ? null : getCulturalPathProgress(levelInfo?.editorialOrder, zone.id);
-                const zoneSize = zone.entryCount;
+                const zoneSize = getCulturalSegmentSize(levelInfo?.editorialOrder, zone.entryCount);
                 return (
                   <TouchableOpacity
                     style={[styles.zoneChip, { backgroundColor: zone.color + "DD" }]}
@@ -532,10 +532,7 @@ export default function MainMenuScreen({ navigation }) {
       <AdBanner style={{ marginBottom: Math.max(4, insets.bottom) }} />
 
       {/* Modals */}
-      <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} onOpenShop={() => { setShowShop(true); setShowAds(true); }} />
-      {showShop && (
-        <ShopScreen visible onClose={() => { setShowShop(false); setShowAds(false); }} autoSinAnuncios={showAds} />
-      )}
+      <WheelModal visible={showWheel} onClose={() => setShowWheel(false)} />
       <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <GiftModel visible={showGift} onClose={() => setShowGift(false)} />
       <SinAnuncios visible={showSinAnuncios} onClose={() => setShowSinAnuncios(false)} />
@@ -559,6 +556,8 @@ export default function MainMenuScreen({ navigation }) {
           />
         );
       })()}
+      <EvolutionCeremony />
+      <PetRebirthNotice />
     </ImageBackground>
   );
 }

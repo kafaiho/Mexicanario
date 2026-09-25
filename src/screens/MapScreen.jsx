@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Dimensions,
   FlatList,
@@ -15,6 +16,7 @@ import { api } from "../../convex/_generated/api";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
 import CulturalAtlasIcon from "../components/CulturalAtlasIcon";
 import { buildCulturalMapItems } from "../config/culturalPathSelection";
+import { CULTURAL_PATHS } from "../config/culturalTaxonomy";
 const { getCulturalAsset } = require("../config/culturalAssets.js");
 const { getChallengePresentation } = require("../config/difficultyPresentation.js");
 import { useAuth } from "../context/AuthContext";
@@ -28,54 +30,63 @@ const AMBER = "#D2691E";
 const WHEAT = "#FFE4B5";
 const WHEAT2 = "#F5DEB3";
 
-// ── Wave ratios — spread nodes across ~75% of screen width ───────────────────
-// Computed dynamically inside MapScreen to support orientation changes.
-// Tablet: 3-node diagonal groups (left → center → right, repeating every 3)
-// Phone:  2-position clear zigzag (left ↔ right)
+// ── Camino serpenteante (estilo Duolingo) ──────────────────────────────────────
+// Los nodos siguen una curva suave: centro → derecha → centro → izquierda.
+// Son proporciones del ancho real de la lista (se recalcula al rotar).
 const WAVE_RATIOS = TABLET_MODE
-  ? [0.08, 0.50, 0.88]
-  : [0.12, 0.72];
+  ? [0.44, 0.56, 0.64, 0.56, 0.44, 0.32, 0.24, 0.32]
+  : [0.40, 0.56, 0.66, 0.56, 0.40, 0.24, 0.14, 0.24];
 
 // ── Tamaños ───────────────────────────────────────────────────────────────────
 const NODE = 66;   // diámetro nodo normal
 const NODE_C = 80;   // diámetro nodo actual
 const DEPTH = 5;    // profundidad 3-D
-// Larger ROW_H on phone gives diagonal connectors a better angle
-const ROW_H = TABLET_MODE ? 130 : 160;
+const ROW_H = TABLET_MODE ? 118 : 124;
+const ZONE_H = 164; // altura fija del encabezado de camino (incluye márgenes)
+const TRAIL_DOTS = 4; // puntitos que unen un nodo con el anterior
 
 
 
-// ── ZoneBanner ────────────────────────────────────────────────────────────────
-function ZoneBanner({ zone }) {
+// ── ZoneBanner: encabezado de camino tipo «unidad» ─────────────────────────────
+function ZoneBanner({ item, currentLevel }) {
+  const { zone, round, firstIndex, levelCount } = item;
   const asset = zone.isNeutral ? null : getCulturalAsset('path', zone.id);
+  const pathNumber = zone.isNeutral ? null : CULTURAL_PATHS.findIndex(({ id }) => id === zone.id) + 1;
+  const done = Math.max(0, Math.min(currentLevel - firstIndex, levelCount));
+  const complete = done >= levelCount;
+  const kicker = zone.isNeutral
+    ? 'TU RECORRIDO'
+    : `${round && round > 1 ? `VUELTA ${round} · ` : ''}CAMINO ${pathNumber}`;
   return (
-    <View style={[styles.zoneBanner, { backgroundColor: zone.color }]}>
-      {asset ? (
-        <CulturalAtlasIcon
-          asset={asset}
-          size={58}
-          borderRadius={9}
-          decorative
-          style={styles.zoneBannerAtlas}
-        />
-      ) : <Text style={styles.zoneBannerEmoji}>{zone.emoji}</Text>}
-      <View style={styles.zoneBannerTexts}>
-        <Text style={styles.zoneBannerName}>{zone.name.toUpperCase()}</Text>
-        <Text style={styles.zoneBannerDesc}>{zone.desc}</Text>
-      </View>
-      {zone.levels && (
-        <View style={styles.zoneBannerBadge}>
-          <Text style={styles.zoneBannerBadgeText}>
-            {zone.levels[0]}–{zone.levels[1]}
-          </Text>
+    <View style={styles.zoneWrap}>
+      <View
+        style={[styles.zoneBanner, { backgroundColor: zone.color, borderBottomColor: zone.dark }]}
+        accessible
+        accessibilityLabel={`${kicker.toLowerCase()}, ${zone.name}. ${done} de ${levelCount} niveles.`}
+      >
+        <View style={styles.zoneTop}>
+          <View style={styles.zoneBannerTexts}>
+            <Text style={styles.zoneKicker}>{kicker}</Text>
+            <Text style={styles.zoneBannerName} numberOfLines={1}>{zone.name}</Text>
+            <Text style={styles.zoneBannerDesc} numberOfLines={2}>{zone.desc}</Text>
+          </View>
+          {asset ? (
+            <CulturalAtlasIcon asset={asset} size={56} borderRadius={12} decorative style={styles.zoneBannerAtlas} />
+          ) : <Text style={styles.zoneBannerEmoji}>{zone.emoji}</Text>}
         </View>
-      )}
+        <View style={styles.zoneProgressRow}>
+          <View style={styles.zoneProgressTrack}>
+            <View style={[styles.zoneProgressFill, { width: `${levelCount ? (done / levelCount) * 100 : 0}%` }]} />
+          </View>
+          <Text style={styles.zoneProgressText}>{complete ? '✅ Completo' : `${done}/${levelCount}`}</Text>
+        </View>
+      </View>
     </View>
   );
 }
 
 // ── DuoNode ───────────────────────────────────────────────────────────────────
-function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, screenW, waveX }) {
+function DuoNode({ item, prevX, currentLevel, openedLevel, setOpenedLevel, navigation, screenW, waveX, reduceMotion }) {
   const { level, zone, waveIdx, displayIndex } = item;
   // Use displayIndex (position in sorted order) to compare against currentLevel
   const n = displayIndex;
@@ -88,7 +99,21 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
 
   const nodeSize = isCurrent ? NODE_C : NODE;
   const radius = nodeSize / 2;
-  const x = waveX[waveIdx % waveX.length];
+  // El nodo se centra en su punto de la curva
+  const centerX = waveX[waveIdx % waveX.length];
+  const x = centerX - nodeSize / 2;
+
+  // Globo «¡EMPIEZA!» que rebota sobre el nivel actual
+  const bounce = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!isCurrent || reduceMotion) { bounce.setValue(0); return undefined; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(bounce, { toValue: -6, duration: 600, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [isCurrent, reduceMotion, bounce]);
 
   // Colores
   let faceColor, shadowColor;
@@ -123,7 +148,7 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
     }
   };
 
-  const icon = isLocked ? "🔒" : isCompleted ? "✓" : "▶";
+  const icon = isLocked ? "🔒" : isCompleted ? "✓" : "★";
   const iconSize = nodeSize * (isCompleted ? 0.30 : 0.34);
   const challenge = getChallengePresentation(level);
 
@@ -139,30 +164,33 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
     // Fila con altura fija para que no se encime con la anterior
     <View style={[styles.row, { minHeight: isOpen ? ROW_H + 148 : ROW_H }]}>
 
+      {/* Puntitos del camino desde el nodo anterior */}
+      {prevX != null && Array.from({ length: TRAIL_DOTS }, (_, i) => {
+        const t = (i + 1) / (TRAIL_DOTS + 1);
+        const fromY = -ROW_H + 16 + NODE / 2;
+        const toY = 16 + nodeSize / 2;
+        return (
+          <View
+            key={i}
+            pointerEvents="none"
+            style={[styles.trailDot, {
+              left: prevX + (centerX - prevX) * t - 4,
+              top: fromY + (toY - fromY) * t - 4,
+              backgroundColor: isLocked ? 'rgba(255,255,255,0.16)' : zone.color,
+            }]}
+          />
+        );
+      })}
+
       {/* Nodo posicionado horizontalmente según la onda */}
       <View style={[styles.nodeArea, { left: x }]}>
 
-        {/* Línea conectora — arriba del nodo (ocupa el padding de 16px antes del cuerpo) */}
-        <View style={{
-          position: 'absolute',
-          top: -16,
-          left: nodeSize / 2 - 2.5,
-          width: 5,
-          height: 16,
-          backgroundColor: isLocked ? 'rgba(255,255,255,0.07)' : zone.color + '70',
-          borderRadius: 3,
-        }} />
-
-        {/* Línea conectora — abajo del nodo */}
-        <View style={{
-          position: 'absolute',
-          top: nodeSize + DEPTH + 2,
-          left: nodeSize / 2 - 2.5,
-          width: 5,
-          height: ROW_H - 16 - nodeSize - DEPTH - 2,
-          backgroundColor: isLocked ? 'rgba(255,255,255,0.07)' : zone.color + '70',
-          borderRadius: 3,
-        }} />
+        {/* Globo sobre el nivel actual */}
+        {isCurrent && !isOpen && (
+          <Animated.View pointerEvents="none" style={[styles.startBubble, { borderColor: zone.color, transform: [{ translateY: bounce }] }]}>
+            <Text style={[styles.startBubbleText, { color: zone.color }]}>¡EMPIEZA!</Text>
+          </Animated.View>
+        )}
 
         {/* Anillo punteado para nivel actual */}
         {isCurrent && (
@@ -273,19 +301,17 @@ function DuoNode({ item, currentLevel, openedLevel, setOpenedLevel, navigation, 
   );
 }
 
-// ── ShopScreen lazy loader (rompe dep circular si aplica) ─────────────────────
-let _ShopScreen = null;
-const getShopScreen = () => {
-  if (!_ShopScreen) _ShopScreen = require("../screens/ShopScreen").default;
-  return _ShopScreen;
-};
-
 export default function MapScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { userId, user } = useAuth();
   const listRef = useRef(null);
   const [openedLevel, setOpenedLevel] = useState(null);
-  const [showShop, setShowShop] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.("reduceMotionChanged", setReduceMotion);
+    return () => sub?.remove?.();
+  }, []);
 
   // ── Actual rendered list width (updated via onLayout) ────────────────────
   // Using onLayout is the only reliable way to get the real render width on
@@ -314,7 +340,6 @@ export default function MapScreen({ navigation, route }) {
 
   // Pre-compute item heights for getItemLayout — zone banners are ~104px, level rows are ROW_H.
   // Without getItemLayout, scrollToIndex fails silently for off-screen items.
-  const ZONE_H = 104; // marginTop(32) + paddingVertical(14)*2 + content(~36) + marginBottom(8)
   const itemLayouts = useMemo(() => {
     let offset = 0;
     return items.map((item, index) => {
@@ -342,11 +367,16 @@ export default function MapScreen({ navigation, route }) {
   }, [items, currentLevel]);
 
 
-  const renderItem = ({ item }) => {
-    if (item.type === "path") return <ZoneBanner zone={item.zone} />;
+  const renderItem = ({ item, index }) => {
+    if (item.type === "path") return <ZoneBanner item={item} currentLevel={currentLevel} />;
+    // Solo se unen con puntitos los nodos seguidos del mismo tramo
+    const prev = items[index - 1];
+    const prevX = prev?.type === "level" ? waveX[prev.waveIdx % waveX.length] : null;
     return (
       <DuoNode
         item={item}
+        prevX={prevX}
+        reduceMotion={reduceMotion}
         currentLevel={currentLevel}
         openedLevel={openedLevel}
         setOpenedLevel={setOpenedLevel}
@@ -371,6 +401,14 @@ export default function MapScreen({ navigation, route }) {
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
         <View style={{ width: 70 }} />
+      </View>
+
+      {/* Progreso general */}
+      <View style={styles.overallWrap}>
+        <Text style={styles.overallTitle}>🇲🇽 México Vivido</Text>
+        <View style={styles.overallTrack}>
+          <View style={[styles.overallFill, { width: `${totalLevels ? Math.min(100, (completedLevels / totalLevels) * 100) : 0}%` }]} />
+        </View>
       </View>
 
       {/* Stats */}
@@ -428,16 +466,6 @@ export default function MapScreen({ navigation, route }) {
         />
       )}
 
-      {/* ShopScreen modal — para desbloquear packs adultos */}
-      {showShop && (() => {
-        const ShopScreen = getShopScreen();
-        return (
-          <ShopScreen
-            visible={showShop}
-            onClose={() => setShowShop(false)}
-          />
-        );
-      })()}
     </ImageBackground>
   );
 }
@@ -479,25 +507,50 @@ const styles = StyleSheet.create({
   statLbl: { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: "600", marginTop: 1 },
   statDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.10)" },
 
-  // Zone banner
+  // Encabezado de camino (tarjeta con borde inferior 3-D)
+  zoneWrap: { height: ZONE_H, paddingTop: 22, paddingBottom: 14, paddingHorizontal: 14 },
   zoneBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 14,
-    marginTop: 32,
-    marginBottom: 8,
-    borderRadius: 16,
-    paddingVertical: 14,
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    gap: 12,
+    borderBottomWidth: 5,
+    justifyContent: "space-between",
   },
-  zoneBannerEmoji: { fontSize: 30 },
-  zoneBannerAtlas: { borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
+  zoneTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  zoneKicker: { color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  zoneBannerEmoji: { fontSize: 34 },
+  zoneBannerAtlas: { borderWidth: 1.5, borderColor: "rgba(255,255,255,0.45)" },
   zoneBannerTexts: { flex: 1 },
-  zoneBannerName: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
-  zoneBannerDesc: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontWeight: "600", marginTop: 2 },
-  zoneBannerBadge: { backgroundColor: "rgba(0,0,0,0.22)", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3 },
-  zoneBannerBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  zoneBannerName: { color: "#fff", fontSize: 18, fontWeight: "900", marginTop: 1 },
+  zoneBannerDesc: { color: "rgba(255,255,255,0.85)", fontSize: 11.5, fontWeight: "600", marginTop: 2, lineHeight: 15 },
+  zoneProgressRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
+  zoneProgressTrack: { flex: 1, height: 9, borderRadius: 5, backgroundColor: "rgba(0,0,0,0.22)", overflow: "hidden" },
+  zoneProgressFill: { height: "100%", borderRadius: 5, backgroundColor: "#FFD54F" },
+  zoneProgressText: { color: "#fff", fontSize: 11, fontWeight: "900", minWidth: 44, textAlign: "right" },
+
+  // Progreso general
+  overallWrap: { marginHorizontal: 16, marginTop: 10 },
+  overallTitle: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 6 },
+  overallTrack: { height: 10, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.12)", overflow: "hidden" },
+  overallFill: { height: "100%", borderRadius: 5, backgroundColor: "#58CC02" },
+
+  // Puntitos del camino entre nodos
+  trailDot: { position: "absolute", width: 8, height: 8, borderRadius: 4, opacity: 0.85 },
+
+  // Globo «¡EMPIEZA!»
+  startBubble: {
+    position: "absolute",
+    top: -40,
+    alignSelf: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    zIndex: 20,
+  },
+  startBubbleText: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
 
   // FlatList
   list: { paddingBottom: 60, paddingTop: 6 },

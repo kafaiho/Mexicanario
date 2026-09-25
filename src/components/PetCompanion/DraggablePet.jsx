@@ -11,6 +11,7 @@ import {
 import usePetStore, { getStage } from '../../store/usePetStore';
 import { TABLET_MODE } from '../../utils/tabletSetup';
 import PetCompanion from './index';
+import { MOOD_PHRASES, WELCOME_BACK_PHRASES, pickRandom, usePetMood } from './petMood';
 
 const KEYBOARD_ZONE_H = TABLET_MODE ? 460 : 280; // height from bottom that counts as "keyboard"
 const SIDE_MARGIN = 10; // px from each edge
@@ -355,17 +356,18 @@ const SELF_PHRASES = [
   "¡Esta la sé yo de memoria! Literalmente soy yo.",
 ];
 
-function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
+function DraggablePet({ reaction, reactionKey = 0, scaleFactor = 1.0, region = null, currentWord = null, gameBubble = null, reduceMotion = false }) {
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
   const vinculo = usePetStore((s) => s.vinculo);
   const petType = usePetStore((s) => s.petType);
   const stage = getStage(vinculo);
-  // Xolo is slightly smaller so it doesn't obstruct gameplay
-  const xoloFactor = petType === 'xolo' ? 0.85 : 1.0;
+  const { mood } = usePetMood();
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
   // Base display size in dp — scaleFactor tunes it up/down
   const BASE_PET = TABLET_MODE ? 72 : 68;
-  const petSize = Math.round(BASE_PET * xoloFactor * scaleFactor);
+  const petSize = Math.round(BASE_PET * scaleFactor);
 
   // Refs accessible inside PanResponder (created once — closures would be stale otherwise)
   const petSizeRef = useRef(petSize);
@@ -408,6 +410,18 @@ function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord 
     bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
     return () => clearTimeout(bubbleTimer.current);
   }, [gameBubble]);
+
+  // Saludo al volver después de 12 h o más sin jugar
+  useEffect(() => {
+    const hoursAway = (Date.now() - (usePetStore.getState().lastInteraction ?? Date.now())) / 3600000;
+    if (hoursAway < 12) return undefined;
+    const t = setTimeout(() => {
+      setBubble(pickRandom(WELCOME_BACK_PHRASES));
+      clearTimeout(bubbleTimer.current);
+      bubbleTimer.current = setTimeout(() => setBubble(null), 3000);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, []);
 
   // Detect when current word matches this pet's name → special reaction
   const shownSelfRef = useRef(false);
@@ -478,6 +492,14 @@ function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord 
   }, []);
 
   const showBubble = useCallback((dir = 'bottom') => {
+    // Al tocarla: si no está simplemente contenta, la mitad de las veces habla de su ánimo
+    const moodList = MOOD_PHRASES[moodRef.current] ?? [];
+    if (dir === 'tap' && moodList.length && Math.random() < 0.5) {
+      setBubble(pickRandom(moodList));
+      clearTimeout(bubbleTimer.current);
+      bubbleTimer.current = setTimeout(() => setBubble(null), 2500);
+      return;
+    }
     const list = PHRASES[dir] ?? PHRASES.bottom;
     const phrase = pickPhrase(list, { current: lastIdxRef.current[dir] ?? -1 });
     const phraseIdx = list.indexOf(phrase);
@@ -593,7 +615,8 @@ function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord 
         const isTap = dist < 12 && elapsed < 500;
 
         if (isTap) {
-          // ── Tap: show random phrase + scale pulse ──
+          // ── Tap: acariciar + frase + pulso ──
+          usePetStore.getState().caricia();
           showBubble('tap');
 
           if (!reduceMotionRef.current) {
@@ -650,7 +673,7 @@ function DraggablePet({ reaction, scaleFactor = 1.0, region = null, currentWord 
             { scale: Animated.multiply(breatheAnim, tapAnim) },
           ],
         }}>
-          <PetCompanion reaction={reaction} compact={false} region={region} reduceMotion={reduceMotion} />
+          <PetCompanion reaction={reaction} reactionKey={reactionKey} compact={false} region={region} reduceMotion={reduceMotion} />
         </Animated.View>
       </Animated.View>
 

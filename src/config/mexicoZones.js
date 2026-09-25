@@ -5,7 +5,7 @@
  * canónica de identidad y rangos es culturalTaxonomy. Los aliases "zone" se
  * conservan para no romper pantallas antiguas; `totalLevels` se ignora a propósito.
  */
-import { CULTURAL_PATHS } from "./culturalTaxonomy";
+import { CULTURAL_PATHS, CULTURAL_SEGMENTS } from "./culturalTaxonomy";
 
 const withMapPresentation = (path) => ({
   ...path,
@@ -21,33 +21,53 @@ export const MEXICO_CULTURAL_PATHS = MEXICO_ZONES;
 
 const PATH_BY_ID = new Map(MEXICO_CULTURAL_PATHS.map((path) => [path.id, path]));
 
+/** Tramo (camino + vuelta) que contiene una posición editorial v2. */
+export function getCulturalSegment(editorialPosition) {
+  if (!Number.isInteger(editorialPosition) || editorialPosition < 1) return null;
+  return CULTURAL_SEGMENTS.find(({ start, end }) => editorialPosition >= start && editorialPosition <= end) ?? null;
+}
+
 /** Resuelve por `pathId` explícito o por posición editorial (v2). */
 export function getCulturalPath(pathIdOrEditorialPosition) {
   if (typeof pathIdOrEditorialPosition === "string") {
     return PATH_BY_ID.get(pathIdOrEditorialPosition) ?? null;
   }
-  if (!Number.isInteger(pathIdOrEditorialPosition) || pathIdOrEditorialPosition < 1) return null;
-  return MEXICO_CULTURAL_PATHS.find(({ levels: [start, end] }) =>
-    pathIdOrEditorialPosition >= start && pathIdOrEditorialPosition <= end
-  ) ?? null;
+  const segment = getCulturalSegment(pathIdOrEditorialPosition);
+  return segment ? PATH_BY_ID.get(segment.pathId) ?? null : null;
 }
 
+/** Niveles completados dentro del tramo actual (camino + vuelta). */
 export function getCulturalPathProgress(editorialPosition, pathId) {
-  const path = pathId ? getCulturalPath(pathId) : getCulturalPath(editorialPosition);
-  if (!path || !Number.isInteger(editorialPosition)) return 0;
-  return Math.max(0, Math.min(editorialPosition - path.levels[0] + 1, path.entryCount));
+  const segment = getCulturalSegment(editorialPosition);
+  if (!segment || (pathId && segment.pathId !== pathId)) return 0;
+  return Math.max(0, Math.min(editorialPosition - segment.start + 1, segment.count));
+}
+
+/** Tamaño del tramo actual; `fallback` cuando la posición no es editorial. */
+export function getCulturalSegmentSize(editorialPosition, fallback = 0) {
+  return getCulturalSegment(editorialPosition)?.count ?? fallback;
 }
 
 export function isCulturalPathStart(editorialPosition, pathId) {
-  const path = pathId ? getCulturalPath(pathId) : getCulturalPath(editorialPosition);
-  return Boolean(path && editorialPosition === path.levels[0]);
+  const segment = getCulturalSegment(editorialPosition);
+  return Boolean(segment && (!pathId || segment.pathId === pathId) && editorialPosition === segment.start);
 }
 
+/**
+ * Siguiente camino. Con una posición editorial usa el tramo real que sigue
+ * (las vueltas tardías pueden saltarse caminos); con un id, el orden del mapa en ciclo.
+ */
 export function getNextCulturalPath(pathIdOrEditorialPosition) {
+  if (typeof pathIdOrEditorialPosition === "number") {
+    const segment = getCulturalSegment(pathIdOrEditorialPosition);
+    if (!segment) return null;
+    const next = CULTURAL_SEGMENTS[CULTURAL_SEGMENTS.indexOf(segment) + 1];
+    return next ? PATH_BY_ID.get(next.pathId) ?? null : null;
+  }
   const current = getCulturalPath(pathIdOrEditorialPosition);
   if (!current) return null;
   const index = MEXICO_CULTURAL_PATHS.findIndex(({ id }) => id === current.id);
-  return MEXICO_CULTURAL_PATHS[index + 1] ?? null;
+  return MEXICO_CULTURAL_PATHS[(index + 1) % MEXICO_CULTURAL_PATHS.length];
 }
 
 /**
@@ -58,7 +78,7 @@ export function getCulturalPathTransition(currentPathId, nextPathId, culturalOrd
   if (culturalOrderVersion !== 2 || !currentPathId || !nextPathId || currentPathId === nextPathId) return null;
   const completed = getCulturalPath(currentPathId);
   const next = getCulturalPath(nextPathId);
-  if (!completed || !next || getNextCulturalPath(completed.id)?.id !== next.id) return null;
+  if (!completed || !next) return null;
   return { completed, next };
 }
 

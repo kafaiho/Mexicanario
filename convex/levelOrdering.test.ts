@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { completedWordIds, getOrderedLevels } from "./levelOrdering";
+import { completedWordIds, dictionaryEntries, dictionaryLetter, getOrderedLevels } from "./levelOrdering";
 
 const level = (id: string, levelNumber: number) => ({ _id: `l-${id}`, wordId: id, levelNumber, reward: { coins: 1, diamonds: 0 } });
 const words = [
@@ -21,6 +21,24 @@ assert.deepEqual(ordered.slice(0, 2).map((item) => item.wordId), ["ordered-a", "
 assert.ok(!ordered.some((item) => item.wordId === "retired"));
 assert.deepEqual(ordered.slice(2).map((item) => item.wordId), ["legacy-b", "legacy-a"], "empates legacy conservan orden determinista previo");
 assert.deepEqual([...completedWordIds(ordered, 3)], ["ordered-a", "ordered-b"], "los ids completados siguen siendo wordId estables");
+
+// Diccionario v2: la palabra retirada no cuenta en el total ni aparece bloqueada
+const dictV2 = dictionaryEntries(ordered, words, 3);
+assert.deepEqual(dictV2.unlocked.map((w) => w._id), ["ordered-b", "ordered-a"]);
+assert.equal(dictV2.lockedCount, 2);
+assert.equal(dictV2.total, 4, "total = palabras del camino del jugador, no toda la tabla");
+// Terminando todo el camino llega al 100 %
+const dictDone = dictionaryEntries(ordered, words, ordered.length + 1);
+assert.equal(dictDone.unlocked.length, dictDone.total);
+assert.equal(dictDone.lockedCount, 0);
+// v1 conserva la retirada en su camino, así que sí cuenta
+assert.equal(dictionaryEntries(legacy, words, 1).total, 5);
+// Bloqueadas agrupadas por letra (Sol y Pan siguen bloqueadas en v2 nivel 3)
+assert.deepEqual(dictV2.lockedByLetter, { S: 1, P: 1 });
+assert.equal(dictionaryLetter("Ándale"), "A");
+assert.equal(dictionaryLetter("ñero"), "Ñ");
+assert.equal(dictionaryLetter("¡Órale!"), "O");
+assert.equal(dictionaryLetter("123"), "#");
 
 const ties = getOrderedLevels(
   [level("z", 2), level("a", 1)],

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 
+import { isoWeekId } from "./weekId";
 // ── Score formula (same as previous getGlobalRank but centralized) ──────────
 function computeScore(user: {
   xp?: number;
@@ -29,10 +30,7 @@ function nowCST(): Date {
 
 function getWeekId(): string {
   const d = nowCST();
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const dayOfYear = Math.floor((d.getTime() - jan4.getTime()) / 86400000) + 4;
-  const weekNum = Math.ceil(dayOfYear / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+  return isoWeekId(d);
 }
 
 function getMonthId(): string {

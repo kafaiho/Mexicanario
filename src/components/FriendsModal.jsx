@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
+import { useShop } from "../context/ShopContext";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -50,6 +51,7 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
   );
   const challengeCount = pendingChallenges?.length ?? 0;
   const acceptChallengeMut = useUserMutation(api.friends.acceptChallenge);
+  const { openShop } = useShop();
 
   // Username setup (para usuarios de Google/Apple sin username)
   const [usernameInput, setUsernameInput] = useState("");
@@ -99,6 +101,7 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
   // Mutations
   const addFriend = useUserMutation(api.friends.addFriend);
   const removeFriend = useUserMutation(api.friends.removeFriend);
+  const startChallengeMut = useUserMutation(api.friends.startChallenge);
   const acceptRequest = useUserMutation(api.friends.acceptFriendRequest);
   const declineRequest = useUserMutation(api.friends.declineFriendRequest);
   const setUsernameMutation = useUserMutation(api.friends.setUsername);
@@ -147,6 +150,50 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Retar a un cuate: se apuestan 50 monedas, juegas primero y tu cuate tiene 24 h
+  function handleChallenge(friend) {
+    if (!navigation) {
+      Alert.alert("Retos", "Abre tus cuates desde el menú principal para retar.");
+      return;
+    }
+    Alert.alert(
+      `⚔️ Retar a ${friend.name}`,
+      `Apuestas 50 monedas y juegas una palabra. ${friend.name} tendrá 24 horas para superarte: gana quien use menos intentos (si empatan, el más rápido). El ganador se lleva 100 monedas.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "¡Retar!",
+          onPress: async () => {
+            setBusyId(`reto-${friend.friendId}`);
+            try {
+              const r = await startChallengeMut({ userId, friendId: friend.friendId });
+              onClose();
+              navigation?.navigate("Gameplay", {
+                challengeMode: true,
+                challengeRole: "challenger",
+                challengeId: r.challengeId,
+                challengeWord: r.wordData,
+                challengeFriendName: friend.name,
+              });
+            } catch (e) {
+              const msg = String(e?.data ?? e?.message ?? "");
+              if (/monedas/i.test(msg)) {
+                Alert.alert("Te faltan varos 🪙", "Necesitas 50 monedas para retar a un cuate.", [
+                  { text: "Después", style: "cancel" },
+                  { text: "Conseguir varos", onPress: () => { onClose(); openShop("varos", { afterModal: true }); } },
+                ]);
+              } else {
+                Alert.alert("No se pudo retar", msg || "Inténtalo de nuevo.");
+              }
+            } finally {
+              setBusyId(null);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function handleRemove(friendId, name) {
@@ -490,6 +537,18 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
                         <Text style={s.name}>{f.name}</Text>
                       </View>
                       <TouchableOpacity
+                        style={s.challengeBtn}
+                        onPress={() => handleChallenge(f)}
+                        disabled={busyId === `reto-${f.friendId}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retar a ${f.name}`}
+                      >
+                        {busyId === `reto-${f.friendId}`
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={s.challengeBtnText}>⚔️ Retar</Text>
+                        }
+                      </TouchableOpacity>
+                      <TouchableOpacity
                         style={s.removeBtn}
                         onPress={() => handleRemove(f.friendId, f.name)}
                         disabled={busyId === String(f.friendId)}
@@ -688,6 +747,10 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
             [
               { text: "Después", style: "cancel" },
               { text: "¡Vamos!", onPress: async () => {
+                if (!navigation) {
+                  Alert.alert("Retos", "Abre tus cuates desde el menú principal para jugar el reto.");
+                  return;
+                }
                 try {
                   setAcceptingChallenge(true);
                   const result = await acceptChallengeMut({
@@ -708,7 +771,15 @@ export default function FriendsModal({ visible, onClose, onOpenProfile, navigati
                     });
                   }
                 } catch (e) {
-                  Alert.alert("Error", e?.message ?? "No se pudo aceptar el reto.");
+                  const msg = e?.data ?? e?.message ?? "";
+                  if (/monedas/i.test(String(msg))) {
+                    Alert.alert("Te faltan varos 🪙", `Necesitas ${challenge.betCoins} monedas para aceptar este reto.`, [
+                      { text: "Después", style: "cancel" },
+                      { text: "Conseguir varos", onPress: () => { onClose(); openShop("varos", { afterModal: true }); } },
+                    ]);
+                  } else {
+                    Alert.alert("Error", String(msg) || "No se pudo aceptar el reto.");
+                  }
                 } finally {
                   setAcceptingChallenge(false);
                 }
@@ -906,6 +977,18 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   removeBtnText: { color: RED, fontWeight: "900", fontSize: 14 },
+  challengeBtn: {
+    backgroundColor: AMBER,
+    borderRadius: 14,
+    borderBottomWidth: 3,
+    borderBottomColor: "#A0541A",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    minWidth: 76,
+    alignItems: "center",
+  },
+  challengeBtnText: { fontFamily: FONTS.bodyBold, color: "#fff", fontSize: 12 },
   alreadyBadge: {
     backgroundColor: GREEN + "22",
     borderRadius: 10,

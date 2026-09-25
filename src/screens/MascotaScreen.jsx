@@ -28,6 +28,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { api } from "../../convex/_generated/api";
 import FloatingMascot from "../components/PetCompanion/FloatingMascot";
+import EvolutionCeremony from "../components/PetCompanion/EvolutionCeremony";
+import PetRebirthNotice from "../components/PetCompanion/PetRebirthNotice";
+import { MOOD_CONFIG, MOOD_PHRASES, pickRandom, usePetMood } from "../components/PetCompanion/petMood";
 import StageCropped from "../components/PetCompanion/StageCropped";
 import PurchaseSuccessModal from "../components/PurchaseSuccessModal";
 import StreakModal from "../components/StreakModal";
@@ -37,40 +40,21 @@ import { notifySuccess, tapLight, tapMedium } from "../services/haptics";
 import usePetStore, { getStage, SKIN_CONFIG } from "../store/usePetStore";
 import { STAGE_THEMES, STAGE_THRESHOLDS, VINCULO_MAX } from "../theme/designTokens";
 import { playPetSound } from "../utils/soundManager";
-import ShopScreen from "./ShopScreen";
+import { useShop } from "../context/ShopContext";
+import useEquipSkin from "../hooks/useEquipSkin";
 import { useUserMutation } from "../hooks/useUserMutation";
+import { serverErrorText } from "../utils/serverError";
+import { DEFAULT_PET_TYPE, flameStatusFor, normalizePetName, normalizePetSlots, normalizePetType, PET_TYPES } from "../config/petTypes";
 
 const { width, height } = Dimensions.get("window");
 const MASCOT_SIZE = Math.min(width * 0.42, 180);
 
 // ─── Tap phrases ─────────────────────────────────────────────────────────────
 const TAP_PHRASES = [
-  "¡Hola! 🦎", "¡Me haces cosquillas!", "¡Otra vez! 😄",
+  "¡Hola! 👋", "¡Me haces cosquillas!", "¡Otra vez! 😄",
   "¡Ajúa! 🎉", "¡Órale!", "¡Qué onda! 👋",
   "¡Más! ¡Más!", "¡Ay wey! 😆", "¡Estoy feliz!",
   "¡Eso! ✨", "¡No pares! 🔥", "¡Qué chido!",
-];
-
-// ─── Pet type definitions ─────────────────────────────────────────────────────
-const PET_TYPES = [
-  {
-    id: "ajolote",
-    name: "Ajolote",
-    desc: "El más tierno · Crece con calma",
-    accent: "#A63C06",
-  },
-  {
-    id: "xolo",
-    name: "Xoloitzcuintle",
-    desc: "Leal y social · El más equilibrado",
-    accent: "#D36B1E",
-  },
-  {
-    id: "alebrije",
-    name: "Alebrije",
-    desc: "El más majestuoso · Evoluciona rápido",
-    accent: "#5C8A40",
-  },
 ];
 
 // ─── Nahual variants (Mexicanario Plus exclusive) ─────────────────────────────
@@ -326,6 +310,34 @@ const BondProgressBar = React.memo(function BondProgressBar({ vinculo, stage, th
   );
 });
 
+// ─── Mood Card ────────────────────────────────────────────────────────────────
+const MoodMeter = ({ label, emoji, value, color }) => (
+  <View style={styles.moodMeterRow}>
+    <Text style={styles.moodMeterLabel}>{emoji} {label}</Text>
+    <View style={styles.moodMeterTrack}>
+      <View style={[styles.moodMeterFill, { width: `${Math.max(4, value)}%`, backgroundColor: color }]} />
+    </View>
+  </View>
+);
+
+const MoodCard = React.memo(function MoodCard({ mood, energia, alegria }) {
+  const cfg = MOOD_CONFIG[mood] ?? MOOD_CONFIG.happy;
+  return (
+    <View
+      style={[styles.moodCard, { borderColor: cfg.color }]}
+      accessible
+      accessibilityLabel={`Ánimo: ${cfg.label}. Energía ${energia} de 100. Alegría ${alegria} de 100. ${cfg.hint}`}
+    >
+      <Text style={[styles.moodTitle, { color: cfg.color }]}>
+        {cfg.emoji ?? "🙂"} {cfg.label}
+      </Text>
+      <MoodMeter label="Energía" emoji="🌮" value={energia} color={energia < 25 ? "#E4572E" : "#FF9F1C"} />
+      <MoodMeter label="Alegría" emoji="💛" value={alegria} color={alegria < 25 ? "#4A90D9" : "#E4007C"} />
+      <Text style={styles.moodHint}>{cfg.hint}</Text>
+    </View>
+  );
+});
+
 // ─── Stage Dots ───────────────────────────────────────────────────────────────
 const StageDots = React.memo(function StageDots({ currentStage }) {
   return (
@@ -369,15 +381,21 @@ export default function MascotaScreen() {
   const buyPetFood = useUserMutation(api.pet.buyPetFood);
   const buyStreakFreeze = useUserMutation(api.streaks.buyStreakFreeze);
   const petSlotsData = useQuery(api.pet.getPetSlots, activeUserArgs);
+  // El servidor puede guardar el tipo anterior (ajolote, xolo, alebrije): se muestra el nuevo
+  const petType = pet?.petType ? normalizePetType(pet.petType) : null;
+  const petDisplayName = pet ? normalizePetName(pet.petName, pet.petType) : "";
+  const petSlots = normalizePetSlots(petSlotsData?.slots);
+  const flameStatus = flameStatusFor(streakStatus);
   const shopState    = useQuery(api.shop.getShopState, activeUserArgs);
 
   // New bond system
   const vinculo      = usePetStore((s) => s.vinculo);
   const caricia      = usePetStore((s) => s.caricia);
   const activeSkin   = usePetStore((s) => s.activeSkin);
-  const setActiveSkin = usePetStore((s) => s.setActiveSkin);
+  const setActiveSkin = useEquipSkin();
   const stage = getStage(vinculo);
   const theme = STAGE_THEMES[stage] ?? STAGE_THEMES[1];
+  const { mood, energia, alegria } = usePetMood();
 
   // Sync petType from Convex → local store so all screens show the right pet
   useEffect(() => {
@@ -390,7 +408,7 @@ export default function MascotaScreen() {
   }, [pet?.petType, pet?.petName]);
 
   const [showStreakModal, setShowStreakModal] = useState(false);
-  const [showShop, setShowShop] = useState(false);
+  const { openShop } = useShop();
   const [buyingFicha, setBuyingFicha] = useState(false);
   const [successItem, setSuccessItem] = useState(null);
   const [switchTarget, setSwitchTarget] = useState(null); // petType string or null
@@ -413,7 +431,7 @@ export default function MascotaScreen() {
           onPress: async () => {
             try {
               await resetPetMutation({ userId });
-              usePetStore.getState().hydrateFromBackend({ vinculo: 0, petType: "alebrije", petName: "", streak: 0 });
+              usePetStore.getState().hydrateFromBackend({ vinculo: 0, petType: DEFAULT_PET_TYPE, petName: "", streak: 0 });
             } catch (e) {
               Alert.alert("Error", "No se pudo reiniciar la mascota. Intenta de nuevo.");
             }
@@ -424,9 +442,9 @@ export default function MascotaScreen() {
   }, [userId, resetPetMutation]);
 
   const handleSwitchPet = useCallback((newPetType) => {
-    if (newPetType === pet?.petType) return;
+    if (newPetType === petType) return;
     setSwitchTarget(newPetType);
-  }, [pet?.petType]);
+  }, [petType]);
 
   const [switchLoading, setSwitchLoading] = useState(false);
 
@@ -459,23 +477,26 @@ export default function MascotaScreen() {
       if (item.id === "streak_freeze") {
         await buyStreakFreeze({ userId });
       } else {
-        await buyPetFood({ userId, foodType: item.id });
+        const res = await buyPetFood({ userId, foodType: item.id });
+        if (res && res.success === false) throw new Error(res.error || "No se pudo comprar");
+        usePetStore.getState().alimentar(item.id, res?.bondIncrease ?? 0); // energía + vínculo
       }
       notifySuccess();
       setSuccessItem(item);
     } catch (e) {
-      if (e.message && e.message.includes("Diamantes insuficientes")) {
+      const msg = serverErrorText(e, "");
+      if (/Diamantes insuficientes/i.test(msg)) {
         // Redirigir a la tienda general
         Alert.alert(
           "Faltan diamantes 💎",
           "Gana diamantes en la ruleta o visita la tienda global.",
           [
             { text: "Cerrar", style: "cancel" },
-            { text: "Ir a la tienda", onPress: () => setShowShop(true) },
+            { text: "Conseguir diamantes", onPress: () => openShop("diamantes") },
           ]
         );
       } else {
-        Alert.alert("¡Aguas!", e.message ?? "No se pudo comprar");
+        Alert.alert("¡Aguas!", msg || "No se pudo comprar. Intenta de nuevo.");
       }
     } finally {
       setBuyingFicha(false);
@@ -493,10 +514,14 @@ export default function MascotaScreen() {
     caricia(); // +5 vínculo por caricia
 
     clearTimeout(bubbleTimer.current);
-    const phrase = TAP_PHRASES[Math.floor(Math.random() * TAP_PHRASES.length)];
+    // La mitad de las veces habla de cómo se siente (si no está simplemente contenta)
+    const moodList = MOOD_PHRASES[mood] ?? [];
+    const phrase = moodList.length && Math.random() < 0.5
+      ? pickRandom(moodList)
+      : TAP_PHRASES[Math.floor(Math.random() * TAP_PHRASES.length)];
     setTapBubble(phrase);
     bubbleTimer.current = setTimeout(() => setTapBubble(""), 2000);
-  }, [caricia]);
+  }, [caricia, mood]);
 
   // ── Guards ───────────────────────────────────────────────────────────────
   if (!userId) {
@@ -532,7 +557,7 @@ export default function MascotaScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Pet name under TopBar */}
-        <Text style={styles.headerName}>{pet.petName}</Text>
+        <Text style={styles.headerName}>{petDisplayName}</Text>
 
         {/* ── Mascot display ── */}
         <View style={styles.mascotWrap}>
@@ -541,11 +566,15 @@ export default function MascotaScreen() {
 
           <FloatingMascot
             active={isFocused}
-            petType={pet.petType}
+            petType={petType}
             stage={stage}
             size={MASCOT_SIZE}
+            showFlame
+            streakDays={streakDays}
+            streakStatus={flameStatus}
             onTap={handleTapMascot}
             activeSkin={activeSkin}
+            mood={mood}
           />
 
           {/* Comic Animated Tap bubble */}
@@ -554,9 +583,12 @@ export default function MascotaScreen() {
 
         <Text style={styles.tapHint}>👆 ¡Tócame para acariciarme y ganar vínculo!</Text>
 
+        {/* ── Ánimo actual ── */}
+        <MoodCard mood={mood} energia={energia} alegria={alegria} />
+
         {/* ── Pet info ── */}
         <View style={styles.infoBlock}>
-          <Text style={styles.petName}>{pet.petName}</Text>
+          <Text style={styles.petName}>{petDisplayName}</Text>
           <View style={[styles.stagePill, { backgroundColor: "rgba(211,107,30,0.15)", borderColor: "#D36B1E" }]}>
             <Text style={[styles.stagePillText, { color: "#D36B1E" }]}>
               Etapa {stage} · {theme.name}
@@ -606,7 +638,14 @@ export default function MascotaScreen() {
         {/* ── Skins equipadas ── */}
         {(() => {
           const ownedSkins = shopState?.purchasedSkins ?? [];
-          if (ownedSkins.length === 0) return null;
+          if (ownedSkins.length === 0) {
+            return (
+              <TouchableOpacity style={styles.shopSection} onPress={() => openShop("trajes")} activeOpacity={0.85}>
+                <Text style={styles.shopTitle}>🎭 Trajes</Text>
+                <Text style={styles.shopSub}>Viste a tu mascota de mariachi, luchador o catrina. Toca para verlos en la tienda.</Text>
+              </TouchableOpacity>
+            );
+          }
           return (
             <View style={styles.shopSection}>
               <Text style={styles.shopTitle}>🎭 Skins</Text>
@@ -657,8 +696,8 @@ export default function MascotaScreen() {
           <Text style={styles.switcherSub}>Puedes tener 3 mascotas. Cada una guarda su propio progreso.</Text>
           <View style={styles.switcherRow}>
             {PET_TYPES.map((pt) => {
-              const isActive = pet?.petType === pt.id;
-              const slotInfo = petSlotsData?.slots?.[pt.id];
+              const isActive = petType === pt.id;
+              const slotInfo = petSlots[pt.id];
               const slotStage = slotInfo?.stage ?? 1;
               const slotName = slotInfo?.name ?? pt.name;
               return (
@@ -724,8 +763,8 @@ export default function MascotaScreen() {
             {pet?.mexPlusActive ? (
               <View style={styles.nahualRow}>
                 {NAHUAL_VARIANTS.map((nv) => {
-                  const isActive = pet?.petType === nv.id;
-                  const slotInfo = petSlotsData?.slots?.[nv.id];
+                  const isActive = petType === nv.id;
+                  const slotInfo = petSlots[nv.id];
                   const slotStage = slotInfo?.stage ?? 1;
                   const slotName = slotInfo?.name ?? nv.variant;
                   return (
@@ -786,7 +825,7 @@ export default function MascotaScreen() {
                   Desbloquea al Nahual y sus 3 variantes con Mexicanario Plus
                 </Text>
 
-                <TouchableOpacity onPress={() => setShowShop(true)} activeOpacity={0.85}>
+                <TouchableOpacity onPress={() => openShop("plus")} activeOpacity={0.85}>
                   <LinearGradient
                     colors={["#F9D342", "#E8920D", "#C27A09"]}
                     start={{ x: 0, y: 0 }}
@@ -808,7 +847,7 @@ export default function MascotaScreen() {
       {switchTarget && (() => {
         const targetPet = PET_TYPES.find(p => p.id === switchTarget)
           ?? NAHUAL_VARIANTS.find(p => p.id === switchTarget);
-        const slotInfo = petSlotsData?.slots?.[switchTarget];
+        const slotInfo = petSlots[switchTarget];
         const slotStage = slotInfo?.stage ?? 1;
         const slotName = slotInfo?.name ?? targetPet?.name ?? switchTarget;
         return (
@@ -864,7 +903,8 @@ export default function MascotaScreen() {
       })()}
 
       <PurchaseSuccessModal visible={!!successItem} item={successItem} onClose={() => setSuccessItem(null)} />
-      {showShop && <ShopScreen visible={showShop} onClose={() => setShowShop(false)} autoSinAnuncios={false} />}
+      <EvolutionCeremony />
+      <PetRebirthNotice />
     </ImageBackground>
   );
 }
@@ -935,6 +975,21 @@ const styles = StyleSheet.create({
     borderTopColor: "#5C3A21",
   },
   tapHint: { color: "rgba(92,58,33,0.55)", fontSize: 12, fontWeight: "600", marginBottom: 16 },
+  moodCard: {
+    alignSelf: "stretch",
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(255,248,236,0.85)",
+  },
+  moodTitle: { fontSize: 16, fontWeight: "800", textAlign: "center", marginBottom: 10 },
+  moodMeterRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  moodMeterLabel: { width: 90, fontSize: 13, fontWeight: "700", color: "#5C3A21" },
+  moodMeterTrack: { flex: 1, height: 10, borderRadius: 5, backgroundColor: "rgba(92,58,33,0.12)", overflow: "hidden" },
+  moodMeterFill: { height: "100%", borderRadius: 5 },
+  moodHint: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "rgba(92,58,33,0.75)", textAlign: "center" },
 
   // Bond / XP Progress Card
   bondCard: {

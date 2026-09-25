@@ -35,11 +35,11 @@ const counts = planned.reduce<Record<string, number>>((result, item) => {
   result[item.difficultyRole] = (result[item.difficultyRole] ?? 0) + 1;
   return result;
 }, {});
-assert.deepEqual(counts, { expected: 124, rest: 52, surprise: 30 });
+assert.deepEqual(counts, { expected: 488, rest: 204, surprise: 121 });
 assert.equal(planned.filter((item) => item.deviation).length, 0, "el catálogo real no necesita fallback");
 
 const challenges = planned.filter((item) => item.isChallenge);
-assert.deepEqual(challenges.map((item) => item.position), Array.from({ length: 20 }, (_, index) => (index + 1) * 10));
+assert.deepEqual(challenges.map((item) => item.position), Array.from({ length: Math.floor(catalog.length / 10) }, (_, index) => (index + 1) * 10));
 assert.ok(challenges.every((item) => item.difficultyRole === "surprise" && item.difficultyBand === "surprise"));
 for (const challenge of challenges) {
   const blockStart = Math.floor((challenge.position - 1) / 10) * 10;

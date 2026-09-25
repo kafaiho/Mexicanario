@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
-import { createStackNavigator } from "@react-navigation/stack";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
@@ -56,14 +56,17 @@ import LoteriaExpressScreen from "./src/screens/LoteriaExpressScreen";
 import MainMenuScreen from "./src/screens/MainMenuScreen";
 import MapScreen from "./src/screens/MapScreen";
 import MascotaScreen from "./src/screens/MascotaScreen";
-import ShopScreen from "./src/screens/ShopScreen";
+import { ShopProvider, useShop } from "./src/context/ShopContext";
+import useShopSignals from "./src/hooks/useShopSignals";
+import useEquipSkin from "./src/hooks/useEquipSkin";
+import usePetStore from "./src/store/usePetStore";
 import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import PvPScreen from "./src/screens/PvPScreen";
 import { tapLight } from "./src/services/haptics";
 import { playBGM, playSound, preloadSounds, setMusicEnabled, setSoundEnabled, unloadSounds } from "./src/utils/soundManager";
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const EmptyComponent = () => null;
 
@@ -100,11 +103,20 @@ const JuicyTabButton = React.memo(function JuicyTabButton({ children, onPress, a
   );
 });
 
-function MainTabs() {
+function MainTabs({ navigation }) {
   const insets = useSafeAreaInsets();
   const [showSettings, setShowSettings] = useState(false);
   const [showHvhu, setShowHvhu] = useState(false);
-  const [showShop, setShowShop] = useState(false);
+  const { openShop } = useShop();
+  const shopSignals = useShopSignals();
+  const equipSkin = useEquipSkin();
+  useEffect(() => {
+    if (!shopSignals) return;
+    const local = usePetStore.getState().activeSkin;
+    const remote = shopSignals.activePetSkin;
+    if (remote) { if (remote !== local) usePetStore.getState().setActiveSkin(remote); }
+    else if (local) equipSkin(local); // cuentas de antes: guardar en la cuenta el traje que ya traía
+  }, [shopSignals?.activePetSkin]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showDisconnect, setShowDisconnect] = useState(false);
   const [showInvitar, setShowInvitar] = useState(false);
   const [showApoyar, setShowApoyar] = useState(false);
@@ -116,13 +128,8 @@ function MainTabs() {
   const [showSupport, setShowSupport] = useState(false);
   const [showPerfil, setShowPerfil] = useState(false);
 
-  // ── Daily reward (7-day login bonus) ────────────────────────────────────────
-  const { shouldShow: showDailyReward, currentDay, rewardCoins, claimed, check: checkDailyReward, claim: claimDailyReward, dismiss: dismissDailyReward } = useDailyReward();
-  useEffect(() => {
-    // Slight delay so the app finishes loading visually before showing the modal
-    const t = setTimeout(() => checkDailyReward(), 1200);
-    return () => clearTimeout(t);
-  }, [checkDailyReward]);
+  // ── Premio diario unificado (vista previa; lo paga la racha al jugar) ──────
+  const { shouldShow: showDailyReward, status: dailyRewardStatus, dismiss: dismissDailyReward } = useDailyReward();
 
   return (
     <>
@@ -199,8 +206,8 @@ function MainTabs() {
                   />
                 )}
 
-                {/* Shop badge */}
-                {route.name === "Shop" && (
+                {/* Globo de la tienda: solo si hay monedas gratis o el regalo Plus del mes */}
+                {route.name === "Shop" && shopSignals?.hasSomethingToClaim && (
                   <View style={{
                     position: "absolute", top: -2, right: -2,
                     backgroundColor: "#E74C3C", borderRadius: badgeSize / 2,
@@ -208,13 +215,15 @@ function MainTabs() {
                     justifyContent: "center", alignItems: "center",
                     borderWidth: 1.5, borderColor: "#D4A574",
                   }}>
-                    <Text style={{ color: "white", fontSize: badgeSize * 0.6, fontWeight: "bold" }}>1</Text>
+                    <Text style={{ color: "white", fontSize: badgeSize * 0.6, fontWeight: "bold" }}>!</Text>
                   </View>
                 )}
               </View>
             );
           },
           headerShown: false,
+          // Pestañas ocultas no re-renderizan (p. ej. updates de Convex en Liga)
+          freezeOnBlur: true,
         })}
       >
         <Tab.Screen name="Home" component={MainMenuScreen} />
@@ -229,7 +238,7 @@ function MainTabs() {
           listeners={{
             tabPress: (e) => {
               e.preventDefault();
-              setShowShop(true);
+              openShop();
             },
           }}
         />
@@ -302,9 +311,6 @@ function MainTabs() {
       />
 
       <Heriokio visible={showHvhu} onClose={() => setShowHvhu(false)} />
-      {showShop && (
-        <ShopScreen visible onClose={() => setShowShop(false)} />
-      )}
       <DisconnectModal
         visible={showDisconnect}
         onClose={() => setShowDisconnect(false)}
@@ -333,13 +339,12 @@ function MainTabs() {
         onClose={() => setShowSupport(false)}
       />
 
-      {/* Recompensa diaria — aparece al abrir la app si aún no se ha reclamado */}
+      {/* Premio de hoy — vista previa al abrir la app si aún no has jugado hoy.
+          Se cobra al acertar la primera palabra (recordDailyPlay). */}
       <DailyRewardModal
         visible={showDailyReward}
-        currentDay={currentDay}
-        rewardCoins={rewardCoins}
-        claimed={claimed}
-        onClaim={claimDailyReward}
+        status={dailyRewardStatus}
+        onPlay={() => { dismissDailyReward(); navigation.navigate("Gameplay"); }}
         onDismiss={dismissDailyReward}
       />
     </>
@@ -576,7 +581,8 @@ function AppContent() {
         message={remoteConfig?.updateMessage}
         onDismiss={() => setUpdateDismissed(true)}
       />
-      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
+      <ShopProvider>
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false, freezeOnBlur: true }}>
         <>
           <Stack.Screen name="Main" component={MainTabs} />
           <Stack.Screen name="Gameplay" component={GameplayScreen} />
@@ -585,6 +591,7 @@ function AppContent() {
           <Stack.Screen name="PvP" component={PvPScreen} />
         </>
       </Stack.Navigator>
+      </ShopProvider>
     </NavigationContainer>
   );
 }

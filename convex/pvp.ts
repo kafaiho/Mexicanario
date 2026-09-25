@@ -3,6 +3,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 import { Id } from "./_generated/dataModel";
 
+import { loadPlayableWords } from "./wordPool";
 // ══════════════════════════════════════════════════════════════════════════════
 // ═══  PvP DUELOS EN TIEMPO REAL  ═══════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════════════════
@@ -196,7 +197,9 @@ async function createMatchInternal(
 
   // ── Select 5 words with progressive difficulty ──
   // Pool: only words the lower-level player has seen (capped at 800 for perf)
-  const allWords = await ctx.db.query("words").collect();
+  // Solo palabras activas, con pista y del catálogo curado: las retiradas
+  // (groserías, duplicados, extranjeras…) nunca deben salir en un duelo.
+  const allWords = await loadPlayableWords(ctx);
 
   // Classify by difficulty (field or word length fallback)
   const classify = (w: any): number => {

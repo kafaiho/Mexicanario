@@ -12,20 +12,10 @@ config.resolver.assetExts.push("glb");
 // Necesario para que Three.js resuelva sus módulos internos
 config.resolver.unstable_enablePackageExports = true;
 
-// react-native-svg "react-native" field apunta a src/index.ts que
-// falla con package exports habilitado. Redirigir al build compilado.
+// Nota: NO redirigir react-native-svg a lib/commonjs — Metro debe usar
+// src/ para que el plugin de codegen genere los view configs (RNSVG*).
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === "react-native-svg") {
-    return {
-      type: "sourceFile",
-      filePath: path.resolve(
-        __dirname,
-        "node_modules/react-native-svg/lib/commonjs/index.js"
-      ),
-    };
-  }
-
   // En Expo Go (desarrollo sin EAS Build) usamos un mock de AdMob para
   // evitar el crash de TurboModuleRegistry.getEnforcing al cargar el módulo.
   // En "eas build" la variable EAS_BUILD=true y se usa el módulo real.

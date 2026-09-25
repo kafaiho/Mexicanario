@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
+import { previewDailyStreakReward, projectStreak, rollDailyStreakReward } from "./streakMath";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,19 @@ export const getStreakStatus = query({
     const currentStreak = isActive ? rawStreak : 0;
     const playedToday = lastPlay === today;
 
+    // Vista previa del premio diario: lo que pagaría recordDailyPlay si juega hoy
+    let todayReward = null;
+    if (!playedToday) {
+      const freezeCount = (user as any).streakFreezeCount ?? 0;
+      const projected = projectStreak({ lastPlay, oldStreak: rawStreak, freezeCount, today });
+      todayReward = {
+        nextStreak: projected.newStreak,
+        ...previewDailyStreakReward(projected.newStreak),
+        shieldsWillSave: projected.freezesConsumed > 0,
+        streakWillReset: projected.daysMissed > 0 && projected.freezesConsumed === 0 && rawStreak > 0,
+      };
+    }
+
     // Weekly calendar
     const weekDays = buildWeekCalendar(lastPlay, currentStreak);
 
@@ -111,6 +125,7 @@ export const getStreakStatus = query({
         ? (user as any).totalWordsToday ?? 0
         : 0,
       streakFreezeCount: (user as any).streakFreezeCount ?? 0,
+      todayReward,
     };
   },
 });
@@ -141,49 +156,19 @@ export const recordDailyPlay = userMutation({
       };
     }
 
-    // New day — compute days missed and apply freeze shields if available
-    const oldStreak = (user as any).playStreak ?? 0;
+    // New day — apply freeze shields if available (see streakMath.projectStreak)
     const freezeCount = (user as any).streakFreezeCount ?? 0;
-
-    // Days missed = gap between lastPlay and today minus 1
-    // e.g. yesterday → 0 missed, 2 days ago → 1 missed, etc.
-    let daysMissed = 0;
-    if (lastPlay) {
-      const lastMs = new Date(lastPlay + "T12:00:00Z").getTime();
-      const todayMs = new Date(today + "T12:00:00Z").getTime();
-      daysMissed = Math.max(0, Math.round((todayMs - lastMs) / 86_400_000) - 1);
-    }
-
-    let newStreak: number;
-    let freezesConsumed = 0;
-
-    if (daysMissed === 0) {
-      // Continuous (played yesterday or first play ever)
-      newStreak = lastPlay ? oldStreak + 1 : 1;
-    } else if (freezeCount >= daysMissed) {
-      // Enough shields to cover all missed days → streak survives
-      newStreak = oldStreak + 1;
-      freezesConsumed = daysMissed;
-    } else {
-      // Not enough shields → streak resets (shields are NOT consumed on reset)
-      newStreak = 1;
-    }
+    const { newStreak, freezesConsumed } = projectStreak({
+      lastPlay,
+      oldStreak: (user as any).playStreak ?? 0,
+      freezeCount,
+      today,
+    });
 
     const maxStreak = Math.max((user as any).playStreakMax ?? 0, newStreak);
 
-    // ── Reward Logic (7-day cycle) ──
-    const streakDay = ((newStreak - 1) % 7) + 1;
-    let coinsEarned = 0;
-    let isPinata = false;
-
-    if (streakDay < 7) {
-      // Day 1: 10, Day 2: 15, Day 3: 20...
-      coinsEarned = 5 + (streakDay * 5);
-    } else {
-      // Day 7: Piñata Surprise (50 - 200)
-      coinsEarned = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
-      isPinata = true;
-    }
+    // ── Premio diario unificado (ciclo de 7 días, piñata el día 7) ──
+    const { coins: coinsEarned, isPinata } = rollDailyStreakReward(newStreak);
 
     await ctx.db.patch(args.userId, {
       lastPlayDate: today,
@@ -320,7 +305,7 @@ export const buyStreakFreeze = userMutation({
 
     const COST = 150; // 150 diamantes por escudo
     if ((user.diamonds ?? 0) < COST) {
-      throw new Error("Diamantes insuficientes para el Protector de Racha");
+      throw new ConvexError("Diamantes insuficientes para el Protector de Racha");
     }
 
     const currentCount = (user as any).streakFreezeCount ?? 0;

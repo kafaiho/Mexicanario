@@ -20,21 +20,23 @@ export const PET_COLORS: Record<string, {
   glow: string;
   accent: string;
 }> = {
-  ajolote: {
-    base: ["#C2185B", "#D81B60", "#E91E63", "#F06292"],
-    glow:   "#F48FB1",
-    accent: "#FCE4EC",
+  tecolote: {
+    // Plumón gris → café lector → café rebozo → noche estrellada
+    base: ["#CFC7BC", "#8B6446", "#6E4A33", "#2A2466"],
+    glow:   "#FFD45A",
+    accent: "#E8B93A",
   },
-  xolo: {
-    base: ["#BF360C", "#D84315", "#E64A19", "#FF5722"],
-    glow:   "#FF8A65",
-    accent: "#FBE9E7",
+  monarca: {
+    // Oruga → crisálida de jade → monarca → papel picado
+    base: ["#FFD21F", "#7FD8A8", "#F28C1B", "#FF2E8A"],
+    glow:   "#FFA41C",
+    accent: "#15101A",
   },
-  alebrije: {
-    // Stage progression: vivid teal → deep violet → jade green → midnight indigo
-    base: ["#00ACC1", "#6A1B9A", "#2E7D32", "#1A237E"],
-    glow:   "#FFD700",   // gold glow — iconic alebrije feature
-    accent: "#FF4081",   // hot pink wings
+  ayotl: {
+    // Cría gris → olivo → talavera → jade
+    base: ["#55534C", "#8C9A63", "#1D3E9E", "#1FA29A"],
+    glow:   "#3FE0C8",
+    accent: "#E8C25A",
   },
 };
 

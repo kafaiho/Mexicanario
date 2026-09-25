@@ -22,7 +22,7 @@ export const CULTURAL_PLACE_IDS = [
   "todo-mexico", "cdmx", "guadalajara", "jalisco", "monterrey", "nuevo-leon",
   "veracruz", "oaxaca", "puebla", "michoacan", "guerrero", "chiapas",
   "yucatan", "campeche", "quintana-roo", "tabasco", "sinaloa", "nayarit",
-  "huasteca", "unclassified",
+  "huasteca", "sonora", "chihuahua", "baja-california", "coahuila", "durango", "zacatecas", "san-luis-potosi", "aguascalientes", "guanajuato", "queretaro", "hidalgo", "estado-de-mexico", "morelos", "tlaxcala", "tamaulipas", "colima", "baja-california-sur", "unclassified",
 ] as const;
 
 const collection = (id: string, name: string, icon: string, color: string) => ({
@@ -64,6 +64,23 @@ export const CULTURAL_PLACES = [
   place("sinaloa", "Sinaloa", "state", "Sinaloense", "🥁", "#0277BD", ["Sinaloa"]),
   place("nayarit", "Nayarit", "state", "Nayarita", "🌊", "#0277BD", ["Estado de Nayarit"]),
   place("huasteca", "La Huasteca", "cultural-region", "Huasteco", "🎻", "#00838F", ["Huasteca", "Región Huasteca", "Region Huasteca"]),
+  place("sonora", "Sonora", "state", "Sonorense", "🌵", "#D84315", ["Estado de Sonora"]),
+  place("chihuahua", "Chihuahua", "state", "Chihuahuense", "🏜️", "#A1887F", ["Estado de Chihuahua"]),
+  place("baja-california", "Baja California", "state", "Bajacaliforniano", "🐋", "#0288D1", ["Estado de Baja California"]),
+  place("coahuila", "Coahuila", "state", "Coahuilense", "⛰️", "#8D6E63", ["Coahuila de Zaragoza"]),
+  place("durango", "Durango", "state", "Duranguense", "🎬", "#6D4C41", ["Estado de Durango"]),
+  place("zacatecas", "Zacatecas", "state", "Zacatecano", "⛏️", "#AD1457", ["Estado de Zacatecas"]),
+  place("san-luis-potosi", "San Luis Potosí", "state", "Potosino", "🌵", "#EF6C00", ["San Luis Potosi", "SLP"]),
+  place("aguascalientes", "Aguascalientes", "state", "Hidrocálido", "🎡", "#C62828", ["Estado de Aguascalientes"]),
+  place("guanajuato", "Guanajuato", "state", "Guanajuatense", "🏛️", "#F9A825", ["Estado de Guanajuato"]),
+  place("queretaro", "Querétaro", "state", "Queretano", "🌉", "#5E35B1", ["Queretaro", "Estado de Querétaro"]),
+  place("hidalgo", "Hidalgo", "state", "Hidalguense", "🥟", "#2E7D32", ["Estado de Hidalgo"]),
+  place("estado-de-mexico", "Estado de México", "state", "Mexiquense", "🔺", "#00796B", ["Edomex", "Estado de Mexico"]),
+  place("morelos", "Morelos", "state", "Morelense", "🌾", "#7CB342", ["Estado de Morelos"]),
+  place("tlaxcala", "Tlaxcala", "state", "Tlaxcalteca", "🦅", "#8E24AA", ["Estado de Tlaxcala"]),
+  place("tamaulipas", "Tamaulipas", "state", "Tamaulipeco", "🦀", "#00838F", ["Estado de Tamaulipas"]),
+  place("colima", "Colima", "state", "Colimense", "🌋", "#BF360C", ["Estado de Colima"]),
+  place("baja-california-sur", "Baja California Sur", "state", "Sudcaliforniano", "🐳", "#0277BD", ["BCS", "Estado de Baja California Sur"]),
   place("unclassified", "Por clasificar", "unclassified", "Por clasificar", "📍", "#757575", ["Desconocido", "Sin región", "Sin region"]),
 ] as const;
 

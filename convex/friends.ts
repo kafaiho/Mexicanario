@@ -5,6 +5,8 @@ import { issueSession, userAction, userMutation } from "./sessionAuth";
 import { COINS_REFERRED, COINS_REFERRER, REFERRAL_MILESTONES } from "./referralConfig";
 import { buildChallengeWordData } from "./friendsPresentation";
 
+import { isoWeekId } from "./weekId";
+import { loadPlayableWords } from "./wordPool";
 // ── SHA-256 usando Web Crypto API (disponible en V8 runtime de Convex) ────────
 async function hashPassword(password: string): Promise<string> {
   const enc = new TextEncoder();
@@ -604,10 +606,7 @@ export const getFriendsLeaderboard = query({
       const now = new Date();
       const utc = now.getTime() + now.getTimezoneOffset() * 60000;
       const cst = new Date(utc + (-6 * 60 * 60 * 1000));
-      const jan4 = new Date(cst.getFullYear(), 0, 4);
-      const dayOfYear = Math.floor((cst.getTime() - jan4.getTime()) / 86400000) + 4;
-      const weekNum = Math.ceil(dayOfYear / 7);
-      const weekId = `${cst.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+      const weekId = isoWeekId(cst);
 
       // Batch fetch weekly scores + user data
       const entries = await Promise.all(
@@ -994,66 +993,103 @@ const CHALLENGE_BET = 50;         // coins cada jugador apuesta
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // ── Crear reto ─────────────────────────────────────────────────────────────
-export const createChallenge = internalMutation({
-  args: {
-    challengerId: v.id("users"),
-    challengedId: v.id("users"),
-    challengerAttempts: v.number(),
-    challengerTimeMs: v.number(),
-  },
-  handler: async (ctx, { challengerId, challengedId, challengerAttempts, challengerTimeMs }) => {
-    const now = Date.now();
+// Estados de un reto:
+//   challenger_playing → quien reta está jugando su palabra (su apuesta ya se cobró)
+//   pending            → esperando al cuate (24 h)
+//   active             → el cuate aceptó y está jugando
+//   completed | expired
+const OPEN_CHALLENGE_STATUSES = ["challenger_playing", "pending", "active"];
 
-    // Verify friendship
+/** Quien reta elige a un cuate: se cobra la apuesta y se le da la palabra para jugar primero. */
+export const startChallenge = userMutation({
+  args: {
+    userId: v.id("users"),
+    friendId: v.id("users"),
+  },
+  handler: async (ctx, { userId, friendId }) => {
+    if (userId === friendId) throw new ConvexError("No puedes retarte a ti mismo.");
     const friendship = await ctx.db
       .query("friendships")
-      .withIndex("by_user_friend", (q) =>
-        q.eq("userId", challengerId).eq("friendId", challengedId)
-      )
+      .withIndex("by_user_friend", (q) => q.eq("userId", userId).eq("friendId", friendId))
       .first();
     if (!friendship || (friendship.status !== "accepted" && friendship.status != null)) {
       throw new ConvexError("Solo puedes retar a tus cuates.");
     }
 
-    // Check challenger has enough coins
-    const challenger = await ctx.db.get(challengerId);
+    // Un reto abierto a la vez con el mismo cuate
+    const mine = await ctx.db
+      .query("friendChallenges")
+      .withIndex("by_challenger", (q) => q.eq("challengerId", userId))
+      .collect();
+    if (mine.some((c) => c.challengedId === friendId && OPEN_CHALLENGE_STATUSES.includes(c.status) && c.expiresAt > Date.now())) {
+      throw new ConvexError("Ya tienes un reto abierto con este cuate.");
+    }
+
+    const challenger = await ctx.db.get(userId);
     if (!challenger || (challenger.coins ?? 0) < CHALLENGE_BET) {
       throw new ConvexError(`Necesitas al menos ${CHALLENGE_BET} monedas para retar.`);
     }
 
-    // Pick a random word from completed levels (so both players have seen it)
-    const totalWords = await ctx.db.query("words").collect();
-    if (totalWords.length === 0) throw new ConvexError("No hay palabras disponibles.");
-    const randomIdx = Math.floor(Math.random() * totalWords.length);
-    const word = totalWords[randomIdx];
+    // Palabra fácil o media del catálogo curado, para que sea justa para los dos
+    const pool = await loadPlayableWords(ctx);
+    const friendly = pool.filter((w: any) => (w.difficulty ?? 2) <= 2);
+    const choices = friendly.length > 0 ? friendly : pool;
+    if (choices.length === 0) throw new ConvexError("No hay palabras disponibles.");
+    const word = choices[Math.floor(Math.random() * choices.length)];
 
-    // Deduct bet from challenger
-    await ctx.db.patch(challengerId, { coins: (challenger.coins ?? 0) - CHALLENGE_BET });
-
+    const now = Date.now();
+    await ctx.db.patch(userId, { coins: (challenger.coins ?? 0) - CHALLENGE_BET });
     const challengeId = await ctx.db.insert("friendChallenges", {
-      challengerId,
-      challengedId,
+      challengerId: userId,
+      challengedId: friendId,
       wordId: word._id,
-      status: "pending",
-      challengerAttempts,
-      challengerTimeMs,
+      status: "challenger_playing",
       rewardCoins: CHALLENGE_BET,
       createdAt: now,
       expiresAt: now + CHALLENGE_TTL_MS,
     });
 
-    // Notify challenged user
+    return { challengeId, wordData: buildChallengeWordData(word), betCoins: CHALLENGE_BET };
+  },
+});
+
+/** Quien reta terminó su palabra: se guarda su marca y le llega el reto al cuate. */
+export const submitChallengerResult = userMutation({
+  args: {
+    challengeId: v.id("friendChallenges"),
+    userId: v.id("users"),
+    attempts: v.number(),
+    timeMs: v.number(),
+  },
+  handler: async (ctx, { challengeId, userId, attempts, timeMs }) => {
+    const challenge = await ctx.db.get(challengeId);
+    if (!challenge) throw new ConvexError("Reto no encontrado.");
+    if (challenge.challengerId !== userId) throw new ConvexError("Este reto no es tuyo.");
+    if (challenge.status !== "challenger_playing") throw new ConvexError("Este reto ya fue enviado.");
+    if (timeMs < 1000) throw new ConvexError("Tiempo de resolución inválido.");
+    if (attempts > 10 || attempts < 1) throw new ConvexError("Intentos inválidos.");
+
+    const now = Date.now();
+    await ctx.db.patch(challengeId, {
+      status: "pending",
+      challengerAttempts: attempts,
+      challengerTimeMs: timeMs,
+      expiresAt: now + CHALLENGE_TTL_MS, // el cuate tiene 24 h desde que le llega
+    });
+
+    const challenger = await ctx.db.get(userId);
     await ctx.db.insert("friendNotifications", {
-      userId: challengedId,
+      userId: challenge.challengedId,
       type: "challenge",
-      fromUserId: challengerId,
-      fromUsername: challenger.username ?? undefined,
-      fromName: challenger.name ?? "Alguien",
+      fromUserId: userId,
+      fromUsername: challenger?.username ?? undefined,
+      fromName: challenger?.name ?? "Alguien",
       read: false,
       createdAt: now,
     });
 
-    return { challengeId, wordId: word._id, word: word.word };
+    const friend = await ctx.db.get(challenge.challengedId);
+    return { sent: true, attempts, timeMs, friendName: friend?.name ?? "tu cuate" };
   },
 });
 
@@ -1261,10 +1297,10 @@ export const expireOldChallenges = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    // Get all pending challenges
+    // Pendientes, o que quien reta dejó a medias: se devuelve su apuesta
     const pending = await ctx.db
       .query("friendChallenges")
-      .filter((q) => q.eq(q.field("status"), "pending"))
+      .filter((q) => q.or(q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "challenger_playing")))
       .collect();
 
     let expired = 0;

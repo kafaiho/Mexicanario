@@ -2,7 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import SKIN_CONFIG from '../constants/skinConfig';
+import { DEFAULT_PET_TYPE, defaultPetName, isLegacyPetType, normalizePetName, normalizePetType } from '../config/petTypes';
 import { STAGE_THRESHOLDS, VINCULO_MAX } from '../theme/designTokens';
+import { FOOD_ENERGIA, evolutionPatch, withMood } from './petMoodLogic';
+
+export { getAlegria, getEnergia, getPetMood, MOOD_HIGH, MOOD_LOW } from './petMoodLogic';
 
 export { SKIN_CONFIG };
 
@@ -14,16 +18,24 @@ export const getStage = (vinculo) => {
   return 1;
 };
 
-// Derive mood for animation frame selection
-export const getMood = (vinculo) => {
-  const ratio = vinculo / VINCULO_MAX;
-  if (ratio < 0.1) return 'sad';
-  if (ratio < 0.4) return 'neutral';
-  if (ratio < 0.7) return 'happy';
-  return 'joyful';
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+// Convierte un tipo anterior (ajolote, xolo, alebrije) y, la primera vez,
+// deja pendiente el aviso de que la mascota renació como la nueva.
+const withPetType = (s, rawType, rawName) => {
+  const petType = normalizePetType(rawType);
+  const patch = { petType, petName: normalizePetName(rawName ?? s.petName, petType) };
+  if (isLegacyPetType(rawType) && !s.rebirthShown && !s.pendingRebirth) {
+    patch.pendingRebirth = { from: rawType, to: petType };
+  }
+  return patch;
 };
 
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+// Suma vínculo y detecta si la mascota subió de etapa (→ ceremonia de evolución)
+const withVinculo = (s, amount) => {
+  const vinculo = clamp(s.vinculo + amount, 0, VINCULO_MAX);
+  return { vinculo, ...evolutionPatch(s.pendingEvolution, getStage(s.vinculo), getStage(vinculo)) };
+};
 
 const usePetStore = create(
   persist(
@@ -31,19 +43,27 @@ const usePetStore = create(
       // ── State ───────────────────────────────────────────────────────────
       vinculo: 0,                   // NUNCA mostrar en UI directamente
       streak: 0,
-      petType: 'alebrije',          // 'alebrije' | 'xolo' | 'ajolote'
-      petName: 'Alebrije',
+      petType: DEFAULT_PET_TYPE,    // 'tecolote' | 'monarca' | 'ayotl' | 'nahual_*'
+      petName: defaultPetName(DEFAULT_PET_TYPE),
       activeSkin: null,             // skin ID activo o null
       lastInteraction: Date.now(),
       lastDecayCheck: Date.now(),
       lastTapDate: null,            // 'YYYY-MM-DD' string for daily tap tracking
       tapsTodayCount: 0,            // taps used today
+      energiaBase: 80,              // 0-100, baja con el tiempo, sube al acertar/comer
+      energiaAt: Date.now(),
+      alegriaBase: 80,              // 0-100, baja con el tiempo, sube con caricias/aciertos
+      alegriaAt: Date.now(),
+      pendingEvolution: null,       // { from, to } → muestra EvolutionCeremony
+      pendingRebirth: null,         // { from, to } → muestra PetRebirthNotice (una sola vez)
+      rebirthShown: false,
 
       // ── Actions ─────────────────────────────────────────────────────────
       // +2 por acierto (antes +15 — ralentizado intencionalmente)
       acierto: () =>
         set((s) => ({
-          vinculo: clamp(s.vinculo + 2, 0, VINCULO_MAX),
+          ...withVinculo(s, 2),
+          ...withMood(s, { energia: 6, alegria: 3 }),
           lastInteraction: Date.now(),
         })),
 
@@ -56,9 +76,11 @@ const usePetStore = create(
           const today = new Date().toISOString().slice(0, 10);
           const isNewDay = s.lastTapDate !== today;
           const tapsToday = isNewDay ? 0 : s.tapsTodayCount;
-          if (tapsToday >= 10) return {}; // límite diario alcanzado
+          // Límite diario: sigue alegrándose, pero ya no suma vínculo
+          if (tapsToday >= 10) return { ...withMood(s, { alegria: 4 }), lastInteraction: Date.now() };
           return {
-            vinculo: clamp(s.vinculo + 2, 0, VINCULO_MAX),
+            ...withVinculo(s, 2),
+            ...withMood(s, { alegria: 8 }),
             lastInteraction: Date.now(),
             lastTapDate: today,
             tapsTodayCount: tapsToday + 1,
@@ -68,9 +90,21 @@ const usePetStore = create(
       // +(streak * 2) al completar racha
       streakBonus: (days) =>
         set((s) => ({
-          vinculo: clamp(s.vinculo + days * 2, 0, VINCULO_MAX),
+          ...withVinculo(s, days * 2),
           streak: days,
         })),
+
+      // Comida comprada: recupera energía y suma el vínculo que confirmó el servidor
+      // (el vínculo de la app es el que decide la evolución)
+      alimentar: (foodType, bondIncrease = 0) =>
+        set((s) => ({
+          ...(bondIncrease > 0 ? withVinculo(s, bondIncrease) : {}),
+          ...withMood(s, { energia: FOOD_ENERGIA[foodType] ?? 35, alegria: 10 }),
+          lastInteraction: Date.now(),
+        })),
+
+      clearPendingEvolution: () => set({ pendingEvolution: null }),
+      clearPendingRebirth: () => set({ pendingRebirth: null, rebirthShown: true }),
 
       // -1/hora por inactividad — desactivado por petición del usuario
       decay: () => {
@@ -78,11 +112,18 @@ const usePetStore = create(
       },
 
       // Sync desde Convex al iniciar sesión
+      // Al cambiar de mascota se descarta la evolución pendiente de la anterior
       hydrateFromBackend: ({ vinculo, petType, petName, streak }) =>
-        set({ vinculo, petType, petName, streak }),
+        set((s) => {
+          const typePatch = withPetType(s, petType, petName);
+          return {
+            vinculo, streak, ...typePatch,
+            ...(s.petType !== typePatch.petType ? { pendingEvolution: null } : {}),
+          };
+        }),
 
-      setPetType: (petType) => set({ petType }),
-      setPetName: (petName) => set({ petName }),
+      setPetType: (petType) => set((s) => withPetType(s, petType, s.petName)),
+      setPetName: (petName) => set((s) => ({ petName: normalizePetName(petName, s.petType) })),
       setActiveSkin: (activeSkin) => set({ activeSkin }),
     }),
     {
@@ -99,7 +140,29 @@ const usePetStore = create(
         lastDecayCheck: state.lastDecayCheck,
         lastTapDate: state.lastTapDate,
         tapsTodayCount: state.tapsTodayCount,
+        energiaBase: state.energiaBase,
+        energiaAt: state.energiaAt,
+        alegriaBase: state.alegriaBase,
+        alegriaAt: state.alegriaAt,
+        pendingEvolution: state.pendingEvolution,
+        pendingRebirth: state.pendingRebirth,
+        rebirthShown: state.rebirthShown,
       }),
+      // v1 (sep 2026): ajolote/xolo/alebrije → ayotl/tecolote/monarca, conservando el progreso.
+      // El aviso de "renació" no se decide aquí: el tipo local por defecto era 'alebrije'
+      // aun sin mascota. Lo activa withPetType cuando el servidor confirma un tipo anterior.
+      version: 1,
+      migrate: (persisted, version) => {
+        if (!persisted || version >= 1) return persisted;
+        const petType = normalizePetType(persisted.petType);
+        return {
+          ...persisted,
+          petType,
+          petName: normalizePetName(persisted.petName, petType),
+          pendingRebirth: null,
+          rebirthShown: false,
+        };
+      },
     }
   )
 );

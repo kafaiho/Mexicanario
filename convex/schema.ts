@@ -76,7 +76,7 @@ export default defineSchema({
     tacos: v.optional(v.number()),             // palabras adivinadas de verdad (≠ jumpToLevel)
     createdAt: v.number(),
     // ── Mascota fields ──────────────────────────────────────────────────
-    petType: v.optional(v.string()),           // "ajolote" | "xolo" | "alebrije"
+    petType: v.optional(v.string()),           // "tecolote" | "monarca" | "ayotl" | "nahual_*" (datos viejos: "ajolote" | "xolo" | "alebrije")
     petName: v.optional(v.string()),           // nombre elegido por el jugador
     petStage: v.optional(v.number()),          // 1=Cría 2=Juvenil 3=Guardián 4=Mítico
     petXp: v.optional(v.number()),             // XP total acumulado
@@ -132,6 +132,7 @@ export default defineSchema({
     petSlots: v.optional(v.string()),            // JSON: { ajolote:{...}, xolo:{...}, alebrije:{...}, nahual_norte:{...}, ... }
     // ── Mexicanario Plus subscription ───────────────────────────────────────
     mexPlusExpiresAt: v.optional(v.number()),    // epoch ms expiry; active when > Date.now()
+    plusRewardMonthId: v.optional(v.string()),   // "2026-09": último mes en que reclamó el regalo Plus
     // ── Sistema de referidos ─────────────────────────────────────────────────────
     referredBy: v.optional(v.id("users")), // quién me invitó (solo 1 vez)
     referralCount: v.optional(v.number()),    // total de cuates que han entrado por mi link
@@ -142,6 +143,7 @@ export default defineSchema({
     lastShareRewardDate: v.optional(v.string()),   // "YYYY-MM-DD" — una recompensa por día
     // ── Skins & contenido desbloqueado ───────────────────────────────────────
     purchasedSkins: v.optional(v.array(v.string())),         // IDs de skins compradas con monedas
+    activePetSkin: v.optional(v.string()),                   // traje puesto (uno de purchasedSkins)
     adultContentUnlocked: v.optional(v.array(v.string())),   // IDs de paquetes de contenido adulto desbloqueados
     // ── Código de creador/referido ───────────────────────────────────────────
     creatorCode: v.optional(v.string()),         // código aplicado (e.g., "ALANA")

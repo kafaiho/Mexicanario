@@ -100,7 +100,7 @@ export const getPetState = query({
 export const choosePet = userMutation({
     args: {
         userId: v.string(),
-        petType: v.string(),   // "ajolote" | "xolo" | "alebrije"
+        petType: v.string(),   // "tecolote" | "monarca" | "ayotl" (apps viejas: "ajolote" | "xolo" | "alebrije")
         petName: v.string(),
     },
     handler: async (ctx, args) => {
@@ -246,14 +246,16 @@ export const buyPetFood = userMutation({
         }
 
         const currentVinculo = user.petVinculo ?? 0;
-        const newVinculo = Math.min(2000, currentVinculo + bondIncrease);
+        // 4000 = VINCULO_MAX de la app (src/theme/designTokens.js)
+        const newVinculo = Math.min(4000, currentVinculo + bondIncrease);
 
         await ctx.db.patch(user._id, {
             diamonds: (user.diamonds ?? 0) - cost,
             petVinculo: newVinculo,
         } as any);
 
-        return { success: true, newVinculo };
+        // La app suma bondIncrease a su vínculo local, que es el que decide la evolución
+        return { success: true, newVinculo, bondIncrease };
     },
 });
 
@@ -313,10 +315,29 @@ export const gainPetXp = userMutation({
 // ─── Multi-mascota system ──────────────────────────────────────────────────────
 
 const DEFAULT_PET_NAMES: Record<string, string> = {
-    ajolote: "Ajolote",
-    xolo: "Xolo",
-    alebrije: "Alebrije",
+    tecolote: "Tecolote",
+    monarca: "Monarca",
+    ayotl: "Ayotl",
 };
+
+// Sep 2026: las mascotas anteriores renacieron como las nuevas y conservan su progreso.
+// Copia de src/config/petTypes.js (Convex no puede importar de src/).
+const LEGACY_PET_TYPES: Record<string, string> = {
+    ajolote: "ayotl",
+    xolo: "tecolote",
+    alebrije: "monarca",
+};
+const normalizePetType = (type: string): string => LEGACY_PET_TYPES[type] ?? type;
+
+// Espacios por mascota con llaves nuevas; si existen la vieja y la nueva, gana la nueva
+function normalizePetSlots(slots: Record<string, any>): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const [type, slot] of Object.entries(slots)) {
+        const key = normalizePetType(type);
+        if (!(key in out) || !(type in LEGACY_PET_TYPES)) out[key] = slot;
+    }
+    return out;
+}
 
 /**
  * Returns the saved slot data for all 3 pet types, including the current active pet.
@@ -356,23 +377,25 @@ export const getPetSlots = query({
 export const switchActivePet = userMutation({
     args: {
         userId: v.string(),
-        newPetType: v.string(),   // "ajolote" | "xolo" | "alebrije"
+        newPetType: v.string(),   // "tecolote" | "monarca" | "ayotl" | "nahual_*"
         currentVinculo: v.number(),   // latest vinculo from client Zustand store
     },
     handler: async (ctx, args) => {
         const user = await ctx.db.get(args.userId as Id<"users">);
         if (!user) return { success: false, error: "Usuario no encontrado" };
 
-        // Already on this pet
-        if (user.petType === args.newPetType) {
+        const newPetType = normalizePetType(args.newPetType);
+
+        // Already on this pet (un Ajolote guardado ya es la Ayotl)
+        if (user.petType && normalizePetType(user.petType) === newPetType) {
             return { success: true, alreadyActive: true, vinculo: args.currentVinculo };
         }
 
         const now = Date.now();
-        const currentType = user.petType ?? "ajolote";
+        const currentType = normalizePetType(user.petType ?? "monarca");
 
         // Parse saved slots
-        const slots: Record<string, any> = JSON.parse((user as any).petSlots || "{}");
+        const slots: Record<string, any> = normalizePetSlots(JSON.parse((user as any).petSlots || "{}"));
 
         // Save current active pet's data into its slot
         if (currentType) {
@@ -390,12 +413,12 @@ export const switchActivePet = userMutation({
         }
 
         // Restore (or initialize) the new pet's data
-        const saved = slots[args.newPetType];
-        const newName = saved?.name ?? DEFAULT_PET_NAMES[args.newPetType] ?? args.newPetType;
+        const saved = slots[newPetType];
+        const newName = saved?.name ?? DEFAULT_PET_NAMES[newPetType] ?? newPetType;
         const newVinculo = saved?.vinculo ?? 0;
 
         const patch: Record<string, any> = {
-            petType: args.newPetType,
+            petType: newPetType,
             petName: newName,
             petXp: saved?.xp ?? 0,
             petStage: saved?.stage ?? 1,

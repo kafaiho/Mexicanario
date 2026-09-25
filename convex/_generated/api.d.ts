@@ -83,6 +83,7 @@ import type * as seedWords1000 from "../seedWords1000.js";
 import type * as sessionAuth from "../sessionAuth.js";
 import type * as sessions from "../sessions.js";
 import type * as shop from "../shop.js";
+import type * as streakMath from "../streakMath.js";
 import type * as streaks from "../streaks.js";
 import type * as syncWords from "../syncWords.js";
 import type * as taquero from "../taquero.js";
@@ -90,6 +91,8 @@ import type * as testLevelState from "../testLevelState.js";
 import type * as userAchievements from "../userAchievements.js";
 import type * as userCollectedCards from "../userCollectedCards.js";
 import type * as users from "../users.js";
+import type * as weekId from "../weekId.js";
+import type * as wordPool from "../wordPool.js";
 import type * as words from "../words.js";
 
 /**
@@ -171,6 +174,7 @@ declare const fullApi: ApiFromModules<{
   sessionAuth: typeof sessionAuth;
   sessions: typeof sessions;
   shop: typeof shop;
+  streakMath: typeof streakMath;
   streaks: typeof streaks;
   syncWords: typeof syncWords;
   taquero: typeof taquero;
@@ -178,6 +182,8 @@ declare const fullApi: ApiFromModules<{
   userAchievements: typeof userAchievements;
   userCollectedCards: typeof userCollectedCards;
   users: typeof users;
+  weekId: typeof weekId;
+  wordPool: typeof wordPool;
   words: typeof words;
 }>;
 export declare const api: FilterApi<

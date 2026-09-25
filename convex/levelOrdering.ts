@@ -191,6 +191,46 @@ export function getOrderedLevels(
  * Returns the Set of wordId strings that a user has already completed,
  * based on their currentLevel and the ordered level list.
  */
+/** Letra índice del diccionario: sin acentos, pero la Ñ se queda como Ñ. */
+export function dictionaryLetter(word: string): string {
+  // Salta signos iniciales como ¡ ¿ " para que "¡Órale!" quede en la O
+  for (const ch of (word ?? "").toUpperCase()) {
+    if (ch === "Ñ") return "Ñ";
+    const base = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (/[A-Z]/.test(base)) return base;
+  }
+  return "#";
+}
+
+/**
+ * Diccionario del jugador: solo cuenta las palabras que están en SU camino de
+ * niveles (sin retiradas ni palabras de otra versión de orden). De las
+ * bloqueadas solo se manda cuántas hay por letra, nunca la palabra ni su significado.
+ */
+export function dictionaryEntries<W extends { _id: any; word: string }>(
+  orderedLevels: LevelDoc[],
+  words: W[],
+  currentLevel: number,
+): { unlocked: W[]; lockedByLetter: Record<string, number>; lockedCount: number; total: number } {
+  const done = completedWordIds(orderedLevels, currentLevel);
+  const inPath = new Set(orderedLevels.map((level) => level.wordId.toString()));
+  const unlocked: W[] = [];
+  const lockedByLetter: Record<string, number> = {};
+  let lockedCount = 0;
+  for (const w of words) {
+    const id = w._id.toString();
+    if (!inPath.has(id)) continue;
+    if (done.has(id)) {
+      unlocked.push(w);
+    } else {
+      const letter = dictionaryLetter(w.word);
+      lockedByLetter[letter] = (lockedByLetter[letter] ?? 0) + 1;
+      lockedCount++;
+    }
+  }
+  return { unlocked, lockedByLetter, lockedCount, total: inPath.size };
+}
+
 export function completedWordIds(
   orderedLevels: LevelDoc[],
   currentLevel: number,

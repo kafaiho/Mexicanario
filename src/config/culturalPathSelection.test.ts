@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildCulturalMapItems, getCurrentPathPresentation } from "./culturalPathSelection.js";
 import { MEXICO_VIVIDO_WORDS } from "../content/mexicoVividoWords.js";
+import { CULTURAL_SEGMENTS } from "./culturalTaxonomy.js";
 
 const shuffledLegacy = [
   { levelNumber: 91, pathId: "historias-leyendas" },
@@ -25,11 +26,16 @@ const editorialLevels = MEXICO_VIVIDO_WORDS.map((word, index) => ({
 }));
 const editorialItems = buildCulturalMapItems(editorialLevels, 2);
 const editorialBanners = editorialItems.filter(({ type }) => type === "path");
-assert.equal(editorialBanners.length, 10);
-assert.deepEqual(editorialBanners.map(({ zone }) => zone.levels), [
-  [1, 20], [21, 40], [41, 65], [66, 85], [86, 106],
-  [107, 126], [127, 146], [147, 166], [167, 186], [187, 206],
-]);
+assert.equal(editorialBanners.length, CULTURAL_SEGMENTS.length, "un encabezado por tramo (camino + vuelta)");
+assert.deepEqual(
+  editorialBanners.map(({ zone, round, firstIndex, levelCount }) => [zone.id, round, firstIndex, firstIndex + levelCount - 1]),
+  CULTURAL_SEGMENTS.map(({ pathId, round, start, end }) => [pathId, round, start, end]),
+);
+assert.deepEqual(
+  editorialBanners.slice(0, 10).map(({ zone }) => zone.levels),
+  CULTURAL_SEGMENTS.filter(({ round }) => round === 1).map(({ start, end }) => [start, end]),
+);
+assert.ok(editorialBanners.slice(10).every(({ round }) => round >= 2), "las ampliaciones son vueltas posteriores");
 
 assert.equal(getCurrentPathPresentation({ pathId: "patio-recreo", culturalOrderVersion: 2 }).id, "patio-recreo");
 assert.equal(getCurrentPathPresentation({ pathId: "patio-recreo", culturalOrderVersion: 1 }).isNeutral, true);

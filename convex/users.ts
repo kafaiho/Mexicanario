@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 import { loadOrderingData } from "./levelData";
+import { isoWeekId } from "./weekId";
 import {
   getOrderedLevels
 } from "./levelOrdering";
@@ -317,10 +318,7 @@ function nowCST(): Date {
 
 function getWeekId(): string {
   const d = nowCST();
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const dayOfYear = Math.floor((d.getTime() - jan4.getTime()) / 86400000) + 4;
-  const weekNum = Math.ceil(dayOfYear / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+  return isoWeekId(d);
 }
 
 function getMonthId(): string {
@@ -451,7 +449,9 @@ export const getGlobalLeaderboard = query({
   },
   handler: async (ctx, args) => {
     const pType = args.periodType ?? "alltime";
-    const pId = args.periodId ?? "alltime";
+    // El servidor fija la semana/mes actual: versiones viejas de la app calculan
+    // la semana con otra fórmula y verían un ranking vacío.
+    const pId = pType === "weekly" ? getWeekId() : pType === "monthly" ? getMonthId() : (args.periodId ?? "alltime");
 
     // Try cached snapshot first (O(1))
     const snapshot = await ctx.db

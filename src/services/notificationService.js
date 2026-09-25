@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { DEFAULT_PET_TYPE, normalizePetName, normalizePetType } from '../config/petTypes';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -62,54 +63,46 @@ function pickRandom(arr) {
 
 const COPY = {
 
-  // ── Racha en riesgo (21:00) ─────────────────────────────────────────────────
+  // ── Racha en riesgo (21:00) — la llama del tonalli está bajita ─────────────
+  // Una sola, amable y sin culpa: la mascota nunca "se muere" por no jugar.
   streakRisk: {
-    ajolote: (name, n) => [
-      { title: `🦎 ${name} lleva horas esperándote`,    body: `${n} días de racha. Se rompen a medianoche. ¿Los tiras?` },
-      { title: `🦎 ${name} está inquieto esta noche`,   body: `Tu ajolote no puede dormir. La racha de ${n} días depende de ti.` },
-      { title: `🌮 ¡Órale! Queda poco tiempo`,          body: `${name} pide que no te rajas. ${n} días en juego ahora mismo.` },
+    tecolote: (name, n) => [
+      { title: `🦉 ${name} sigue despierto`,              body: `Su tonalli está bajito. ¿Una palabra antes de dormir? Van ${n} días.` },
+      { title: `🔥 ${n} días de llama`,                    body: `${name} tiene el libro abierto. Dos minutos y la llama sigue viva.` },
     ],
-    xolo: (name, n) => [
-      { title: `🐕 ${name} ladra bajito en la esquina`, body: `${n} días de racha a punto de romperse. No lo dejes plantado.` },
-      { title: `🐕 ${name} está en la puerta`,          body: `Tu xolo espera. ${n} días. La medianoche se acerca rápido.` },
-      { title: `🌮 ¡No te me rajes, cuate!`,            body: `${name} dice que aún hay tiempo. Salva los ${n} días.` },
+    monarca: (name, n) => [
+      { title: `🦋 ${name} bate las alas despacito`,       body: `Su llama está bajita. Un nivel y siguen ${n} días de viaje.` },
+      { title: `🔥 ${n} días de llama`,                    body: `${name} quiere seguir volando contigo hoy. ¿Una palabra?` },
     ],
-    alebrije: (name, n) => [
-      { title: `🌈 ${name} perdió colores de tristeza`, body: `La racha de ${n} días muere a medianoche. Vuélvele los colores.` },
-      { title: `🌈 ${name} soñó que te perdía`,        body: `${n} días en juego. Tu alebrije dice que no pares ahora.` },
-      { title: `🌮 La racha te necesita esta noche`,    body: `${name} espera. ${n} días. Solo toma 2 minutos. ¡Ándale!` },
+    ayotl: (name, n) => [
+      { title: `🐢 ${name} te espera en la orilla`,        body: `Lenta pero segura: un nivel y siguen ${n} días de racha.` },
+      { title: `🔥 ${n} días de llama`,                    body: `El tonalli de ${name} está bajito. Dos minutos bastan.` },
     ],
   },
 
-  // ── Racha perdida (09:00 día siguiente) ──────────────────────────────────────
+  // ── Racha perdida (09:00 día siguiente) — nuevo comienzo, sin culpa ─────────
   streakLost: {
-    ajolote: (name, n) => [
-      { title: `💔 Se rompió. ${n} días perdidos`,      body: `${name} no te culpa. Hoy empieza de cero, y esta vez sin excusas.` },
-      { title: `🦎 ${name} sigue ahí, esperándote`,     body: `La racha cayó, pero tu ajolote no se rindió. ¿Y tú?` },
+    tecolote: (name, n) => [
+      { title: `🦉 ${name} se durmió`,                     body: `La llama se apagó, pero tu récord de ${n} días se queda. Hoy enciendes una nueva.` },
     ],
-    xolo: (name, n) => [
-      { title: `💔 ${n} días de racha se fueron`,       body: `${name} te perdonó. Dice que hoy es el día uno de algo mejor.` },
-      { title: `🐕 ${name} sigue fiel en casa`,         body: `La racha se fue. Pero tu xolo no se rinde. No le falles hoy.` },
+    monarca: (name, n) => [
+      { title: `🦋 ${name} descansa en su hoja`,           body: `Tu récord de ${n} días sigue en tu perfil. ¿Encendemos una llama nueva?` },
     ],
-    alebrije: (name, n) => [
-      { title: `💔 ${n} días. Se acabó la racha`,       body: `${name} está triste. Pero los alebrijes siempre renacen. Tú también.` },
-      { title: `🌈 ${name} necesita tus colores`,       body: `La racha cayó. Tu alebrije espera el primer día de la próxima.` },
+    ayotl: (name, n) => [
+      { title: `🐢 ${name} se durmió en la arena`,         body: `No pasa nada: tu récord de ${n} días se queda. Hoy empieza otra llama.` },
     ],
   },
 
   // ── Mascota hambrienta (36h sin jugar) ────────────────────────────────────────
   mascotHungry: {
-    ajolote: (name) => [
-      { title: `😢 ${name} tiene hambre`,               body: `Tu ajolote lleva días sin aprender modismos. Aprende 3 y aliméntalo.` },
-      { title: `🦎 ${name} te extraña mucho`,           body: `Han pasado muchas horas. Tu ajolote espera que vuelvas.` },
+    tecolote: (name) => [
+      { title: `🦉 ${name} quiere leer contigo`,           body: `Tiene palabras nuevas guardadas para ti. Ven un ratito.` },
     ],
-    xolo: (name) => [
-      { title: `🐕 ${name} está echado y solo`,         body: `Tu xolo no ha comido modismos en días. Ven a jugar un rato.` },
-      { title: `😢 ${name} ladra sin que nadie escuche`,body: `No te ha visto en mucho tiempo. Vuelve y enséñale algo chido.` },
+    monarca: (name) => [
+      { title: `🦋 ${name} tiene hambre de palabras`,      body: `Aprende 3 modismos y dale de comer.` },
     ],
-    alebrije: (name) => [
-      { title: `🌈 ${name} perdió sus colores`,         body: `Tu alebrije se apaga sin ti. Vuelve y aprende algo hoy.` },
-      { title: `😢 ${name} necesita brillar de nuevo`,  body: `Muchas horas sin modismos. Tu alebrije espera que lo despiertes.` },
+    ayotl: (name) => [
+      { title: `🐢 ${name} te extraña`,                    body: `Sin prisa, pero sin pausa: ven a jugar una palabra.` },
     ],
   },
 };
@@ -159,7 +152,7 @@ async function _schedule(id, content, trigger) {
 // 1. Racha en riesgo — 21:00 local (si ya pasó, mañana 21:00)
 async function _scheduleStreakRisk(streak, petName, petType) {
   if (streak <= 0) return;
-  const type = petType in COPY.streakRisk ? petType : 'ajolote';
+  const type = normalizePetType(petType) in COPY.streakRisk ? normalizePetType(petType) : DEFAULT_PET_TYPE;
   const msg  = pickRandom(COPY.streakRisk[type](petName || 'Tu mascota', streak));
   let   fire = todayAt(21, 0);
   if (fire <= new Date()) fire = tomorrowAt(21, 0);
@@ -170,7 +163,7 @@ async function _scheduleStreakRisk(streak, petName, petType) {
 //    Se cancela si el usuario juega antes de medianoche.
 async function _scheduleStreakLost(streak, petName, petType) {
   if (streak <= 0) return;
-  const type = petType in COPY.streakLost ? petType : 'ajolote';
+  const type = normalizePetType(petType) in COPY.streakLost ? normalizePetType(petType) : DEFAULT_PET_TYPE;
   const msg  = pickRandom(COPY.streakLost[type](petName || 'Tu mascota', streak));
   await _schedule(NOTIF_IDS.streakLost, msg, { date: tomorrowAt(9, 0) });
 }
@@ -198,7 +191,7 @@ async function _scheduleMilestoneEve(streak) {
 
 // 4. Mascota hambrienta — 36h desde ahora
 async function _scheduleMascotHungry(petName, petType) {
-  const type = petType in COPY.mascotHungry ? petType : 'ajolote';
+  const type = normalizePetType(petType) in COPY.mascotHungry ? normalizePetType(petType) : DEFAULT_PET_TYPE;
   const msg  = pickRandom(COPY.mascotHungry[type](petName || 'Tu mascota'));
   const fire = new Date(Date.now() + 36 * 60 * 60 * 1000);
   await _schedule(NOTIF_IDS.mascotHungry, msg, { date: fire });
@@ -264,13 +257,13 @@ export async function cancelAllReminders() {
 // Parámetros:
 //   streakDays  — racha actual (ya actualizada)
 //   petName     — nombre del pet del usuario
-//   petType     — 'ajolote' | 'xolo' | 'alebrije'
+//   petType     — 'tecolote' | 'monarca' | 'ayotl' (acepta los tipos anteriores)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function rescheduleAfterPlay({ streakDays, petName, petType }) {
   await cancelAllReminders();
 
-  const name = petName || 'Tu mascota';
-  const type = petType || 'ajolote';
+  const type = normalizePetType(petType);
+  const name = normalizePetName(petName, petType);
 
   if (streakDays > 0) {
     await _scheduleStreakRisk(streakDays, name, type);

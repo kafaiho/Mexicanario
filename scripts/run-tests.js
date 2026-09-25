@@ -6,6 +6,7 @@ const testModules = [
   'src/config/culturalAssets.test.js',
   'src/config/culturalContent.test.js',
   'src/config/regionConfig.test.js',
+  'src/config/streakRewards.test.js',
   'src/config/collectionPresentation.test.js',
   'src/config/achievementProgress.test.js',
   'src/config/achievementCollections.test.js',
@@ -40,6 +41,13 @@ const typescriptTestModules = [
   'convex/culturalLibrary.test.ts',
   'convex/shopPerformance.test.ts',
   'convex/sessionAuth.test.ts',
+  'convex/iapCatalogParity.test.ts',
+  'convex/weekId.test.ts',
+  'convex/streakMath.test.ts',
+  'src/store/petMoodLogic.test.ts',
+  'src/config/petTypes.test.ts',
+  'src/components/Pet3D/petModels.test.ts',
+  'src/utils/serverError.test.ts',
 ];
 
 const catalogCheck = spawnSync(process.execPath, ['scripts/generate-mexico-vivido-convex-catalog.js', '--check'], {

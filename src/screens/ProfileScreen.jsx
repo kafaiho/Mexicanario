@@ -15,11 +15,12 @@ import AvatarModal from "../components/AvatarModal";
 import CountryModal from "../components/CountryModal";
 import InviteModal from "../components/InviteModal";
 import { DIVISIONS } from "../components/LeagueBadge";
-import { PET_ASSETS } from "../components/PetCompanion/petAssets";
+import { getStageAssets } from "../components/PetCompanion/petAssets";
+import { normalizePetSlots, normalizePetType, PET_TYPES } from "../config/petTypes";
 import ProfileModal from "../components/ProfileModal";
 import { useAuth } from "../context/AuthContext";
 import { FONTS } from "../theme/designTokens";
-import { getCulturalPathProgress, getNextCulturalPath } from "../config/mexicoZones";
+import { getCulturalPathProgress, getCulturalSegmentSize, getNextCulturalPath } from "../config/mexicoZones";
 import { getCurrentPathPresentation } from "../config/culturalPathSelection";
 import EloBadge from "../components/EloBadge";
 
@@ -105,9 +106,7 @@ export default function ProfileScreen({ visible, onClose }) {
   const highDivInfo = DIVISIONS.find((d) => d.div === leagueHighest) ?? DIVISIONS[0];
 
   // Pet asset
-  const petAsset = petType && PET_ASSETS[petType]
-    ? PET_ASSETS[petType][petStage]?.body ?? null
-    : null;
+  const petAsset = petType ? getStageAssets(petType, petStage)?.body ?? null : null;
 
   // Viaje de México: v2 usa metadatos editoriales; v1 conserva etiqueta neutral.
   const totalLevels  = allLevels?.length ?? 0;
@@ -119,9 +118,13 @@ export default function ProfileScreen({ visible, onClose }) {
   const zoneProgress = currentZone && !currentZone.isNeutral
     ? getCulturalPathProgress(currentLevelMeta?.editorialOrder, currentZone.id)
     : Math.min(level, totalLevels);
-  const zoneSize     = currentZone?.entryCount ?? Math.max(totalLevels, 1);
+  const zoneSize     = currentZone && !currentZone.isNeutral
+    ? getCulturalSegmentSize(currentLevelMeta?.editorialOrder, currentZone.entryCount)
+    : Math.max(totalLevels, 1);
   const zonePct      = zoneSize > 0 ? zoneProgress / zoneSize : 0;
-  const nextZone     = currentZone && !currentZone.isNeutral ? getNextCulturalPath(currentZone.id) : null;
+  const nextZone     = currentZone && !currentZone.isNeutral
+    ? getNextCulturalPath(currentLevelMeta?.editorialOrder ?? currentZone.id)
+    : null;
 
   // Cuates count
   const cuatesCount = myFriends?.length ?? 0;
@@ -262,11 +265,11 @@ export default function ProfileScreen({ visible, onClose }) {
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Mascotas</Text>
                 <View style={styles.petsRow}>
-                  {["ajolote", "alebrije", "xolo"].map((type) => {
-                    const slot = petSlots.slots[type];
-                    const isActive = petSlots.activePetType === type;
+                  {PET_TYPES.map(({ id: type }) => {
+                    const slot = normalizePetSlots(petSlots.slots)[type];
+                    const isActive = normalizePetType(petSlots.activePetType) === type;
                     const stage = slot?.stage ?? 0;
-                    const asset = slot && PET_ASSETS[type]?.[stage]?.body;
+                    const asset = slot && getStageAssets(type, stage)?.body;
                     const stageProgress = stage / 6;
 
                     return (

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
@@ -11,9 +11,13 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import HomeButton from "../components/HomeButton";
+import MinigameScoreboard from "../components/MinigameScoreboard";
 import { api } from "../../convex/_generated/api";
+import { isNewRecord, shuffle, taqueroPantry, taqueroRecipe, TAQUERO_UNLOCKS } from "../config/minigameLogic";
 import { useAuth } from "../context/AuthContext";
-import { playBGM, stopBGM } from "../utils/soundManager";
+import { notifyError, notifySuccess, tapLight } from "../services/haptics";
+import { playBGM, playSound, stopBGM } from "../utils/soundManager";
 import { useUserMutation } from "../hooks/useUserMutation";
 
 const { width, height } = Dimensions.get("window");
@@ -26,34 +30,22 @@ const WHEAT2 = "#F5DEB3";
 const RED = "#C0392B";
 const GREEN = "#27AE60";
 
-// RECIPE es ahora dinámico, generado por taco
-const BASE_TOPPINGS = ["Carne", "Salsa", "Limón"];
-const ALL_INGREDIENTS = ["Carne", "Limón", "Tortilla", "Salsa"];
+const GAME_SECONDS = 30;
+const PERFECT_BONUS_MS = 1000; // taco sin errores = +1s
 
-function shuffleArray(arr) {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
+const S_MENU = "menu";
+const S_PLAYING = "playing";
+const S_OVER = "over";
 
-const TABS = [
-    { key: "daily", label: "🔥 Hoy" },
-    { key: "weekly", label: "📅 Semana" },
-    { key: "alltime", label: "🏆 Total" },
-];
-
-function getIngredientIcon(ingredient) {
-    switch (ingredient) {
-        case "Tortilla": return "🫓";
-        case "Carne": return "🥩";
-        case "Salsa": return "🌶️";
-        case "Limón": return "🍋";
-        default: return "";
-    }
-}
+const INGREDIENT_ICONS = {
+    Tortilla: "🫓",
+    Carne: "🥩",
+    Salsa: "🌶️",
+    Limón: "🍋",
+    Cebolla: "🧅",
+    Cilantro: "🌿",
+    Piña: "🍍",
+};
 
 function scoreMsg(n) {
     if (n > 15) return "¡Eres el Rey del Trompo! 👑";
@@ -67,118 +59,172 @@ export default function TaqueroRushScreen({ navigation }) {
 
     const insets = useSafeAreaInsets();
     const { userId } = useAuth();
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(30);
+    const [gameState, setGameState] = useState(S_MENU);
+    const [timeLeft, setTimeLeft] = useState(GAME_SECONDS);
     const [score, setScore] = useState(0);
     const [currentStep, setCurrentStep] = useState(0);
-    const [isGameOver, setIsGameOver] = useState(false);
-    const [tab, setTab] = useState("daily");
-    const [shuffledButtons, setShuffledButtons] = useState(() => shuffleArray(ALL_INGREDIENTS));
-    const [currentRecipe, setCurrentRecipe] = useState(() => ["Tortilla", ...shuffleArray(BASE_TOPPINGS)]);
+    const [currentRecipe, setCurrentRecipe] = useState(() => taqueroRecipe(0));
+    const [buttons, setButtons] = useState(() => shuffle(taqueroPantry(0)));
     const [tacoStack, setTacoStack] = useState([]);
-    const tacoShake = React.useRef(new Animated.Value(0)).current;
+    const [wrongIng, setWrongIng] = useState(null);
+    const [unlockMsg, setUnlockMsg] = useState(null);
+    const [newRecord, setNewRecord] = useState(false);
+
+    const tacoShake = useRef(new Animated.Value(0)).current;
+    const bonusAnim = useRef(new Animated.Value(0)).current;
+    const scoreRef = useRef(0);
+    const endTimeRef = useRef(0);
+    const lockRef = useRef(false);        // bloquea taps mientras se sirve el taco
+    const mistakeRef = useRef(false);     // ¿hubo error en el taco actual?
+    const stackIdRef = useRef(0);
+    const prevBestRef = useRef(null);
+    const timeoutsRef = useRef([]);
 
     const submitScore = useUserMutation(api.taquero.submitScore);
-    const leaderboard = useQuery(api.taquero.getLeaderboard, isGameOver ? { type: tab } : "skip");
-    const myBest = useQuery(api.taquero.getMyBest, userId && isGameOver ? { userId } : "skip");
+    const myBest = useQuery(api.taquero.getMyBest, userId ? { userId } : "skip");
 
+    const later = (ms, fn) => { timeoutsRef.current.push(setTimeout(fn, ms)); };
+    useEffect(() => () => timeoutsRef.current.forEach(clearTimeout), []);
+
+    // Reloj basado en hora de fin: permite sumar segundos de bono sin desfasarse
     useEffect(() => {
-        let timer;
-        if (isPlaying && timeLeft > 0) {
-            timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-        } else if (isPlaying && timeLeft === 0) {
-            const finalScore = score;
-            setIsGameOver(true);
-            setIsPlaying(false);
-            if (userId && finalScore > 0) submitScore({ userId, score: finalScore }).catch(() => { });
-        }
+        if (gameState !== S_PLAYING) return;
+        const timer = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            if (remaining === 0) {
+                clearInterval(timer);
+                const finalScore = scoreRef.current;
+                const prev = prevBestRef.current;
+                setNewRecord(prev !== null && isNewRecord(finalScore, prev));
+                setGameState(S_OVER);
+                if (userId && finalScore > 0) submitScore({ userId, score: finalScore }).catch(() => { });
+            }
+        }, 200);
         return () => clearInterval(timer);
-    }, [isPlaying, timeLeft]);
+    }, [gameState]);
 
     const startGame = () => {
-        setIsPlaying(true);
-        setIsGameOver(false);
+        tapLight();
+        prevBestRef.current = myBest ? myBest.allTime : null;
+        scoreRef.current = 0;
+        endTimeRef.current = Date.now() + GAME_SECONDS * 1000;
+        lockRef.current = false;
+        mistakeRef.current = false;
         setScore(0);
-        setTimeLeft(30);
+        setTimeLeft(GAME_SECONDS);
         setCurrentStep(0);
         setTacoStack([]);
+        setWrongIng(null);
+        setUnlockMsg(null);
+        setNewRecord(false);
         tacoShake.setValue(0);
-        setCurrentRecipe(["Tortilla", ...shuffleArray(BASE_TOPPINGS)]);
-        setShuffledButtons(shuffleArray(ALL_INGREDIENTS));
+        setCurrentRecipe(taqueroRecipe(0));
+        setButtons(shuffle(taqueroPantry(0)));
+        setGameState(S_PLAYING);
     };
 
-    // Pre-allocate pool of Animated.Values to avoid creating new ones per tap
-    const animPool = useRef(Array.from({ length: 20 }, () => new Animated.Value(0))).current;
-    const animIdx = useRef(0);
+    const serveTaco = () => {
+        lockRef.current = true;
+        const served = scoreRef.current + 1;
+        scoreRef.current = served;
+        setScore(served); // cuenta al instante, aunque el reloj llegue a cero durante la animación
+
+        playSound("coin");
+        notifySuccess();
+        if (!mistakeRef.current) {
+            endTimeRef.current += PERFECT_BONUS_MS;
+            bonusAnim.setValue(0);
+            Animated.timing(bonusAnim, { toValue: 1, duration: 700, useNativeDriver: true }).start();
+        }
+
+        const unlock = TAQUERO_UNLOCKS.find((u) => u.at === served);
+        if (unlock) {
+            setUnlockMsg(`¡Nuevo ingrediente: ${INGREDIENT_ICONS[unlock.ingredient]} ${unlock.ingredient}!`);
+            later(1600, () => setUnlockMsg(null));
+        }
+
+        Animated.sequence([
+            Animated.timing(tacoShake, { toValue: 1.2, duration: 100, useNativeDriver: true }),
+            Animated.timing(tacoShake, { toValue: 0, duration: 100, useNativeDriver: true }),
+        ]).start(() => {
+            mistakeRef.current = false;
+            setTacoStack([]);
+            setCurrentStep(0);
+            setCurrentRecipe(taqueroRecipe(served));
+            setButtons(shuffle(taqueroPantry(served)));
+            lockRef.current = false;
+        });
+    };
 
     const handleIngredientTap = useCallback((ingredient) => {
-        if (!isPlaying || isGameOver) return;
+        if (gameState !== S_PLAYING || lockRef.current) return;
         if (ingredient === currentRecipe[currentStep]) {
-            // Reuse Animated.Value from pool (no leak)
-            const anim = animPool[animIdx.current % animPool.length];
-            anim.setValue(0);
-            animIdx.current++;
-
-            const newIng = {
-                id: Date.now().toString(),
-                icon: getIngredientIcon(ingredient),
+            tapLight();
+            const anim = new Animated.Value(0);
+            stackIdRef.current += 1;
+            setTacoStack((prev) => [...prev, {
+                id: stackIdRef.current,
+                icon: INGREDIENT_ICONS[ingredient],
                 rotate: `${Math.random() * 20 - 10}deg`,
                 offsetX: Math.random() * 16 - 8,
                 anim,
-            };
+            }]);
+            Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
-            setTacoStack((prev) => [...prev, newIng]);
-
-            Animated.spring(newIng.anim, {
-                toValue: 1,
-                friction: 5,
-                useNativeDriver: true,
-            }).start();
-
-            if (currentStep === currentRecipe.length - 1) {
-                // Taco complete
-                setCurrentStep(0);
-                setTimeout(() => {
-                    // Celebration bounce
-                    Animated.sequence([
-                        Animated.timing(tacoShake, { toValue: 1.2, duration: 100, useNativeDriver: true }),
-                        Animated.timing(tacoShake, { toValue: 0, duration: 100, useNativeDriver: true })
-                    ]).start(() => {
-                        setScore((s) => s + 1);
-                        setTacoStack([]);
-                        setCurrentRecipe(["Tortilla", ...shuffleArray(BASE_TOPPINGS)]);
-                        setShuffledButtons(shuffleArray(ALL_INGREDIENTS));
-                    });
-                }, 150);
-            } else {
-                setCurrentStep((s) => s + 1);
-            }
+            if (currentStep === currentRecipe.length - 1) serveTaco();
+            else setCurrentStep((s) => s + 1);
         } else {
-            // Regresar a 0 si falla (agitar y limpiar)
+            // Error: se tira el taco y se empieza de nuevo
+            lockRef.current = true;
+            mistakeRef.current = true;
+            playSound("wrong");
+            notifyError();
+            setWrongIng(ingredient);
             Animated.sequence([
                 Animated.timing(tacoShake, { toValue: -1, duration: 50, useNativeDriver: true }),
                 Animated.timing(tacoShake, { toValue: 1, duration: 50, useNativeDriver: true }),
-                Animated.timing(tacoShake, { toValue: 0, duration: 50, useNativeDriver: true })
+                Animated.timing(tacoShake, { toValue: 0, duration: 50, useNativeDriver: true }),
             ]).start(() => {
                 setCurrentStep(0);
                 setTacoStack([]);
+                setWrongIng(null);
+                lockRef.current = false;
             });
         }
-    }, [isPlaying, isGameOver, currentRecipe, currentStep]);
+    }, [gameState, currentRecipe, currentStep]);
+
+    const threeCols = buttons.length > 4;
 
     return (
         <ImageBackground source={require("../../assets/images/bg.webp")} style={styles.root} resizeMode="cover">
             <View style={styles.darkOverlay} />
 
             {/* ── Menú ── */}
-            {!isPlaying && !isGameOver && (
-                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+            {gameState === S_MENU && (
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 64 }]}>
                     <View style={styles.card}>
                         <Text style={styles.cardBigEmoji}>🌮</Text>
                         <Text style={styles.cardTitle}>¡Taquero Rush!</Text>
                         <Text style={styles.cardDesc}>
-                            Tienes 30 segundos. Sigue la receta en orden.
+                            Arma los tacos siguiendo la receta en orden. Mientras más sirves, más ingredientes aparecen.
                         </Text>
+                        <View style={styles.instructRow}>
+                            <View style={styles.instructItem}>
+                                <Text style={styles.instructEmoji}>⏱️</Text>
+                                <Text style={styles.instructText}>{GAME_SECONDS} segundos</Text>
+                            </View>
+                            <View style={styles.instructDivider} />
+                            <View style={styles.instructItem}>
+                                <Text style={styles.instructEmoji}>✨</Text>
+                                <Text style={styles.instructText}>Sin errores{"\n"}+1s</Text>
+                            </View>
+                            <View style={styles.instructDivider} />
+                            <View style={styles.instructItem}>
+                                <Text style={styles.instructEmoji}>🏆</Text>
+                                <Text style={styles.instructText}>Récord{"\n"}{myBest ? myBest.allTime : "–"}</Text>
+                            </View>
+                        </View>
                         <TouchableOpacity style={styles.startBtn} onPress={startGame}>
                             <Text style={styles.startBtnText}>¡Ándale, Empezar!</Text>
                         </TouchableOpacity>
@@ -190,28 +236,39 @@ export default function TaqueroRushScreen({ navigation }) {
             )}
 
             {/* ── En juego ── */}
-            {isPlaying && (
+            {gameState === S_PLAYING && (
                 <View style={StyleSheet.absoluteFillObject}>
                     <View style={[styles.hud, { top: insets.top + 10 }]}>
                         <Text style={styles.hudText}>🌮 {score}</Text>
-                        <Text style={[styles.hudText, timeLeft <= 5 && { color: RED }]}>⏱️ {timeLeft}s</Text>
-                        <TouchableOpacity style={styles.exitBtn} onPress={() => { setIsPlaying(false); navigation.goBack(); }}>
+                        <View>
+                            <Text style={[styles.hudText, timeLeft <= 5 && styles.hudTextDanger]}>⏱️ {timeLeft}s</Text>
+                            <Animated.Text
+                                pointerEvents="none"
+                                style={[styles.bonusText, {
+                                    opacity: bonusAnim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }),
+                                    transform: [{ translateY: bonusAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 28] }) }],
+                                }]}
+                            >
+                                +1s ✨
+                            </Animated.Text>
+                        </View>
+                        <TouchableOpacity style={styles.exitBtn} onPress={() => navigation.goBack()} accessibilityLabel="Salir del juego">
                             <Text style={styles.exitBtnText}>✕</Text>
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.gameInner}>
                         <View style={styles.prepArea}>
-                            <Text style={styles.prepTitle}>Preparando Taco...</Text>
+                            <Text style={styles.prepTitle}>{unlockMsg || "Preparando taco..."}</Text>
 
                             <Animated.View style={[
                                 styles.tacoStackArea,
                                 {
                                     transform: [
-                                        { scale: tacoShake.interpolate({ inputRange: [0, 1.2], outputRange: [1, 1.2], extrapolate: 'clamp' }) },
-                                        { translateX: tacoShake.interpolate({ inputRange: [-1, 0, 1], outputRange: [-10, 0, 10], extrapolate: 'clamp' }) }
-                                    ]
-                                }
+                                        { scale: tacoShake.interpolate({ inputRange: [0, 1.2], outputRange: [1, 1.2], extrapolate: "clamp" }) },
+                                        { translateX: tacoShake.interpolate({ inputRange: [-1, 0, 1], outputRange: [-10, 0, 10], extrapolate: "clamp" }) },
+                                    ],
+                                },
                             ]}>
                                 {tacoStack.length === 0 ? (
                                     <Text style={styles.emptyPlateText}>¡Echa la tortilla!</Text>
@@ -227,8 +284,8 @@ export default function TaqueroRushScreen({ navigation }) {
                                                         { translateY: item.anim.interpolate({ inputRange: [0, 1], outputRange: [-80, 0] }) },
                                                         { translateX: item.offsetX },
                                                         { rotate: item.rotate },
-                                                    ]
-                                                }
+                                                    ],
+                                                },
                                             ]}
                                         >
                                             {item.icon}
@@ -236,22 +293,42 @@ export default function TaqueroRushScreen({ navigation }) {
                                     ))
                                 )}
                             </Animated.View>
-                            <View style={styles.progressDots}>
-                                {currentRecipe.map((_, i) => (
-                                    <View key={i} style={[styles.dot,
-                                    currentStep > i ? styles.dotDone : currentStep === i ? styles.dotCurrent : null]} />
+
+                            {/* Receta completa: lo hecho, lo que sigue y lo que falta */}
+                            <View style={styles.recipeRow}>
+                                {currentRecipe.map((ing, i) => (
+                                    <View
+                                        key={`${ing}-${i}`}
+                                        style={[
+                                            styles.recipeStep,
+                                            currentStep > i && styles.recipeStepDone,
+                                            currentStep === i && styles.recipeStepCurrent,
+                                        ]}
+                                    >
+                                        <Text style={styles.recipeIcon}>{currentStep > i ? "✓" : INGREDIENT_ICONS[ing]}</Text>
+                                    </View>
                                 ))}
                             </View>
                             <Text style={styles.nextPrompt}>
-                                Siguiente: {currentRecipe[currentStep]} {getIngredientIcon(currentRecipe[currentStep])}
+                                Siguiente: {currentRecipe[currentStep]} {INGREDIENT_ICONS[currentRecipe[currentStep]]}
                             </Text>
                         </View>
 
                         <View style={styles.grid}>
-                            {shuffledButtons.map((ing, idx) => (
-                                <TouchableOpacity key={idx} style={styles.ingBtn} onPress={() => handleIngredientTap(ing)}>
-                                    <Text style={styles.ingIcon}>{getIngredientIcon(ing)}</Text>
-                                    <Text style={styles.ingName}>{ing}</Text>
+                            {buttons.map((ing) => (
+                                <TouchableOpacity
+                                    key={ing}
+                                    style={[
+                                        styles.ingBtn,
+                                        threeCols && styles.ingBtnSmall,
+                                        wrongIng === ing && styles.ingBtnWrong,
+                                    ]}
+                                    onPressIn={() => handleIngredientTap(ing)}
+                                    activeOpacity={0.7}
+                                    accessibilityLabel={ing}
+                                >
+                                    <Text style={[styles.ingIcon, threeCols && styles.ingIconSmall]}>{INGREDIENT_ICONS[ing]}</Text>
+                                    <Text style={[styles.ingName, threeCols && styles.ingNameSmall]}>{ing}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -260,8 +337,8 @@ export default function TaqueroRushScreen({ navigation }) {
             )}
 
             {/* ── Game over + leaderboard ── */}
-            {isGameOver && (
-                <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+            {gameState === S_OVER && (
+                <View style={[styles.cardOverlay, { paddingTop: insets.top + 64 }]}>
                     <View style={styles.card}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingBottom: 8 }}>
                             <Text style={styles.cardBigEmoji}>👨‍🍳</Text>
@@ -273,42 +350,13 @@ export default function TaqueroRushScreen({ navigation }) {
                             </View>
                             <Text style={styles.resultMsg}>{scoreMsg(score)}</Text>
 
-                            {/* Personal bests */}
-                            {myBest && (
-                                <View style={styles.myBestRow}>
-                                    <View style={styles.myBestItem}><Text style={styles.myBestVal}>{myBest.daily}</Text><Text style={styles.myBestLabel}>🔥 Hoy</Text></View>
-                                    <View style={styles.myBestItem}><Text style={styles.myBestVal}>{myBest.weekly}</Text><Text style={styles.myBestLabel}>📅 Semana</Text></View>
-                                    <View style={styles.myBestItem}><Text style={styles.myBestVal}>{myBest.allTime}</Text><Text style={styles.myBestLabel}>🏆 Total</Text></View>
-                                </View>
-                            )}
-
-                            {/* Tabs */}
-                            <View style={styles.tabRow}>
-                                {TABS.map((t) => (
-                                    <TouchableOpacity key={t.key} style={[styles.tabBtn, tab === t.key && styles.tabBtnActive]} onPress={() => setTab(t.key)}>
-                                        <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
-                            {/* Leaderboard */}
-                            <View style={styles.lbList}>
-                                {!leaderboard ? (
-                                    <Text style={styles.lbLoading}>Cargando...</Text>
-                                ) : leaderboard.length === 0 ? (
-                                    <Text style={styles.lbEmpty}>¡Sé el primero en el marcador!</Text>
-                                ) : leaderboard.map((entry) => {
-                                    const isMe = entry.userId === userId;
-                                    return (
-                                        <View key={entry.userId} style={[styles.lbRow, isMe && styles.lbRowMe]}>
-                                            <Text style={styles.lbRank}>{entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`}</Text>
-                                            <Text style={styles.lbAvatar}>{entry.avatar}</Text>
-                                            <Text style={styles.lbName} numberOfLines={1}>{entry.name}</Text>
-                                            <Text style={styles.lbScore}>🌮 {entry.score}</Text>
-                                        </View>
-                                    );
-                                })}
-                            </View>
+                            <MinigameScoreboard
+                                game={api.taquero}
+                                userId={userId}
+                                myBest={myBest}
+                                newRecord={newRecord}
+                                formatScore={(n) => `🌮 ${n}`}
+                            />
 
                             <TouchableOpacity style={styles.startBtn} onPress={startGame}>
                                 <Text style={styles.startBtnText}>¡Otra vez, órale!</Text>
@@ -320,6 +368,8 @@ export default function TaqueroRushScreen({ navigation }) {
                     </View>
                 </View>
             )}
+            {/* Casita para volver al inicio, solo fuera de una partida */}
+            {gameState !== S_PLAYING && <HomeButton floating />}
         </ImageBackground>
     );
 }
@@ -329,58 +379,57 @@ const styles = StyleSheet.create({
     darkOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,3,0,0.72)" },
 
     hud: {
-        position: "absolute", left: 18, right: 18,
+        position: "absolute", left: 18, right: 18, zIndex: 10,
         flexDirection: "row", alignItems: "center", gap: 12,
     },
-    hudText: { color: WHEAT, fontWeight: "900", fontSize: width * 0.048, backgroundColor: "rgba(139,69,19,0.7)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5 },
+    hudText: { color: WHEAT, fontWeight: "900", fontSize: width * 0.048, backgroundColor: "rgba(139,69,19,0.7)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, overflow: "hidden" },
+    hudTextDanger: { backgroundColor: "rgba(192,57,43,0.85)" },
+    bonusText: { position: "absolute", top: "100%", alignSelf: "center", color: GOLD, fontWeight: "900", fontSize: width * 0.04 },
     exitBtn: { marginLeft: "auto", backgroundColor: "rgba(192,57,43,0.9)", width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
     exitBtnText: { color: "#fff", fontWeight: "900", fontSize: 17 },
 
     gameInner: { flex: 1, justifyContent: "center", paddingHorizontal: 20, paddingTop: 100 },
     prepArea: { backgroundColor: "rgba(255,228,181,0.15)", borderRadius: 20, padding: 20, alignItems: "center", marginBottom: 20, borderWidth: 1.5, borderColor: "rgba(210,105,30,0.4)" },
-    prepTitle: { color: WHEAT, fontSize: width * 0.045, fontWeight: "700", marginBottom: 12 },
+    prepTitle: { color: WHEAT, fontSize: width * 0.045, fontWeight: "700", marginBottom: 12, textAlign: "center" },
     tacoStackArea: { height: 100, justifyContent: "flex-end", alignItems: "center", marginBottom: 14, width: "100%" },
     emptyPlateText: { color: "rgba(255,228,181,0.5)", fontSize: width * 0.04, fontWeight: "bold", paddingBottom: 10 },
     tacoIngEmoji: { fontSize: width * 0.16, position: "absolute" },
+
+    recipeRow: { flexDirection: "row", gap: 6, marginBottom: 10 },
+    recipeStep: { width: width * 0.1, height: width * 0.1, borderRadius: width * 0.05, backgroundColor: "rgba(255,228,181,0.12)", borderWidth: 1.5, borderColor: "rgba(255,228,181,0.3)", justifyContent: "center", alignItems: "center" },
+    recipeStepDone: { backgroundColor: GREEN, borderColor: GREEN },
+    recipeStepCurrent: { backgroundColor: "rgba(248,190,23,0.3)", borderColor: GOLD, borderWidth: 2.5, transform: [{ scale: 1.12 }] },
+    recipeIcon: { fontSize: width * 0.05, color: "#fff", fontWeight: "900" },
+
     nextPrompt: { color: GOLD, fontSize: width * 0.055, fontWeight: "900" },
-    grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 12 },
-    ingBtn: { width: "48%", backgroundColor: WHEAT, borderRadius: 20, padding: 20, alignItems: "center", borderWidth: 2, borderColor: AMBER },
+    grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 12 },
+    ingBtn: { width: "46%", backgroundColor: WHEAT, borderRadius: 20, padding: 20, alignItems: "center", borderWidth: 2, borderColor: AMBER },
+    ingBtnSmall: { width: "30%", padding: 12, borderRadius: 16 },
+    ingBtnWrong: { backgroundColor: "#F5B7B1", borderColor: RED },
     ingIcon: { fontSize: width * 0.1, marginBottom: 6 },
+    ingIconSmall: { fontSize: width * 0.08, marginBottom: 4 },
     ingName: { fontSize: width * 0.042, fontWeight: "800", color: BROWN },
+    ingNameSmall: { fontSize: width * 0.034 },
 
     cardOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "center", alignItems: "center", paddingHorizontal: 16, paddingVertical: 20 },
     card: { backgroundColor: WHEAT, borderRadius: 24, borderWidth: 3, borderColor: BROWN, padding: 18, width: "100%", maxWidth: 440, maxHeight: height * 0.88, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 14 },
     cardBigEmoji: { fontSize: width * 0.16, textAlign: "center", marginBottom: 4 },
     cardTitle: { fontSize: width * 0.055, fontWeight: "900", color: BROWN, textAlign: "center", marginBottom: 8 },
     cardDesc: { fontSize: width * 0.036, color: AMBER, textAlign: "center", lineHeight: width * 0.052, marginBottom: 16, fontWeight: "600" },
+
+    instructRow: { flexDirection: "row", alignItems: "center", backgroundColor: WHEAT2, borderRadius: 16, borderWidth: 1.5, borderColor: "rgba(139,69,19,0.25)", paddingVertical: 12, paddingHorizontal: 8, marginBottom: 18, width: "100%" },
+    instructItem: { flex: 1, alignItems: "center" },
+    instructEmoji: { fontSize: width * 0.075, marginBottom: 4 },
+    instructText: { fontSize: width * 0.028, color: BROWN, fontWeight: "700", textAlign: "center" },
+    instructDivider: { width: 1, height: 40, backgroundColor: "rgba(139,69,19,0.2)" },
+
     startBtn: { backgroundColor: GOLD, borderRadius: 50, paddingVertical: 13, paddingHorizontal: 28, width: "100%", alignItems: "center", marginBottom: 10, borderWidth: 2, borderColor: AMBER },
     startBtnText: { color: BROWN, fontSize: width * 0.046, fontWeight: "900" },
-    backBtn: { paddingVertical: 8, paddingHorizontal: 16 },
+    backBtn: { paddingVertical: 8, paddingHorizontal: 16, alignSelf: "center" },
     backBtnText: { color: AMBER, fontSize: width * 0.036, fontWeight: "700" },
 
     resultBox: { flexDirection: "row", alignItems: "center", backgroundColor: WHEAT2, borderRadius: 16, borderWidth: 2, borderColor: AMBER, paddingHorizontal: 22, paddingVertical: 10, marginBottom: 10, gap: 10 },
     resultNum: { fontSize: width * 0.13, fontWeight: "900", color: AMBER, lineHeight: width * 0.14 },
     resultLabel: { fontSize: width * 0.038, color: BROWN, fontWeight: "700" },
     resultMsg: { fontSize: width * 0.035, color: AMBER, fontWeight: "700", textAlign: "center", marginBottom: 14 },
-
-    myBestRow: { flexDirection: "row", width: "100%", backgroundColor: WHEAT2, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(139,69,19,0.3)", marginBottom: 14, overflow: "hidden" },
-    myBestItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
-    myBestVal: { fontSize: width * 0.062, fontWeight: "900", color: BROWN },
-    myBestLabel: { fontSize: width * 0.028, color: AMBER, fontWeight: "700", marginTop: 2 },
-
-    tabRow: { flexDirection: "row", width: "100%", backgroundColor: WHEAT2, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(139,69,19,0.25)", marginBottom: 10, overflow: "hidden" },
-    tabBtn: { flex: 1, paddingVertical: 9, alignItems: "center" },
-    tabBtnActive: { backgroundColor: AMBER },
-    tabText: { fontSize: width * 0.03, fontWeight: "700", color: AMBER },
-    tabTextActive: { color: "#fff" },
-
-    lbList: { width: "100%", marginBottom: 14 },
-    lbLoading: { color: AMBER, textAlign: "center", fontSize: width * 0.035, paddingVertical: 12 },
-    lbEmpty: { color: AMBER, textAlign: "center", fontSize: width * 0.033, paddingVertical: 12, fontWeight: "600" },
-    lbRow: { flexDirection: "row", alignItems: "center", paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10, marginBottom: 4, backgroundColor: WHEAT2, borderWidth: 1, borderColor: "rgba(139,69,19,0.15)", gap: 8 },
-    lbRowMe: { backgroundColor: "#FFF8DC", borderColor: GOLD, borderWidth: 2 },
-    lbRank: { width: 32, textAlign: "center", fontSize: width * 0.035, fontWeight: "900", color: BROWN },
-    lbAvatar: { fontSize: width * 0.055 },
-    lbName: { flex: 1, fontSize: width * 0.033, fontWeight: "700", color: BROWN },
-    lbScore: { fontSize: width * 0.035, fontWeight: "900", color: AMBER },
 });

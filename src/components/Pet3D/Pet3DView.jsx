@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, PanResponder, StyleSheet, View } from 'react-native';
 import * as THREE from 'three';
+import { createGestureTracker } from './petGestures';
 import { createPetController } from './petModels';
 
 // expo-gl es un módulo nativo: si el build instalado no lo trae, no tronamos la
@@ -58,11 +59,14 @@ class GLErrorBoundary extends React.Component {
  *   size                  – ancho = alto en dp
  *   active                – false pausa el render (pantalla sin foco)
  *   reduceMotion          – dibuja una pose quieta y no anima
- *   interactive           – arrastrar en horizontal gira la mascota
+ *   interactive           – la mirada sigue el dedo; arrastrar la gira; toque en la cabeza =
+ *                           palmadita, en el cuerpo = rebote; frotar y cosquillas (4 toques)
+ *   onInteract(kind)      – 'head' | 'body' | 'rub' | 'tickle' cuando el jugador la acaricia
  *   showFlame, streakDays, streakStatus – llama del tonalli ('activa' | 'riesgo' | 'apagada')
  *   mood                  – 'joyful' | 'happy' | 'hungry' | 'sad' | 'sleepy'
- *   reaction, reactionKey – 'tap' | 'correct' | 'combo' | 'wrong'; cambia reactionKey para repetir
+ *   reaction, reactionKey – 'tap' | 'correct' | 'combo' | 'wrong' | 'hint'; cambia reactionKey para repetir
  *   framing               – 'fit' (llena el cuadro) | 'stage' (crece con la etapa)
+ *   outfit                – traje de la tienda ('skin_mariachi'…) o null
  *   fps                   – tope de cuadros por segundo (30 en el gameplay)
  *   fallback              – elemento a mostrar si no hay 3D en este dispositivo
  */
@@ -71,7 +75,7 @@ function Pet3DView({
   active = true, reduceMotion = false, interactive = false,
   showFlame = false, streakDays = 0, streakStatus = 'activa',
   mood = 'happy', reaction = null, reactionKey = 0,
-  framing = 'fit', fps = 60, fallback = null,
+  framing = 'fit', fps = 60, fallback = null, outfit = null, onInteract,
 }) {
   const [failed, setFailed] = useState(!GLView);
   const ctrlRef = useRef(null);
@@ -80,12 +84,17 @@ function Pet3DView({
   const rafRef = useRef(null);
   const needsFrameRef = useRef(true);
   const lastDxRef = useRef(0);
+  const gestureRef = useRef(null);
+  if (!gestureRef.current) gestureRef.current = createGestureTracker();
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const onInteractRef = useRef(onInteract);
+  onInteractRef.current = onInteract;
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const running = active && appActive && !reduceMotion;
 
   // Props actuales, legibles desde el contexto GL sin recrearlo
   const propsRef = useRef({});
-  propsRef.current = { petType, stage, showFlame, streakDays, streakStatus, mood, reduceMotion, framing };
+  propsRef.current = { petType, stage, showFlame, streakDays, streakStatus, mood, reduceMotion, framing, outfit };
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => setAppActive(s === 'active'));
@@ -104,7 +113,7 @@ function Pet3DView({
       const p = propsRef.current;
       glRef.current = gl;
       rendererRef.current = createRenderer(gl);
-      const ctrl = createPetController({ petType: p.petType, stage: p.stage, framing: p.framing, showFlame: p.showFlame });
+      const ctrl = createPetController({ petType: p.petType, stage: p.stage, framing: p.framing, showFlame: p.showFlame, outfit: p.outfit });
       ctrl.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
       ctrl.setStreak(p.streakDays, p.streakStatus);
       ctrl.setMood(p.mood);
@@ -152,6 +161,7 @@ function Pet3DView({
   // Cambios de props → controlador
   useEffect(() => { ctrlRef.current?.setPet(petType, stage); needsFrameRef.current = true; }, [petType, stage]);
   useEffect(() => { ctrlRef.current?.setShowFlame(showFlame); needsFrameRef.current = true; }, [showFlame]);
+  useEffect(() => { ctrlRef.current?.setOutfit(outfit); needsFrameRef.current = true; }, [outfit]);
   useEffect(() => { ctrlRef.current?.setStreak(streakDays, streakStatus); needsFrameRef.current = true; }, [streakDays, streakStatus]);
   useEffect(() => { ctrlRef.current?.setMood(mood); needsFrameRef.current = true; }, [mood]);
   useEffect(() => { ctrlRef.current?.setReduceMotion(reduceMotion); needsFrameRef.current = true; }, [reduceMotion]);
@@ -167,21 +177,67 @@ function Pet3DView({
     glRef.current = null;
   }, []);
 
-  // Arrastre horizontal = girar; el vertical se deja pasar al ScrollView
-  const pan = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => interactive && Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-    onPanResponderGrant: () => {},
-    onPanResponderMove: (_, g) => {
-      const ctrl = ctrlRef.current;
-      if (!ctrl) return;
-      ctrl.dragBy(g.dx - lastDxRef.current);
-      lastDxRef.current = g.dx;
+  // Toques: la mirada sigue el dedo; arrastrar en horizontal la gira; tocar, frotar
+  // y hacer cosquillas son caricias. El arrastre vertical se deja al ScrollView.
+  const pan = useMemo(() => {
+    const toView = (x, y) => [(x / size) * 2 - 1, -((y / size) * 2 - 1)];
+    const look = (x, y) => {
+      const [nx, ny] = toView(x, y);
+      ctrlRef.current?.lookAt(nx, ny);
       needsFrameRef.current = true;
-    },
-    onPanResponderRelease: () => { lastDxRef.current = 0; ctrlRef.current?.release(); },
-    onPanResponderTerminate: () => { lastDxRef.current = 0; ctrlRef.current?.release(); },
-    onPanResponderTerminationRequest: () => true,
-  }), [interactive]);
+    };
+    const finish = () => {
+      lastDxRef.current = 0;
+      ctrlRef.current?.release();
+      ctrlRef.current?.lookAt(null);
+      needsFrameRef.current = true;
+    };
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => interactive,
+      onMoveShouldSetPanResponder: (_, g) => interactive && Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderGrant: (e) => {
+        const { locationX: x, locationY: y } = e.nativeEvent;
+        touchStartRef.current = { x, y };
+        lastDxRef.current = 0;
+        gestureRef.current.begin(x, y, Date.now());
+        look(x, y);
+      },
+      onPanResponderMove: (_, g) => {
+        const ctrl = ctrlRef.current;
+        if (!ctrl) return;
+        const x = touchStartRef.current.x + g.dx;
+        const y = touchStartRef.current.y + g.dy;
+        if (gestureRef.current.move(x, y, Date.now()) === 'rub') {
+          ctrl.pet('rub');
+          onInteractRef.current?.('rub');
+        }
+        if (!gestureRef.current.rubbing && Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) {
+          ctrl.dragBy(g.dx - lastDxRef.current);
+          lastDxRef.current = g.dx;
+        }
+        look(x, y);
+      },
+      onPanResponderRelease: (_, g) => {
+        const ctrl = ctrlRef.current;
+        const x = touchStartRef.current.x + g.dx;
+        const y = touchStartRef.current.y + g.dy;
+        const kind = gestureRef.current.end(x, y, Date.now());
+        if (ctrl && kind === 'tickle') {
+          ctrl.pet('tickle');
+          onInteractRef.current?.('tickle');
+        } else if (ctrl && kind === 'tap') {
+          const [nx, ny] = toView(x, y);
+          const zone = ctrl.zoneAt(nx, ny) || 'body';
+          if (zone === 'head') ctrl.pet('headpat');
+          else ctrl.react('tap');
+          onInteractRef.current?.(zone);
+        }
+        finish();
+      },
+      onPanResponderTerminate: () => { gestureRef.current.cancel(); finish(); },
+      onPanResponderTerminationRequest: () => true,
+    });
+  }, [interactive, size]);
 
   if (failed || !GLView) return fallback;
 

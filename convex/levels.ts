@@ -5,6 +5,7 @@ import { userMutation } from "./sessionAuth";
 import { loadOrderingData } from "./levelData";
 import { getOrderedLevels } from "./levelOrdering";
 import { insertNewLevel } from "./levelWrites";
+import { rewardTicketPatch } from "./rewards";
 
 /** Strip accents/tildes so words are guessable without special keys */
 function normalizeWord(str: string): string {
@@ -150,10 +151,12 @@ export const completeLevel = userMutation({
       if (args.isPerfect) {
         levelPatch.perfectLevels = ((user as any).perfectLevels ?? 0) + 1;
       }
+      // Boleto de un solo uso para cobrar el premio de este nivel (rewards.claimLevelReward)
+      Object.assign(levelPatch, rewardTicketPatch("level", args.levelNumber, reward.diamonds ?? 0));
       await ctx.db.patch(args.userId, levelPatch);
     }
 
-    // Rewards are given client-side via updateUserCurrency (avoids double-counting)
+    // El premio lo cobra la app con rewards.claimLevelReward, topado por el boleto de arriba
     return {
       success: true,
       level: args.levelNumber,

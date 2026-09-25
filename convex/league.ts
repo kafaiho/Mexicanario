@@ -3,6 +3,7 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 
 import { isoWeekId } from "./weekId";
+import { PROMO_MIN_CXP, SAFE_MIN_CXP, cxpGaps, rankGroup, zoneSizes } from "./leagueStandings";
 // ── Division metadata ───────────────────────────────────────────────────────
 
 export const DIVISIONS = [
@@ -81,10 +82,8 @@ const DAILY_SOFT_CAP = 150;  // diminishing returns start here (was 100)
 const DAILY_HARD_CAP = 200;  // absolute daily ceiling (was 150)
 
 // ── League zone thresholds ──────────────────────────────────────────────────
-const PROMO_PCT     = 0.20;  // top 20% of group get promoted
-const DEMO_PCT      = 0.20;  // bottom 20% of group get demoted
-const PROMO_MIN_CXP = 200;   // must earn this much weekly to be eligible for promotion
-const SAFE_MIN_CXP  = 50;    // earn less than this → demotion zone regardless of rank
+// Orden, zonas y umbrales viven en leagueStandings.ts: la pantalla y el cierre
+// semanal usan exactamente la misma regla.
 
 function calculateWordCXP(
   attempts: number,
@@ -166,24 +165,16 @@ export const getLeagueStatus = query({
       .withIndex("by_group", (q) => q.eq("groupId", playerEntry.groupId))
       .collect();
 
-    // Sort by cxpTotal desc, then by wordsThisWeek desc
-    groupPlayers.sort((a, b) => b.cxpTotal - a.cxpTotal || b.wordsThisWeek - a.wordsThisWeek);
-
-    // Zone boundaries (percentage-based, like Duolingo)
-    const total = groupPlayers.length;
-    const promoCount = Math.max(1, Math.ceil(total * PROMO_PCT)); // top 20%
-    const demoCount  = Math.max(1, Math.ceil(total * DEMO_PCT));  // bottom 20%
+    // Orden y zonas con la misma regla que el cierre del lunes (leagueStandings.ts)
+    const ranked = rankGroup(groupPlayers, division);
+    const total = ranked.length;
+    const { promoCount, demoCount } = zoneSizes(total);
+    const gaps = cxpGaps(ranked, groupPlayers.find((p) => p._id === playerEntry._id) ?? playerEntry, division);
 
     // Enrich with user data
     const enriched = await Promise.all(
-      groupPlayers.map(async (p, idx) => {
+      ranked.map(async ({ player: p, rank, zone }) => {
         const u = await ctx.db.get(p.userId);
-        const rank = idx + 1;
-        // Promotion: top 20% AND earned enough CXP this week
-        const wouldPromote = rank <= promoCount && p.cxpTotal >= PROMO_MIN_CXP && division < 10;
-        // Demotion: bottom 20% OR too inactive (regardless of rank)
-        const wouldDemote  = (rank > total - demoCount || p.cxpTotal < SAFE_MIN_CXP) && division > 1;
-        const zone = wouldPromote ? "promotion" : wouldDemote ? "demotion" : "safe";
         return {
           rank,
           zone,
@@ -232,6 +223,9 @@ export const getLeagueStatus = query({
       safeMinCXP: SAFE_MIN_CXP,
       promoBoundaryCxp,
       safeBoundaryCxp,
+      // cXP exactos que faltan (con desempate incluido); null cuando no aplica
+      cxpToPromotion: gaps.toPromotion,
+      cxpToSafety: gaps.toSafety,
     };
   },
 });
@@ -594,6 +588,9 @@ export const processWeekEnd = internalMutation({
     const prevDay = new Date(cst);
     prevDay.setDate(cst.getDate() - 1); // Yesterday = last day of prev week
     const weekId = getWeekId(prevDay);
+    const weekBefore = new Date(prevDay);
+    weekBefore.setDate(prevDay.getDate() - 7);
+    const previousWeekId = getWeekId(weekBefore); // para la racha de semanas seguidas
 
     const weekEntry = await ctx.db
       .query("leagueWeeks")
@@ -616,27 +613,13 @@ export const processWeekEnd = internalMutation({
         .withIndex("by_group", (q) => q.eq("groupId", group._id))
         .collect();
 
-      // Sort by cxpTotal desc
-      players.sort((a, b) => b.cxpTotal - a.cxpTotal || b.wordsThisWeek - a.wordsThisWeek);
+      // Misma regla de orden y zonas que ve el jugador durante la semana
+      const ranked = rankGroup(players, group.division);
 
-      const total = players.length;
-      const promoCount = Math.max(1, Math.ceil(total * PROMO_PCT));
-      const demoCount  = Math.max(1, Math.ceil(total * DEMO_PCT));
-
-      for (let i = 0; i < players.length; i++) {
-        const p = players[i];
-        const rank = i + 1;
+      for (const { player: p, rank, zone } of ranked) {
         const division = p.division;
-
-        let outcome: "promoted" | "stayed" | "demoted" = "stayed";
-
-        // Promotion: top 20% AND earned the minimum CXP to prove real activity
-        if (rank <= promoCount && p.cxpTotal >= PROMO_MIN_CXP && division < 10) {
-          outcome = "promoted";
-        // Demotion: bottom 20% OR too inactive (didn't earn SAFE_MIN_CXP)
-        } else if ((rank > total - demoCount || p.cxpTotal < SAFE_MIN_CXP) && division > 1) {
-          outcome = "demoted";
-        }
+        const outcome: "promoted" | "stayed" | "demoted" =
+          zone === "promotion" ? "promoted" : zone === "demotion" ? "demoted" : "stayed";
 
         // Update player entry
         await ctx.db.patch(p._id, { rank, outcome });
@@ -650,14 +633,14 @@ export const processWeekEnd = internalMutation({
         if (outcome === "demoted") newDiv = Math.max(1, division - 1);
 
         const highestDiv = Math.max((user as any).leagueHighestDiv ?? 1, newDiv);
-        const prevWeekId = (user as any).lastLeagueWeekId ?? "";
-        // Streak increments if user played the immediately prior week (consecutive)
-        const prevWeekNum = parseInt(prevWeekId.split("-W")[1] || "0", 10);
-        const currWeekNum = parseInt(weekId.split("-W")[1] || "0", 10);
-        const isConsecutive = prevWeekId.split("-W")[0] === weekId.split("-W")[0]
-          ? currWeekNum - prevWeekNum === 1
-          : prevWeekNum >= 52 && currWeekNum === 1; // year boundary
-        const weeklyStreak = isConsecutive
+        // Racha: sube si también jugó la liga la semana anterior. Antes se comparaba
+        // con lastLeagueWeekId, que es esta misma semana al cerrar, y la racha nunca
+        // pasaba de 1.
+        const playedPreviousWeek = await ctx.db
+          .query("leaguePlayers")
+          .withIndex("by_week_user", (q) => q.eq("weekId", previousWeekId).eq("userId", p.userId))
+          .first();
+        const weeklyStreak = playedPreviousWeek
           ? ((user as any).leagueWeeklyStreak ?? 0) + 1
           : 1;
 

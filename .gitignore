@@ -45,3 +45,6 @@ allwords_temp.json
 analyze_modismos*.js
 test_gemini*.js
 cats.json
+
+# Herramienta local de streaming (no es parte de la app; puede contener tokens)
+Streamer.bot-*/

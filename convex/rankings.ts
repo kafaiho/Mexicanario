@@ -91,7 +91,10 @@ export const recomputeAll = internalMutation({
     const totalPlayers = scored.length;
 
     // ── 3. All-time ranking ────────────────────────────────────────────────
-    scored.sort((a, b) => b.score - a.score);
+    // Desempate estable: con el mismo puntaje manda el nivel y luego el id, así dos
+    // jugadores empatados no se cambian de lugar cada 30 minutos.
+    const tieBreak = (a: ScoredUser, b: ScoredUser) => b.level - a.level || a.userId.localeCompare(b.userId);
+    scored.sort((a, b) => b.score - a.score || tieBreak(a, b));
     const alltimeTop = scored.slice(0, TOP_N).map((s, i) => ({
       userId: s.userId,
       name: s.name,
@@ -115,7 +118,7 @@ export const recomputeAll = internalMutation({
 
     // ── 4. Weekly ranking (by xpThisWeek) ──────────────────────────────────
     const weeklyActive = scored.filter((s) => s.xpThisWeek > 0);
-    weeklyActive.sort((a, b) => b.xpThisWeek - a.xpThisWeek);
+    weeklyActive.sort((a, b) => b.xpThisWeek - a.xpThisWeek || b.score - a.score || tieBreak(a, b));
 
     const weeklyTop = weeklyActive.slice(0, TOP_N).map((s, i) => ({
       userId: s.userId,
@@ -141,7 +144,7 @@ export const recomputeAll = internalMutation({
 
     // ── 5. Monthly ranking (by xpThisMonth) ────────────────────────────────
     const monthlyActive = scored.filter((s) => s.xpThisMonth > 0);
-    monthlyActive.sort((a, b) => b.xpThisMonth - a.xpThisMonth);
+    monthlyActive.sort((a, b) => b.xpThisMonth - a.xpThisMonth || b.score - a.score || tieBreak(a, b));
 
     const monthlyTop = monthlyActive.slice(0, TOP_N).map((s, i) => ({
       userId: s.userId,
@@ -225,6 +228,9 @@ async function upsertRankCache(
   };
 
   if (existing) {
+    // Se recalcula cada 30 minutos: solo se escribe si algo cambió (menos escrituras
+    // y menos reactividad inútil en las pantallas que leen el caché).
+    if (existing.rank === rank && existing.score === score && existing.percentile === percentile) return;
     await ctx.db.patch(existing._id, { rank, score, percentile, updatedAt: now });
   } else {
     await ctx.db.insert("userRankCache", data);

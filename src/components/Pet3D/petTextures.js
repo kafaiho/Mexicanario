@@ -274,3 +274,11 @@ export function wingTex(key, kind, pts, root) {
     return [c[0], c[1], c[2], 255];
   }, { repeat: false });
 }
+
+// Corazón para las caricias (sprite con fondo transparente)
+export const heartTex = () => dataTexture('heart', 32, 32, (u, v) => {
+  const x = (u - 0.5) * 2.4, y = (v - 0.45) * 2.4;
+  const d = Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y;   // curva del corazón
+  const a = d <= 0 ? 1 : Math.max(0, 1 - d * 40);
+  return [255, 92, 150, Math.round(a * 255)];
+}, { repeat: false });

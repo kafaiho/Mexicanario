@@ -107,6 +107,7 @@ export default function PetCompanion({ reaction = null, reactionKey = 0, compact
             reaction={activeReaction}
             reactionKey={reactionKey}
             fps={30}
+            outfit={activeSkin}
             fallback={sprite}
           />
         ) : sprite}

@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import DraggablePet from "../components/PetCompanion/DraggablePet";
+import HomeButton from "../components/HomeButton";
 import CulturalAtlasIcon from "../components/CulturalAtlasIcon";
 import { buildCulturalMapItems } from "../config/culturalPathSelection";
 import { CULTURAL_PATHS } from "../config/culturalTaxonomy";
@@ -303,6 +304,8 @@ function DuoNode({ item, prevX, currentLevel, openedLevel, setOpenedLevel, navig
 
 export default function MapScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const navState = navigation.getState();
+  const cameFromGameplay = navState?.routes?.[navState.index - 1]?.name === "Gameplay";
   const { userId, user } = useAuth();
   const listRef = useRef(null);
   const [openedLevel, setOpenedLevel] = useState(null);
@@ -397,9 +400,15 @@ export default function MapScreen({ navigation, route }) {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Volver</Text>
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <HomeButton />
+          {/* Desde una partida de repaso, "Volver" regresa a esa partida */}
+          {cameFromGameplay && (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <Text style={styles.backText}>← Volver</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <View style={{ width: 70 }} />
       </View>
 
@@ -475,6 +484,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(10,4,1,0.80)" },
 
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   header: {
     flexDirection: "row",
     alignItems: "center",

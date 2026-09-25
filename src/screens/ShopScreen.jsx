@@ -38,8 +38,13 @@ import { FONTS } from "../theme/designTokens";
 import { REAL_WIDTH, TABLET_MODE } from "../utils/tabletSetup";
 import { useUserAction, useUserMutation } from "../hooks/useUserMutation";
 import { serverErrorText } from "../utils/serverError";
-import usePetStore from "../store/usePetStore";
+import usePetStore, { getStage } from "../store/usePetStore";
 import useEquipSkin from "../hooks/useEquipSkin";
+import { useReducedMotion } from "react-native-reanimated";
+import Pet3DView from "../components/Pet3D/Pet3DView";
+import { supports3D } from "../components/Pet3D/petModels";
+import StageCropped from "../components/PetCompanion/StageCropped";
+import { normalizePetType } from "../config/petTypes";
 
 const { width, height } = Dimensions.get("window");
 
@@ -250,15 +255,22 @@ const ItemRow = React.memo(function ItemRow({ items, onBuy, prices }) {
 });
 
 // ─── Traje de mascota ─────────────────────────────────────────────────────────
-function SkinCard({ skin, owned, equipped, onBuy, onEquip }) {
+// Tocar una tarjeta pone el traje en el probador; ahí se compra o se lo pone.
+function SkinCard({ skin, owned, equipped, selected, onSelect }) {
   const cfg = SKIN_CONFIG[skin.id];
   return (
     <TouchableOpacity
-      style={[s.skinCard, { borderColor: cfg.borderColor }, owned && { backgroundColor: cfg.bgColor + "33" }]}
-      onPress={() => (owned ? onEquip(skin) : onBuy(skin))}
+      style={[
+        s.skinCard,
+        { borderColor: cfg.borderColor },
+        owned && { backgroundColor: cfg.bgColor + "33" },
+        selected && { borderWidth: 3, transform: [{ scale: 1.04 }] },
+      ]}
+      onPress={() => onSelect(skin)}
       activeOpacity={0.85}
       accessibilityRole="button"
-      accessibilityLabel={owned ? `${skin.label}, ${equipped ? "puesto" : "ponérselo"}` : `Comprar ${skin.label} por ${skin.price} varos`}
+      accessibilityState={{ selected }}
+      accessibilityLabel={`Probarle a tu mascota el traje ${skin.label}${owned ? (equipped ? ", puesto" : ", ya es tuyo") : `, cuesta ${skin.price} varos`}`}
     >
       {equipped && (
         <View style={s.skinBadge}><Text style={s.skinBadgeText}>PUESTO</Text></View>
@@ -266,7 +278,7 @@ function SkinCard({ skin, owned, equipped, onBuy, onEquip }) {
       <Text style={s.skinIcon}>{cfg.emoji}</Text>
       <Text style={s.skinLabel}>{skin.label}</Text>
       {owned ? (
-        <Text style={s.skinPrice}>{equipped ? "✓ Tuyo" : "Ponérselo"}</Text>
+        <Text style={s.skinPrice}>{equipped ? "✓ Puesto" : "✓ Tuyo"}</Text>
       ) : (
         <View style={s.skinPriceRow}>
           <Image source={require("../../assets/icons/coin.png")} style={s.itemCoinIcon} />
@@ -274,6 +286,54 @@ function SkinCard({ skin, owned, equipped, onBuy, onEquip }) {
         </View>
       )}
     </TouchableOpacity>
+  );
+}
+
+// ─── Probador: tu mascota en 3D con el traje ──────────────────────────────────
+const FITTING_SIZE = Math.min(width * 0.5, 230);
+
+function SkinFittingRoom({ skin, owned, equipped, onBuy, onEquip }) {
+  const cfg = SKIN_CONFIG[skin.id];
+  const petType = normalizePetType(usePetStore((st) => st.petType));
+  const stage = getStage(usePetStore((st) => st.vinculo));
+  const reduceMotion = useReducedMotion();
+  const still = <StageCropped petType={petType} stage={stage} size={FITTING_SIZE * 0.8} activeSkin={skin.id} />;
+  return (
+    <View style={[s.fittingCard, { borderColor: cfg.borderColor }]}>
+      <View style={[s.fittingStage, { backgroundColor: cfg.bgColor + "26" }]}>
+        {supports3D(petType) ? (
+          <Pet3DView
+            petType={petType}
+            stage={stage}
+            size={FITTING_SIZE}
+            outfit={skin.id}
+            interactive
+            reduceMotion={reduceMotion}
+            mood="joyful"
+            fps={30}
+            fallback={still}
+          />
+        ) : still}
+        <Text style={s.fittingHint}>↔ Gírala con el dedo</Text>
+      </View>
+      <Text style={s.fittingTitle}>{cfg.emoji} {skin.label}</Text>
+      <Text style={s.fittingDesc}>{cfg.desc}</Text>
+      {owned ? (
+        <TouchableOpacity
+          style={[s.fittingBtn, equipped && s.fittingBtnGhost]}
+          onPress={() => onEquip(equipped ? null : skin.id)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+        >
+          <Text style={[s.fittingBtnText, equipped && s.fittingBtnGhostText]}>{equipped ? "Quitárselo" : "Ponérselo"}</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity style={s.fittingBtn} onPress={() => onBuy(skin)} activeOpacity={0.85} accessibilityRole="button">
+          <Image source={require("../../assets/icons/coin.png")} style={s.itemCoinIcon} />
+          <Text style={s.fittingBtnText}>Comprar · {skin.price.toLocaleString()}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -291,6 +351,8 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
   const [prices, setPrices] = useState({});
   const activeSkin = usePetStore((st) => st.activeSkin);
   const setActiveSkin = useEquipSkin();
+  const [previewSkinId, setPreviewSkinId] = useState(null);
+  const previewSkin = TRAJES.find((t) => t.id === (previewSkinId ?? activeSkin)) ?? TRAJES[0];
 
   // Desplazarse a una sección (al abrir desde otro lado o al faltar saldo)
   const scrollRef = useRef(null);
@@ -327,18 +389,72 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
   const claimFreeCoins = useUserMutation(api.shop.claimFreeCoins);
   const buyWithCoins = useUserMutation(api.shop.buyWithCoins);
   const applyIAPPurchase = useUserAction(api.shop.applyIAPPurchase);
+  const claimPendingPurchases = useUserAction(api.shop.claimPendingIAPPurchases);
   const verifyMexPlus = useUserAction(api.shop.verifyMexPlusEntitlement);
   const claimPlusMonthlyReward = useUserMutation(api.shop.claimPlusMonthlyReward);
   const buyPetFood = useUserMutation(api.pet.buyPetFood);
   const buyStreakFreeze = useUserMutation(api.streaks.buyStreakFreeze);
-  const updateUserCurrency = useUserMutation(api.users.updateUserCurrency);
+  const claimAdReward = useUserMutation(api.rewards.claimAdReward);
 
   const { ready: adReady, available: adAvailable, showAd } = useRewardedAd();
+
+  // Compras cobradas por Google Play que no alcanzaron a llegar (app cerrada,
+  // sin red, pago en efectivo que se confirmó después): se acreditan al abrir.
+  useEffect(() => {
+    if (!visible || !userId) return undefined;
+    let alive = true;
+    recoverPendingPurchases().then((r) => {
+      if (alive && r) Alert.alert("¡Llegó tu compra! 🎉", r);
+    });
+    return () => { alive = false; };
+  }, [visible, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!visible) return null;
 
   const cooldown = shopState?.freeCooldownRemaining ?? 0;
   const activePass = shopState?.activePass ?? null;
+
+  // Monedas y diamantes volando hacia el marcador
+  function celebrateGrant({ coinsGranted = 0, diamondsGranted = 0 }) {
+    const fromX = TABLET_MODE ? REAL_WIDTH / 2 : width / 2;
+    if (coinsGranted > 0) {
+      const c = getCoinPillFallback();
+      triggerCoinFly({ fromX, fromY: height * 0.6, toX: c.x + c.w / 2, toY: c.y + c.h / 2, coins: coinsGranted });
+    }
+    if (diamondsGranted > 0) {
+      const d = getDiamondPillFallback();
+      triggerDiamondFly({ fromX, fromY: height * 0.6, toX: d.x + d.w / 2, toY: d.y + d.h / 2, diamonds: diamondsGranted });
+    }
+  }
+
+  /** Acredita compras pendientes; devuelve el texto a mostrar o null si no había. */
+  async function recoverPendingPurchases() {
+    if (!userId) return null;
+    try {
+      const r = await claimPendingPurchases({ userId });
+      if (!r?.granted?.length) return null;
+      notifySuccess();
+      celebrateGrant(r);
+      const parts = [];
+      if (r.coinsGranted) parts.push(`${r.coinsGranted.toLocaleString()} varos`);
+      if (r.diamondsGranted) parts.push(`${r.diamondsGranted.toLocaleString()} diamantes`);
+      return `Acreditamos tu compra pendiente: ${parts.join(" y ")}.`;
+    } catch {
+      return null;
+    }
+  }
+
+  // RevenueCat puede tardar unos segundos en ver la compra que Google Play acaba de cobrar
+  async function applyPurchaseWithRetry(itemId, transactionId) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await applyIAPPurchase({ userId, itemId, transactionId });
+      } catch (e) {
+        if (attempt >= 2 || !/PURCHASE_NOT_VERIFIED/.test(serverErrorText(e, ""))) throw e;
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+      }
+    }
+  }
 
   // ── Mexicanario Plus — subscribe via RevenueCat Paywall ─────────────────────
   async function handleSubscribePlus() {
@@ -376,20 +492,19 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
   async function handleRestorePurchases() {
     setBuying(true);
     try {
-      const { restored, entitlement, activeEntitlements } = await restorePurchases();
+      const { entitlement } = await restorePurchases();
 
       // Sync Plus entitlement if it was restored
       if (userId && entitlement.active) {
         await verifyMexPlus({ userId });
       }
+      const recovered = await recoverPendingPurchases();
 
-      if (restored) {
-        const plusMsg = entitlement.active ? "¡Mexicanario Plus restaurado! " : "";
-        Alert.alert(
-          "✅ Compras restauradas",
-          plusMsg + `Entitlements activos: ${activeEntitlements.join(", ")}`,
-          [{ text: "¡Qué chido!" }]
-        );
+      if (entitlement.active || recovered) {
+        const msgs = [];
+        if (entitlement.active) msgs.push("⭐ Mexicanario Plus está activo en tu cuenta.");
+        if (recovered) msgs.push(recovered);
+        Alert.alert("✅ Compras restauradas", msgs.join("\n\n"), [{ text: "¡Qué chido!" }]);
       } else {
         Alert.alert(
           "Sin compras previas",
@@ -421,33 +536,22 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
         item.id,
         async (transactionId) => {
           try {
-            const r = await applyIAPPurchase({ userId, itemId: item.id, transactionId });
+            const r = await applyPurchaseWithRetry(item.id, transactionId);
             notifySuccess();
-            const coinsGranted = r.coinsGranted ?? 0;
-            if (coinsGranted > 0) {
-              const c = getCoinPillFallback();
-              triggerCoinFly({
-                fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
-                fromY: height * 0.6,
-                toX: c.x + c.w / 2,
-                toY: c.y + c.h / 2,
-                coins: coinsGranted,
-              });
-            }
-            const t = getDiamondPillFallback();
-            const diamonds = r.diamondsGranted ?? 0;
-            if (diamonds > 0) {
-              triggerDiamondFly({
-                fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
-                fromY: height * 0.6,
-                toX: t.x + t.w / 2,
-                toY: t.y + t.h / 2,
-                diamonds,
-              });
-            }
+            celebrateGrant(r);
             setSuccessItem(item);
           } catch (e) {
-            Alert.alert("¡Aguas!", serverErrorText(e, "No se pudo procesar la compra. Intenta de nuevo."));
+            // Google Play ya cobró: la compra queda registrada en RevenueCat y se
+            // acredita sola al volver a abrir la tienda (recoverPendingPurchases).
+            const code = serverErrorText(e, "");
+            if (/PURCHASE_NOT_VERIFIED|PAYMENTS_UNAVAILABLE|PAYMENTS_NOT_CONFIGURED/.test(code) || !code) {
+              Alert.alert(
+                "Compra recibida ✅",
+                "Google Play confirmó tu pago, pero tu recompensa tarda un poco en llegar. Se acredita sola en unos minutos; si no, cierra y vuelve a abrir la tienda."
+              );
+            } else {
+              Alert.alert("¡Aguas!", code);
+            }
           } finally {
             setBuying(false);
           }
@@ -528,43 +632,29 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
         coins: r.coinsAdded ?? 15,
       });
     } catch (e) {
-      Alert.alert("Espérate", e.message ?? "Error");
+      Alert.alert("Espérate", serverErrorText(e, "No se pudo reclamar. Intenta de nuevo."));
     } finally {
       setBuying(false);
     }
   }
 
-  function handleWatchAd() {
-    const shown = showAd(async () => {
-      if (!userId) return;
-      try {
-        await updateUserCurrency({ userId, coins: 40 });
-        notifySuccess();
-        const t = getCoinPillFallback();
-        triggerCoinFly({
-          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
-          fromY: height * 0.65,
-          toX: t.x + t.w / 2,
-          toY: t.y + t.h / 2,
-          coins: 40,
-        });
-      } catch { }
-    });
-
-    // En Expo Go (__DEV__ sin módulo nativo) dar monedas directamente
-    if (!shown && __DEV__ && userId) {
-      updateUserCurrency({ userId, coins: 40 }).then(() => {
-        notifySuccess();
-        const t = getCoinPillFallback();
-        triggerCoinFly({
-          fromX: TABLET_MODE ? REAL_WIDTH / 2 : width / 2,
-          fromY: height * 0.65,
-          toX: t.x + t.w / 2,
-          toY: t.y + t.h / 2,
-          coins: 40,
-        });
-      });
+  // 40 varos por anuncio: los paga el servidor, con tope diario
+  async function payAdReward() {
+    if (!userId) return;
+    try {
+      const r = await claimAdReward({ userId });
+      notifySuccess();
+      celebrateGrant(r);
+    } catch (e) {
+      Alert.alert("Anuncios", serverErrorText(e, "No se pudo dar el premio del anuncio."));
     }
+  }
+
+  function handleWatchAd() {
+    const shown = showAd(payAdReward);
+    // En Expo Go (__DEV__ sin módulo nativo) no hay anuncios: premio directo
+    if (!shown && __DEV__) payAdReward();
+    else if (!shown) Alert.alert("📺 Anuncio no disponible", "El anuncio aún no carga. Inténtalo en un momento.");
   }
 
   // Regalo mensual de Mexicanario Plus
@@ -699,6 +789,13 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
           <View onLayout={onSectionLayout("trajes")}>
             <SectionBanner title="Trajes para tu mascota 🎭" />
           </View>
+          <SkinFittingRoom
+            skin={previewSkin}
+            owned={(shopState?.purchasedSkins ?? []).includes(previewSkin.id)}
+            equipped={activeSkin === previewSkin.id}
+            onBuy={handleBuyItem}
+            onEquip={setActiveSkin}
+          />
           <View style={s.skinsGrid}>
             {TRAJES.map((skin) => {
               const owned = (shopState?.purchasedSkins ?? []).includes(skin.id);
@@ -708,8 +805,8 @@ export default function ShopScreen({ visible, onClose, hideTopBar = false, initi
                   skin={skin}
                   owned={owned}
                   equipped={owned && activeSkin === skin.id}
-                  onBuy={handleBuyItem}
-                  onEquip={(sk) => setActiveSkin(activeSkin === sk.id ? null : sk.id)}
+                  selected={previewSkin.id === skin.id}
+                  onSelect={(sk) => setPreviewSkinId(sk.id)}
                 />
               );
             })}
@@ -1408,6 +1505,40 @@ const s = StyleSheet.create({
     paddingVertical: 3,
   },
   skinPrice: { fontFamily: FONTS.bodyBold, fontSize: width * 0.028, color: "#8B4513" },
+  fittingCard: {
+    backgroundColor: "#FFF8EC",
+    borderRadius: 18,
+    borderWidth: 2,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  fittingStage: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    paddingTop: 6,
+    paddingBottom: 4,
+    minHeight: FITTING_SIZE + 26,
+  },
+  fittingHint: { fontFamily: FONTS.body, fontSize: width * 0.026, color: "#9A6030", marginTop: 2 },
+  fittingTitle: { fontFamily: FONTS.display, fontSize: width * 0.05, color: "#5C2800", marginTop: 8 },
+  fittingDesc: { fontFamily: FONTS.body, fontSize: width * 0.031, color: "#8B5E3C", textAlign: "center", marginTop: 2, marginBottom: 10 },
+  fittingBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: ACTION_BG,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: ACTION_BORDER,
+    paddingVertical: 10,
+    paddingHorizontal: 26,
+  },
+  fittingBtnText: { fontFamily: FONTS.bodyBold, color: ACTION_TEXT, fontSize: width * 0.04 },
+  fittingBtnGhost: { backgroundColor: "transparent", borderColor: "#A0714F" },
+  fittingBtnGhostText: { color: "#7A4020" },
 
   // ── Contenido +18 ──────────────────────────────────────────────────────────
   adultBanner: {

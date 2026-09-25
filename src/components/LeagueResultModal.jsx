@@ -1,4 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { notifySuccess, tapHeavy, tapLight, tapMedium } from "../services/haptics";
+import { playSound } from "../utils/soundManager";
+import ConfettiBurst from "./ConfettiBurst";
 import {
   Dimensions,
   Modal,
@@ -29,6 +32,22 @@ const DIVISIONS = [
 ];
 
 export default function LeagueResultModal({ visible, onClose, outcome, oldDivision, newDivision, rank, cxpTotal }) {
+  useEffect(() => {
+    if (!visible) return undefined;
+    const t = setTimeout(() => {
+      if (outcome === "promoted") {
+        tapHeavy();
+        setTimeout(notifySuccess, 140);
+        playSound("milestone");
+      } else if (outcome === "demoted") {
+        tapLight();
+      } else {
+        tapMedium();
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [visible, outcome]);
+
   if (!visible) return null;
 
   const isPromotion = outcome === "promoted";
@@ -57,6 +76,7 @@ export default function LeagueResultModal({ visible, onClose, outcome, oldDivisi
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
+          <ConfettiBurst burstKey={isPromotion ? 1 : 0} count={26} distance={160} style={styles.burstOrigin} />
           {/* Big emoji */}
           <Text style={styles.bigEmoji}>
             {isPromotion ? "🎊" : isDemotion ? "😔" : "🤝"}
@@ -111,6 +131,7 @@ export default function LeagueResultModal({ visible, onClose, outcome, oldDivisi
 }
 
 const styles = StyleSheet.create({
+  burstOrigin: { top: 50, left: "50%" },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 import { loadOrderingData } from "./levelData";
@@ -219,6 +219,13 @@ export const updateUserCurrency = userMutation({
     }
     if (args.diamonds !== undefined) {
       update.diamonds = (user.diamonds || 0) + args.diamonds;
+    }
+    // Sumar varos/diamantes desde la app ya no se permite: los premios pasan por
+    // convex/rewards.ts. Mientras CURRENCY_ENFORCEMENT no sea "on", las versiones
+    // anteriores de la app lo siguen usando; actívalo al forzar la actualización.
+    const adds = (args.coins ?? 0) > 0 || (args.diamonds ?? 0) > 0;
+    if (adds && process.env.CURRENCY_ENFORCEMENT === "on") {
+      throw new ConvexError("Actualiza la app para recibir tus premios.");
     }
     // Spending must never leave a negative balance (e.g. two hints tapped
     // before the reactive balance refreshes on the client).

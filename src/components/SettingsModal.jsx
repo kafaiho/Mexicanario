@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { presentCustomerCenter } from "../services/RevenueCatService";
 import { setMusicEnabled, setSoundEnabled } from "../utils/soundManager";
+import { HAPTICS_PREF_KEY, setHapticsEnabled, tapMedium } from "../services/haptics";
 import AccountDeletionModal from "./AccountDeletionModal";
 
 const { height } = Dimensions.get("window");
@@ -78,6 +79,7 @@ export default function SettingsModal({
   const { logout, user } = useAuth();
   const [musicOn, setMusicOn] = useState(true);
   const [soundFx, setSoundFx] = useState(true);
+  const [hapticsOn, setHapticsOn] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -110,13 +112,14 @@ export default function SettingsModal({
   // Load persisted preferences when modal opens
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.multiGet(["pref_music", "pref_sound", "pref_notif"]).then((pairs) => {
+    AsyncStorage.multiGet(["pref_music", "pref_sound", "pref_notif", HAPTICS_PREF_KEY]).then((pairs) => {
       pairs.forEach(([key, val]) => {
         if (val === null) return;
         const bool = val === "true";
         if (key === "pref_music") { setMusicOn(bool); setMusicEnabled(bool); }
         if (key === "pref_sound") { setSoundFx(bool); setSoundEnabled(bool); }
         if (key === "pref_notif") setNotifEnabled(bool);
+        if (key === HAPTICS_PREF_KEY) { setHapticsOn(bool); setHapticsEnabled(bool); }
       });
     });
   }, [visible]);
@@ -131,6 +134,13 @@ export default function SettingsModal({
     setSoundFx(val);
     AsyncStorage.setItem("pref_sound", String(val));
     setSoundEnabled(val); // immediately silences/restores all playSound() calls
+  };
+
+  const handleHapticsToggle = (val) => {
+    setHapticsOn(val);
+    AsyncStorage.setItem(HAPTICS_PREF_KEY, String(val));
+    setHapticsEnabled(val); // immediately silences/restores every vibration
+    if (val) tapMedium(); // confirma que volvió la vibración
   };
 
   const handleNotifToggle = (val) => {
@@ -158,6 +168,7 @@ export default function SettingsModal({
           <View style={styles.toggleRow}>
             <ToggleBtn icon="musical-notes" label="Música" value={musicOn} onToggle={handleMusicToggle} />
             <ToggleBtn icon="volume-high" label="Sonido" value={soundFx} onToggle={handleSoundToggle} />
+            <ToggleBtn icon="phone-portrait" label="Vibración" value={hapticsOn} onToggle={handleHapticsToggle} />
             <ToggleBtn icon="notifications" label="Avisos" value={notifEnabled} onToggle={handleNotifToggle} />
           </View>
 

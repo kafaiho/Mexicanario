@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -8,7 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 import { FONTS } from "../theme/designTokens";
+import { notifySuccess, tapHeavy, tapLight, tapMedium, tick } from "../services/haptics";
+import { playSound } from "../utils/soundManager";
+import ConfettiBurst from "./ConfettiBurst";
 
 const { width, height } = Dimensions.get("window");
 
@@ -33,6 +37,31 @@ export default function RankUpOverlay({ visible, oldRank, newRank, onDismiss }) 
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const titleSlide = useRef(new Animated.Value(30)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
+  const ring = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
+  const [burstKey, setBurstKey] = useState(0);
+
+  // Escalera háptica mientras el rango viejo se va (tensión) → golpe + éxito al
+  // aparecer el nuevo, sincronizado con la secuencia de abajo (300 + 400 ms).
+  useEffect(() => {
+    if (!visible) return undefined;
+    const timers = [
+      setTimeout(tick, 320),
+      setTimeout(tapLight, 480),
+      setTimeout(tapMedium, 620),
+      setTimeout(() => {
+        tapHeavy();
+        setTimeout(notifySuccess, 140);
+        playSound("milestone");
+        setBurstKey((k) => k + 1);
+        if (!reduceMotion) {
+          ring.setValue(0);
+          Animated.timing(ring, { toValue: 1, duration: 700, useNativeDriver: true }).start();
+        }
+      }, 720),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [visible, reduceMotion]);
 
   useEffect(() => {
     if (!visible) return;
@@ -123,6 +152,20 @@ export default function RankUpOverlay({ visible, oldRank, newRank, onDismiss }) 
           {oldRank.emoji}
         </Animated.Text>
 
+        {/* Aro de luz + confeti al aparecer el rango nuevo */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.ring,
+            {
+              borderColor: newRank.color || GOLD,
+              opacity: ring.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.9, 0] }),
+              transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.2] }) }],
+            },
+          ]}
+        />
+        <ConfettiBurst burstKey={burstKey} count={26} distance={170} style={styles.burstOrigin} />
+
         {/* New emoji (scaling in) */}
         <Animated.Text
           style={[
@@ -171,6 +214,17 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: width * 0.25,
+  },
+  ring: {
+    position: "absolute",
+    width: width * 0.32,
+    height: width * 0.32,
+    borderRadius: width * 0.16,
+    borderWidth: 4,
+  },
+  burstOrigin: {
+    top: "50%",
+    left: "50%",
   },
   upLabel: {
     fontFamily: FONTS.bodyBold,

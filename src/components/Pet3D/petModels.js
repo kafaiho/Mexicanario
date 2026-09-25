@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import * as TX from './petTextures.js';
+import { buildOutfit } from './petOutfits.js';
 
 export const PET3D_TYPES = ['tecolote', 'monarca', 'ayotl'];
 export const supports3D = (petType) => PET3D_TYPES.includes(petType);
@@ -138,7 +139,7 @@ function buildTecolote(stage) {
     egg.position.y = 0.95;
     g.add(egg);
     anim.push((t) => { egg.rotation.z = Math.sin(t * 2.2) * 0.05; egg.rotation.y = t * 0.3; });
-    return { g, eyes, anim };
+    return { g, eyes, anim, head: { c: [0, 0.95, 0], r: 0.62, top: 1.29, shape: [1, 1.3, 1] } };
   }
   if (stage === 2) {
     nest(g);
@@ -151,8 +152,8 @@ function buildTecolote(stage) {
     addEyes(g, eyes, { r: 0.15, dx: 0.17, y: rimY + 0.39, z: 0.45, iris: 0xF6B81A });
     g.add(M(new THREE.ConeGeometry(0.05, 0.12, 12), std(0xB08A5A), [0, rimY + 0.25, 0.47], null, [Math.PI * 0.85, 0, 0]));
     blush(g, 0.3, rimY + 0.27, 0.38, 0.06);
-    capOn(g, 0.6, 0.8, 0.18, shellMat, [0.06, rimY + 0.62, 0], -0.35);
-    return { g, eyes, anim };
+    const cap = capOn(g, 0.6, 0.8, 0.18, shellMat, [0.06, rimY + 0.62, 0], -0.35);
+    return { g, eyes, anim, head: { c: [0, rimY + 0.35, 0.02], r: 0.46, eyeY: 0.09, eyeDX: 0.37, eyeR: 0.33, faceZ: 0.93, hides: [cap] } };
   }
   const P = {
     3: { body: 0xCFC7BC, disc: 0xEFE9E0, eyeR: 0.27, tufts: 0, glasses: false, wings: 'fold', rough: 0.95, fluffTop: true },
@@ -232,8 +233,9 @@ function buildTecolote(stage) {
       g.add(S(0.025 + rnd() * 0.02, sm, [v.x * 1.01, 1 + v.y * 1.05, v.z * 0.93]));
     }
   }
+  let moon = null;
   if (P.crown) {
-    const moon = M(new THREE.TorusGeometry(0.3, 0.075, 12, 36, Math.PI * 1.35), std(0xF2C14E, { emissive: 0xE8A10E, emissiveIntensity: 0.6, metalness: 0.6, roughness: 0.3 }), [0, 2.32, 0.05], null, [0, 0, -Math.PI * 0.18]);
+    moon = M(new THREE.TorusGeometry(0.3, 0.075, 12, 36, Math.PI * 1.35), std(0xF2C14E, { emissive: 0xE8A10E, emissiveIntensity: 0.6, metalness: 0.6, roughness: 0.3 }), [0, 2.32, 0.05], null, [0, 0, -Math.PI * 0.18]);
     g.add(moon);
     anim.push((t) => { moon.position.y = 2.32 + Math.sin(t * 1.5) * 0.04; });
   }
@@ -249,7 +251,8 @@ function buildTecolote(stage) {
     g.add(ring);
     anim.push((t) => { ring.rotation.y = t * 0.35; });
   }
-  return { g, eyes, anim };
+  const head = { c: [0, 1 + by, 0], r: 1, top: 1.04, hatLift: 0.68, shape: [1, 1.04, 0.92], eyeY: 0.31, eyeDX: 0.3, eyeR: P.eyeR, faceZ: 0.9, neck: [-0.22, 0.98], hides: moon ? [moon] : [] };
+  return { g, eyes, anim, head };
 }
 
 // ── Monarca ─────────────────────────────────────────────────────────────────
@@ -290,7 +293,7 @@ function buildMonarca(stage) {
     egg.position.y = 0.76;
     g.add(egg);
     anim.push((t) => { egg.rotation.z = Math.sin(t * 2) * 0.04; });
-    return { g, eyes, anim };
+    return { g, eyes, anim, head: { c: [0, 0.76, 0], r: 0.44, top: 1.41, shape: [1, 1.4, 1] } };
   }
   if (stage === 2) {
     leaf(g, 1.25, 0.08);
@@ -302,8 +305,8 @@ function buildMonarca(stage) {
     blush(g, 0.22, hy - 0.08, 0.25, 0.05);
     const ink = std(0x15101A);
     [-1, 1].forEach((s) => g.add(M(new THREE.CylinderGeometry(0.018, 0.018, 0.28, 8), ink, [s * 0.14, hy + 0.36, 0], null, [0, 0, -s * 0.35])));
-    capOn(g, 0.42, 0.62, 0.35, sm, [-0.05, hy + 0.23, 0], 0.4);
-    return { g, eyes, anim };
+    const cap = capOn(g, 0.42, 0.62, 0.35, sm, [-0.05, hy + 0.23, 0], 0.4);
+    return { g, eyes, anim, head: { c: [0, hy, 0], r: 0.34, eyeY: 0.09, eyeDX: 0.38, eyeR: 0.35, faceZ: 0.92, hides: [cap] } };
   }
   if (stage === 3) {
     leaf(g, 1.7, 0.08);
@@ -334,7 +337,7 @@ function buildMonarca(stage) {
     });
     cat.rotation.y = -0.35;
     anim.push((t) => segs.forEach((s, i) => { s.position.y = 0.42 + Math.sin((i / (n - 1)) * Math.PI) * 0.22 + Math.sin(t * 3 - i * 0.7) * 0.035; }));
-    return { g, eyes, anim };
+    return { g, eyes, anim, head: { parent: cat, c: [hx, hy, 0.05], r: 0.42, eyeY: 0.05, eyeDX: 0.33, eyeR: 0.31, faceZ: 1.07, neck: [-0.85, 0.72] } };
   }
   if (stage === 4) {
     const bark = std(0x6B4424, { roughness: 0.9 });
@@ -359,7 +362,8 @@ function buildMonarca(stage) {
     blush(hang, 0.26, faceY - 0.1, 0.4, 0.06);
     hang.add(M(new THREE.TorusGeometry(0.035, 0.012, 8, 12, Math.PI), ink, [0, faceY - 0.14, 0.455], null, [0, 0, Math.PI]));
     anim.push((t, fx) => { hang.rotation.z = Math.sin(t * 1.1) * 0.06 + fx.wobble; hang.rotation.x = Math.sin(t * 0.8) * 0.03; });
-    return { g, eyes, anim, noHop: true };
+    // La crisálida cuelga: el sombrero va arriba, donde se angosta hacia la rama
+    return { g, eyes, anim, noHop: true, head: { parent: hang, c: [0, faceY, 0], r: 0.46, top: 1.65, eyeY: 0, eyeDX: 0.3, eyeR: 0.16, faceZ: 0.96 } };
   }
   // Mariposa (5) y Papalotl (6)
   const mythic = stage === 6;
@@ -418,7 +422,8 @@ function buildMonarca(stage) {
     g.add(ring);
     anim.push((t) => { ring.rotation.y = -t * 0.4; });
   }
-  return { g, eyes, anim };
+  const head = { c: [0, headY, 0.05], r: 0.44, eyeY: 0.05, eyeDX: 0.36, eyeR: (mythic ? 0.12 : 0.15) / 0.44, faceZ: 0.97, neck: [-1.0, 0.55] };
+  return { g, eyes, anim, head };
 }
 
 // ── Ayotl ───────────────────────────────────────────────────────────────────
@@ -461,7 +466,8 @@ function buildTurtle(o) {
     });
     head.position.y = hy + Math.sin(t * 1.7) * 0.015 - fx.droop * 0.08;
   });
-  return { g, eyes, anim };
+  const anchor = { parent: head, c: [0, 0, 0], r: o.headR, eyeY: 0.18, eyeDX: 0.46, eyeR: o.eyeR / o.headR, faceZ: 0.86, neck: [-0.82, 0.42] };
+  return { g, eyes, anim, head: anchor };
 }
 const sandMound = (g, r) => { const m = S(r, std(0xffffff, { map: TX.sandTex(), roughness: 1 }), [0, 0, 0], [1, 0.28, 1]); g.add(m); return m; };
 
@@ -477,7 +483,7 @@ function buildAyotl(stage) {
     const glow = S(0.43, std(0xFFFFFF, { transparent: true, opacity: 0.18, emissive: 0xFFF1C9, emissiveIntensity: 0.8 }), [0, 0.42, 0.25]);
     g.add(glow);
     anim.push((t) => glow.scale.setScalar(0.43 * (1 + Math.sin(t * 2) * 0.04)));
-    return { g, eyes: [], anim };
+    return { g, eyes: [], anim, head: { c: [0, 0.42, 0.25], r: 0.42 } };
   }
   if (stage === 2) {
     const g = new THREE.Group();
@@ -494,7 +500,7 @@ function buildAyotl(stage) {
     g.add(M(new THREE.TorusGeometry(0.07, 0.016, 8, 16, Math.PI), std(0x2A2220), [0, hy - 0.13, 0.36], null, [0, 0, Math.PI]));
     const cap = capOn(g, 0.5, 0.5, 0, em, [0.05, hy + 0.17, 0], -0.3);
     anim.push((t) => { cap.rotation.z = -0.3 + Math.sin(t * 2.5) * 0.05; });
-    return { g, eyes, anim };
+    return { g, eyes, anim, head: { c: [0, hy, 0.05], r: 0.36, eyeY: 0.17, eyeDX: 0.44, eyeR: 0.36, faceZ: 0.86, hides: [cap] } };
   }
   if (stage === 3) {
     const out = buildTurtle({ R: 0.72, y: 0.26, dome: 0.62, shell: 'hatch', skin: 0x55534C, headR: 0.42, eyeR: 0.15, flip: 0.85 });
@@ -627,8 +633,9 @@ const easeOutBack = (p) => 1 + 2.2 * Math.pow(p - 1, 3) + 1.2 * Math.pow(p - 1, 
  *
  * opts.framing: 'stage' → el modelo crece con la etapa dentro del mismo encuadre
  *               'fit'   → el modelo llena el encuadre en cualquier etapa
+ * opts.outfit:  traje de la tienda ('skin_mariachi'…) o null (ver petOutfits.js)
  */
-export function createPetController({ petType = 'monarca', stage = 1, framing = 'fit', showFlame = false, showShadow = true, baseRotation = -0.35 } = {}) {
+export function createPetController({ petType = 'monarca', stage = 1, framing = 'fit', showFlame = false, showShadow = true, baseRotation = -0.35, outfit = null } = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
   scene.add(new THREE.HemisphereLight(0xFFF4E6, 0x5B3F66, 2.2));
@@ -655,18 +662,23 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
   }
 
   const st = {
-    petType, stage, framing, showFlame, aspect: 1,
-    model: null, height: 1, width: 1,
+    petType, stage, framing, showFlame, outfit, aspect: 1,
+    model: null, height: 1, width: 1, extraTop: 0, fullWidth: 1,
     flame: null, hourglass: null, zs: [],
     streakDays: 0, streakStatus: 'activa', mood: 'happy',
     rotY: baseRotation, rotVel: 0, dragging: false, lastDrag: -1e9,
     reaction: null, reactionT0: 0, popT0: -10, time: 0, reduceMotion: false,
+    // Mirada: sigue el dedo (x, y de -1 a 1) y vuelve al frente al soltar
+    look: { tx: 0, ty: 0, x: 0, y: 0, until: -1 },
+    caress: null, caressT0: 0,               // 'rub' | 'headpat' | 'tickle'
+    hearts: [],
   };
 
   function frame() {
     const flameH = st.showFlame ? 0.85 : 0;
-    const contentH = (st.framing === 'stage' ? STAGE_H[5] : st.height) + flameH;
-    const contentW = Math.max(st.framing === 'stage' ? 2.6 : st.width, 1.2);
+    // El traje (sombrero, penacho) agranda el encuadre en vez de encoger a la mascota
+    const contentH = (st.framing === 'stage' ? STAGE_H[5] : st.height) + st.extraTop + flameH;
+    const contentW = Math.max(st.framing === 'stage' ? 2.6 : st.width, st.fullWidth, 1.2);
     const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const margin = 1.12;
     const dist = Math.max((contentH * margin) / 2 / half, (contentW * margin) / 2 / (half * st.aspect));
@@ -694,18 +706,41 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
     const b2 = new THREE.Box3().setFromObject(inner);
     const c = b2.getCenter(new THREE.Vector3());
     inner.position.set(-c.x, -b2.min.y, -c.z);
+    st.height = b2.max.y - b2.min.y;
+    st.width = Math.max(b2.max.x - b2.min.x, b2.max.z - b2.min.z);
+    // Traje: se pone después de medir, así la mascota conserva su tamaño
+    st.extraTop = 0;
+    st.fullWidth = st.width;
+    if (wearOutfit(m, inner)) {
+      const b3 = new THREE.Box3().setFromObject(inner);
+      st.extraTop = Math.max(0, b3.max.y - st.height);
+      st.fullWidth = Math.max(b3.max.x - b3.min.x, b3.max.z - b3.min.z);
+    }
     loose.forEach(([n, p]) => p.add(n));
     const wrap = new THREE.Group();
     wrap.add(inner);
     body.add(wrap);
     st.model = { ...m, wrap, inner, baseScale: s };
-    st.height = b2.max.y - b2.min.y;
-    st.width = Math.max(b2.max.x - b2.min.x, b2.max.z - b2.min.z);
     if (shadow) shadow.scale.set(Math.min(st.width, 2.2) * 0.9, Math.min(st.width, 2.2) * 0.9, 1);
     rim.color.setHex(RIM[st.petType] || RIM.monarca);
     st.popT0 = st.time;
     frame();
     syncFlame();
+  }
+
+  // Coloca el traje en el ancla de cabeza; quita lo que reemplaza (cascarón-sombrero, luna)
+  function wearOutfit(m, inner) {
+    if (!st.outfit || !m.head) return false;
+    const a = m.head;
+    const piece = buildOutfit(st.outfit, a);
+    if (!piece) return false;
+    (a.hides || []).forEach((h) => h.parent?.remove(h));
+    const holder = new THREE.Group();
+    holder.position.set(a.c[0], a.c[1], a.c[2]);
+    holder.scale.setScalar(a.r);
+    holder.add(piece);
+    (a.parent || inner).add(holder);
+    return true;
   }
 
   function syncFlame() {
@@ -718,7 +753,7 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
     const risk = wantFlame && st.streakStatus === 'riesgo';
     if (risk && !st.hourglass) { st.hourglass = buildHourglass(); st.hourglass.scale.setScalar(0.9); st.hourglass.position.set(0.55, 0.3, 0); flameHolder.add(st.hourglass); }
     if (!risk && st.hourglass) { flameHolder.remove(st.hourglass); disposeTree(st.hourglass); st.hourglass = null; }
-    flameHolder.position.set(0, st.height + 0.1, 0);
+    flameHolder.position.set(0, st.height + st.extraTop + 0.1, 0);
     flameHolder.scale.setScalar(0.85);
   }
 
@@ -733,6 +768,40 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
       }
     }
     if (!sleeping && st.zs.length) { st.zs.forEach((z) => { scene.remove(z); z.material.dispose(); }); st.zs = []; }
+  }
+
+  // Corazones que salen de la cabeza al acariciarla
+  function spawnHearts(n) {
+    for (let i = 0; i < n; i++) {
+      let h = st.hearts.find((x) => x.userData.t0 == null);
+      if (!h) {
+        if (st.hearts.length >= 6) return;
+        h = new THREE.Sprite(new THREE.SpriteMaterial({ map: TX.heartTex(), transparent: true, depthWrite: false }));
+        h.visible = false;
+        scene.add(h);
+        st.hearts.push(h);
+      }
+      h.userData.t0 = st.time + i * 0.18;
+      h.userData.dx = (Math.random() - 0.5) * 0.7;
+    }
+  }
+
+  // ¿El dedo cae en la cabeza, en el cuerpo o fuera de la mascota?
+  const raycaster = new THREE.Raycaster();
+  function zoneAt(nx, ny) {
+    const m = st.model;
+    if (!m) return null;
+    scene.updateMatrixWorld(true);
+    raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
+    const hit = raycaster.intersectObject(m.wrap, true)[0];
+    if (!hit) return null;
+    const a = m.head;
+    if (!a) return 'body';
+    const owner = a.parent || m.inner;
+    const center = owner.localToWorld(new THREE.Vector3(a.c[0], a.c[1], a.c[2]));
+    const r = a.r * new THREE.Vector3().setFromMatrixScale(owner.matrixWorld).x;
+    // En el tecolote cabeza y cuerpo son la misma bola: cuenta la mitad de arriba
+    return hit.point.distanceTo(center) <= r * 1.25 && hit.point.y >= center.y - r * 0.2 ? 'head' : 'body';
   }
 
   rebuild();
@@ -753,10 +822,33 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
       syncFlame();
     },
     setShowFlame(v) { st.showFlame = !!v; frame(); syncFlame(); },
+    /** Ponerle o quitarle (null) un traje; la mascota hace un pequeño "pop" al cambiar. */
+    setOutfit(id) {
+      const next = id || null;
+      if (next === st.outfit) return;
+      st.outfit = next;
+      rebuild();
+    },
     setMood(mood) { st.mood = mood || 'happy'; syncZs(); },
     setReduceMotion(v) { st.reduceMotion = !!v; },
-    /** kind: 'tap' | 'correct' | 'combo' | 'wrong' */
-    react(kind) { st.reaction = kind; st.reactionT0 = st.time; },
+    /** kind: 'tap' | 'correct' | 'combo' | 'wrong' | 'hint' (voltea al teclado) */
+    react(kind) {
+      st.reaction = kind; st.reactionT0 = st.time;
+      if (kind === 'hint') { st.look.tx = 0.15; st.look.ty = -0.95; st.look.until = st.time + 2.6; }
+    },
+    /** La mirada sigue un punto de la vista (x, y de -1 a 1); null la suelta. */
+    lookAt(nx, ny) {
+      if (nx == null) { st.look.until = Math.min(st.look.until, st.time + 0.5); return; }
+      st.look.tx = Math.max(-1, Math.min(1, nx));
+      st.look.ty = Math.max(-1, Math.min(1, ny));
+      st.look.until = st.time + 1.5;
+    },
+    /** Caricias: 'rub' (frotar), 'headpat' (palmadita en la cabeza), 'tickle' (cosquillas). */
+    pet(kind) {
+      st.caress = kind; st.caressT0 = st.time;
+      if (!st.reduceMotion) spawnHearts(kind === 'tickle' ? 3 : kind === 'rub' ? 2 : 1);
+    },
+    zoneAt,
     dragBy(dxPixels) { st.rotY += dxPixels * 0.012; st.rotVel = dxPixels * 0.012; st.dragging = true; st.lastDrag = st.time; },
     release() { st.dragging = false; st.lastDrag = st.time; },
 
@@ -786,7 +878,7 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
         } else {
           const hops = r === 'combo' ? 2 : 1;
           const dur = 0.42;
-          if (r !== 'tap' && p < dur * hops) hop = Math.abs(Math.sin((p / dur) * Math.PI)) * (r === 'combo' ? 0.32 : 0.24);
+          if (r !== 'tap' && p < dur * hops) hop = Math.abs(Math.sin((p / dur) * Math.PI)) * (r === 'combo' ? 0.32 : r === 'hint' ? 0.08 : 0.24);
           if (r === 'tap' && p < 0.3) hop = Math.sin((p / 0.3) * Math.PI) * 0.1;
           sq = -0.18 * Math.exp(-5 * p) * Math.cos(14 * p);
           if (r === 'combo' && p < 0.85) spin = Math.PI * 2 * (0.5 - 0.5 * Math.cos((p / 0.85) * Math.PI));
@@ -794,19 +886,51 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
         }
         if (p > 1.6) st.reaction = null;
       }
-      fx.wobble = wob;
       // alegría: brinquito cada 3 s
       if (mood === 'joyful' && !still && !st.reaction && st.stage > 1 && !m.noHop) {
         const q = t % 3;
         if (q < 0.35) hop = Math.sin((q / 0.35) * Math.PI) * 0.12;
       }
 
+      // caricias
+      let squint = 1;
+      let puff = 0;
+      if (st.caress) {
+        const p = t - st.caressT0;
+        const dur = st.caress === 'rub' ? 1.4 : st.caress === 'tickle' ? 1.1 : 0.9;
+        if (p > dur) st.caress = null;
+        else if (!still) {
+          const fade = 1 - p / dur;
+          squint = 0.3;                                      // ojitos felices ^^
+          const egg = st.stage === 1 || m.noHop;
+          if (st.caress === 'rub') {
+            wob += Math.sin(p * 9) * 0.07 * fade;              // se mece contenta
+            puff = 0.05 * fade;                                // se esponja
+            fx.flap += Math.sin(p * 14) * 0.25 * fade;
+          } else if (st.caress === 'headpat') {
+            sq += -0.12 * Math.exp(-6 * p) * Math.cos(12 * p); // aplastadito
+          } else {
+            wob += Math.sin(p * 32) * 0.13 * fade;             // se retuerce de risa
+            if (!egg) hop = Math.max(hop, Math.abs(Math.sin(p * 9)) * 0.1 * fade);
+            fx.flap += Math.sin(p * 24) * 0.45 * fade;
+          }
+        }
+      }
+      fx.wobble = wob;
+
+      // mirada: hacia el dedo mientras toca, luego regresa al frente
+      const lk = st.look;
+      const following = !still && t < lk.until;
+      lk.x += ((following ? lk.tx : 0) - lk.x) * 0.15;
+      lk.y += ((following ? lk.ty : 0) - lk.y) * 0.15;
+
       // giro: arrastre con inercia, luego balanceo suave hacia la vista 3/4
       if (!st.dragging) {
         if (t - st.lastDrag > 2.5 && !still) st.rotY += (baseRotation + Math.sin(t * 0.35) * 0.45 - st.rotY) * 0.02;
         else { st.rotY += st.rotVel; st.rotVel *= 0.9; }
       }
-      root.rotation.y = st.rotY + spin;
+      root.rotation.y = st.rotY + spin + lk.x * 0.35;
+      body.rotation.x = -lk.y * 0.08;
 
       // aparición al cambiar de etapa
       const pp = Math.min(1, (t - st.popT0) / 0.48);
@@ -815,13 +939,33 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
       const bob = still || sleeping ? 0 : Math.abs(Math.sin(t * 2.1)) * 0.03;
       body.position.y = hop + bob - fx.droop * 0.02;
       body.rotation.z = shake || wob;
-      body.scale.set(pop * (1 - sq * 0.6) * (low ? 0.98 : 1), pop * (1 + sq + breath) * (low ? 0.96 : 1), pop * (1 - sq * 0.6));
+      body.scale.set(pop * (1 - sq * 0.6 + puff) * (low ? 0.98 : 1), pop * (1 + sq + breath + puff * 0.5) * (low ? 0.96 : 1), pop * (1 - sq * 0.6 + puff));
       if (!still) m.anim.forEach((f) => f(t, fx));
 
       // ojos: parpadeo, sueño y tristeza
       const blink = !still && t % 3.6 > 3.45 ? 0.12 : 1;
-      const eyeY = sleeping ? 0.08 : low ? Math.min(blink, 0.6) : blink;
-      m.eyes.forEach((e) => { e.scale.y = eyeY; });
+      const eyeY = sleeping ? 0.08 : Math.min(low ? Math.min(blink, 0.6) : blink, squint);
+      m.eyes.forEach((e) => {
+        if (e.userData.baseRY == null) e.userData.baseRY = e.rotation.y;
+        e.scale.y = eyeY;
+        e.rotation.y = e.userData.baseRY + lk.x * 0.45;         // las pupilas siguen el dedo
+        e.rotation.x = -lk.y * 0.35;
+      });
+
+      // corazones de las caricias
+      st.hearts.forEach((h) => {
+        const t0 = h.userData.t0;
+        if (t0 == null) return;
+        const p = (t - t0) / 1.1;
+        if (p < 0) { h.visible = false; return; }
+        if (p >= 1) { h.visible = false; h.userData.t0 = null; return; }
+        const base = V3(h.userData.dx, st.height * 0.9 + p * 0.7, 0.35).applyAxisAngle(V3(0, 1, 0), root.rotation.y);
+        h.visible = true;
+        h.position.set(base.x, base.y + body.position.y, base.z);
+        const sc = 0.16 + Math.sin(Math.min(1, p * 3) * Math.PI / 2) * 0.08;
+        h.scale.set(sc, sc, sc);
+        h.material.opacity = 1 - p * p;
+      });
 
       if (shadow) {
         const k = 1 - Math.min(0.5, hop * 1.5);
@@ -832,7 +976,7 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
       // llama
       if (st.flame) {
         flameHolder.rotation.y = root.rotation.y;
-        flameHolder.position.y = st.height + 0.1 + hop + (still ? 0 : Math.sin(t * 2) * 0.04);
+        flameHolder.position.y = st.height + st.extraTop + 0.1 + hop + (still ? 0 : Math.sin(t * 2) * 0.04);
         const risk = st.streakStatus === 'riesgo';
         const tier = st.flame.userData.tier;
         st.flame.userData.parts.forEach((p, i) => {
@@ -871,6 +1015,7 @@ export function createPetController({ petType = 'monarca', stage = 1, framing = 
     dispose() {
       disposeTree(scene);
       st.zs = [];
+      st.hearts = [];
     },
   };
 }

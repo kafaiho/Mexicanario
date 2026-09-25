@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
-import { NavigationContext } from "@react-navigation/native";
+import { NavigationContext, NavigationRouteContext } from "@react-navigation/native";
 import React, { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   Alert,
@@ -39,6 +39,7 @@ import StreakModal from "./StreakModal";
 import Terminosdeservio from "./Terminosdeservio";
 import CuatesModal from "./CuatesModal";
 import FriendsModal from "./FriendsModal";
+import { goHome } from "./HomeButton";
 import { tapMedium, comboBurst } from "../services/haptics";
 import { playSound } from "../utils/soundManager";
 import useDevMode from "../hooks/useDevMode";
@@ -81,6 +82,10 @@ const S = {
   tacoIcon: width * 0.042,
 };
 
+// Alto real de la barra (desde el borde superior de la pantalla). Las pantallas que
+// dibujan debajo la usan para no dejar huecos ni encimarse.
+export const TOP_BAR_HEIGHT = Math.ceil(S.topPad + S.pillH + S.barH);
+
 // "+N" que aparece bajo el pill mientras las monedas/diamantes van llegando
 function GainLabel({ gain, color }) {
   const opacity = useSharedValue(0);
@@ -111,14 +116,18 @@ function GainLabel({ gain, color }) {
 }
 
 /**
+ * Botón izquierdo: en la pantalla de inicio abre Ajustes; en cualquier otra
+ * sección es la casita para volver al inicio. `showHomeButton` lo fuerza.
  * @param {{ navigation?: any, showHomeButton?: boolean }} props
  * @param {React.ForwardedRef<any>} ref
  */
-function TopBar({ navigation: navigationProp, showHomeButton = false }, ref) {
+function TopBar({ navigation: navigationProp, showHomeButton }, ref) {
   // Si la pantalla no la pasa, usar la navegación de la pantalla donde está la barra
   // (FriendsModal la necesita para abrir el juego al retar o aceptar un reto).
   const screenNavigation = useContext(NavigationContext);
   const navigation = navigationProp ?? screenNavigation;
+  const route = useContext(NavigationRouteContext);
+  const showHome = showHomeButton ?? (!!route && route.name !== "Home");
   const coinPillRef    = useRef(null);
   const diamondPillRef = useRef(null);
   const bounceScale    = useSharedValue(1);
@@ -344,8 +353,8 @@ function TopBar({ navigation: navigationProp, showHomeButton = false }, ref) {
   const handleLeftButtonPress = () => {
     tapMedium();
     animateSettings();
-    if (showHomeButton && navigation) {
-      navigation.navigate("Main");
+    if (showHome && navigation) {
+      goHome(navigation);
     } else {
       setShowSettings(true);
     }
@@ -361,11 +370,13 @@ function TopBar({ navigation: navigationProp, showHomeButton = false }, ref) {
             <TouchableOpacity
               style={[styles.circleBtn, devEnabled && styles.circleBtnDev]}
               onPress={handleLeftButtonPress}
+              accessibilityRole="button"
+              accessibilityLabel={showHome ? "Ir al inicio" : "Ajustes"}
               onLongPress={handleDevToggle}
               delayLongPress={1000}
             >
               <Ionicons
-                name={showHomeButton ? "home" : "settings"}
+                name={showHome ? "home" : "settings"}
                 size={20}
                 color={devEnabled ? "#fff" : "#C47A3A"}
               />

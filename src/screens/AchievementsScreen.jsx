@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { comboBurst } from "../services/haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -25,6 +26,7 @@ import useCoinFly from "../hooks/useCoinFly";
 import { FONTS } from "../theme/designTokens";
 import { TABLET_MODE } from "../utils/tabletSetup";
 import { useUserMutation } from "../hooks/useUserMutation";
+import { serverErrorText } from "../utils/serverError";
 const { sumPlaceProgress } = require('../config/achievementProgress.js');
 const { getAchievementCollectionDescription } = require('../config/achievementCollections.js');
 
@@ -61,7 +63,10 @@ export default function AchievementsScreen() {
   const [claimedIds, setClaimedIds] = useState(new Set());
   const [claiming, setClaiming] = useState(null);
 
-  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
+  // Los logros los paga el servidor y los anota en la cuenta (convex/rewards.ts)
+  const claimAchievement = useUserMutation(api.rewards.claimAchievement);
+  const syncClaimedAchievements = useUserMutation(api.rewards.syncClaimedAchievements);
+  const rewardState = useQuery(api.rewards.getRewardState, userId ? { userId } : "skip");
 
   // ── Real user data from Convex ──────────────────────────────────────────────
   const user = useQuery(api.users.getUser, userId ? { userId } : "skip");
@@ -81,9 +86,21 @@ export default function AchievementsScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((val) => {
-      if (val) setClaimedIds(new Set(JSON.parse(val)));
+      if (val) setClaimedIds((prev) => new Set([...prev, ...JSON.parse(val)]));
     });
   }, []);
+
+  // Cobrados en la cuenta + los que este teléfono cobró antes de que se guardaran
+  // en el servidor (esos se anotan en la cuenta sin volver a pagarse)
+  const serverClaimed = rewardState?.claimedAchievements;
+  useEffect(() => {
+    if (!serverClaimed || !userId) return;
+    setClaimedIds((prev) => {
+      const localOnly = [...prev].filter((id) => !serverClaimed.includes(id));
+      if (localOnly.length) syncClaimedAchievements({ userId, achievementIds: localOnly }).catch(() => { });
+      return new Set([...prev, ...serverClaimed]);
+    });
+  }, [serverClaimed?.length, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Compute achievements from real user data ────────────────────────────────
   const achievementsData = useMemo(() => {
@@ -557,21 +574,16 @@ export default function AchievementsScreen() {
       sourcePos = { x: width / 2, y: height * 0.6 };
     }
 
-    // ── Launch coin animation immediately (don't await backend) ───────────
-    triggerCoinFly({
-      fromX: sourcePos.x,
-      fromY: sourcePos.y,
-      toX: targetPos.x + targetPos.w / 2,
-      toY: targetPos.y + targetPos.h / 2,
-      coins: achievement.reward.coins || 25,
-      onAllArrived: () => topBarRef.current?.triggerBounce(),
-    });
-
     try {
-      await updateCurrency({
-        userId,
-        coins: achievement.reward.coins || 0,
-        diamonds: achievement.reward.diamonds > 0 ? achievement.reward.diamonds : undefined,
+      const r = await claimAchievement({ userId, achievementId: achievement.id });
+      // ── Las monedas vuelan cuando el servidor ya pagó ─────────────────────
+      triggerCoinFly({
+        fromX: sourcePos.x,
+        fromY: sourcePos.y,
+        toX: targetPos.x + targetPos.w / 2,
+        toY: targetPos.y + targetPos.h / 2,
+        coins: r.coinsGranted || 25,
+        onAllArrived: () => topBarRef.current?.triggerBounce(),
       });
       const next = new Set(claimedIds);
       next.add(achievement.id);
@@ -580,7 +592,9 @@ export default function AchievementsScreen() {
       comboBurst(5);
       triggerBadgeAnimations(achievement.id);
     } catch (e) {
-      // Animation already played; silently ignore backend error
+      const msg = serverErrorText(e, "No se pudo reclamar el logro. Intenta de nuevo.");
+      if (/Ya reclamaste/.test(msg)) setClaimedIds((prev) => new Set([...prev, achievement.id]));
+      Alert.alert("Logros", msg);
     } finally {
       setClaiming(null);
     }

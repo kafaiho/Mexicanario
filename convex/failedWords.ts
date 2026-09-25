@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { userMutation } from "./sessionAuth";
 import { buildDueReviewWord } from "./failedWordPresentation";
+import { rewardTicketPatch } from "./rewards";
 
 const TWO_DAYS_MS = 172_800_000;
 
@@ -66,6 +67,9 @@ export const resolveWord = userMutation({
 
     if (record) {
       await ctx.db.patch(record._id, { resolved: true });
+      // Acertar una palabra del repaso paga como una palabra del nivel actual
+      const user = await ctx.db.get(userId);
+      if (user) await ctx.db.patch(userId, rewardTicketPatch("review", user.currentLevel ?? 1, 1) as any);
     }
   },
 });

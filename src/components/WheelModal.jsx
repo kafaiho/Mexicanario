@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMutation } from 'convex/react';
+import { useQuery } from 'convex/react';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -16,12 +15,14 @@ import {
 } from 'react-native';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { serverErrorText } from '../utils/serverError';
 import useCoinFly from '../hooks/useCoinFly';
 import useDiamondFly from '../hooks/useDiamondFly';
 import { useRewardedAd } from '../hooks/useRewardedAd';
 import { presentMexicanarioPlusPaywall } from '../services/RevenueCatService';
 import { hasPermission, scheduleWheelReady } from '../services/notificationService';
 import { playSound } from '../utils/soundManager';
+import { notifySuccess, tapHeavy, tapLight, tick } from '../services/haptics';
 import { REAL_HEIGHT, REAL_WIDTH, TABLET_MODE } from '../utils/tabletSetup';
 import CoinFlyOverlay from './CoinFlyOverlay';
 import DiamondFlyOverlay from './DiamondFlyOverlay';
@@ -30,7 +31,8 @@ import { useUserMutation } from "../hooks/useUserMutation";
 const { width, height } = Dimensions.get('window');
 
 // ─── Prize segments ────────────────────────────────────────────────────────────
-// 8 segments, 45° each, listed clockwise starting from the TOP of the wheel image
+// 8 segments, 45° each, listed clockwise starting from the TOP of the wheel image.
+// El premio lo elige y lo paga el servidor (convex/rewards.ts WHEEL_SEGMENTS, mismo orden).
 const SEGMENTS = [
   { label: '💎 3', coins: 0, emoji: '💎', type: 'diamond', diamonds: 3 },
   { label: '60', coins: 60, emoji: '🪙', type: 'coins' },
@@ -45,8 +47,28 @@ const SEGMENTS = [
 const NUM_SEGMENTS = SEGMENTS.length;          // 8
 const SEGMENT_ANGLE = 360 / NUM_SEGMENTS;       // 45°
 const SPIN_ROTATIONS = 6;                        // full rotations before landing
-const COOLDOWN_MS = 24 * 60 * 60 * 1000;     // 24 hours
-const STORAGE_KEY = 'wheel_last_spin';
+const SPIN_MS = 4000;
+const MIN_TICK_GAP_MS = 45;                      // al inicio gira muy rápido: no saturar la vibración
+
+/**
+ * Momentos (ms) en que la flecha cruza un borde de segmento, para un giro de
+ * `deltaDeg` con Easing.out(Easing.cubic): p(t) = 1 - (1 - t)^3  ⇒  t = 1 - (1 - p)^(1/3).
+ * Al frenar, los tics se espacian cada vez más (suspenso de tragamonedas).
+ */
+function segmentTickTimes(startDeg, deltaDeg) {
+  const times = [];
+  let last = -Infinity;
+  const firstBoundary = Math.ceil(startDeg / SEGMENT_ANGLE) * SEGMENT_ANGLE;
+  for (let b = firstBoundary; b < startDeg + deltaDeg; b += SEGMENT_ANGLE) {
+    const p = (b - startDeg) / deltaDeg;
+    const t = (1 - Math.cbrt(1 - p)) * SPIN_MS;
+    if (t - last >= MIN_TICK_GAP_MS) {
+      times.push(t);
+      last = t;
+    }
+  }
+  return times;
+}
 
 const getCoinPillFallback = () => {
   const topPad = Platform.OS === 'ios' ? 52 : 36;
@@ -68,7 +90,11 @@ function formatCooldown(ms) {
 
 export default function WheelModal({ visible, onClose, onOpenShop }) {
   const { userId } = useAuth();
-  const updateCurrency = useUserMutation(api.users.updateUserCurrency);
+  const spinWheel = useUserMutation(api.rewards.spinWheel);
+  const rewardState = useQuery(api.rewards.getRewardState, userId ? { userId } : 'skip');
+  const freeReadyAt = rewardState?.wheel?.freeReadyAt ?? 0;
+  const adSpinsLeft = rewardState?.wheel?.adSpinsLeft ?? 0;
+  const requestingRef = useRef(false);
   const { flyCoins, particles, triggerCoinFly, onCoinArrived } = useCoinFly();
   const { flyDiamonds, diamondParticles, triggerDiamondFly, onDiamondArrived } = useDiamondFly();
 
@@ -79,32 +105,20 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
   const [spinning, setSpinning] = useState(false);
   const [prize, setPrize] = useState(null);   // segment index when done
   const [cooldownMs, setCooldownMs] = useState(0);
-  const [adUsedThisSession, setAdUsedThisSession] = useState(false);
   const tickRef = useRef(null);
+  const spinTickTimers = useRef([]);
+  useEffect(() => () => spinTickTimers.current.forEach(clearTimeout), []);
   const cooldownEndsAtRef = useRef(0);
 
-  // Load cooldown on open
+  // Cuenta regresiva del giro gratis (la hora la guarda el servidor)
   useEffect(() => {
-    if (!visible) return;
-    checkCooldown();
+    if (!visible) return undefined;
+    cooldownEndsAtRef.current = freeReadyAt;
+    const remaining = Math.max(0, freeReadyAt - Date.now());
+    setCooldownMs(remaining);
+    if (remaining > 0) startTick();
     return () => clearInterval(tickRef.current);
-  }, [visible]);
-
-  async function checkCooldown() {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (!stored) {
-        cooldownEndsAtRef.current = 0;
-        setCooldownMs(0);
-        return;
-      }
-      const last = parseInt(stored, 10);
-      cooldownEndsAtRef.current = last + COOLDOWN_MS;
-      const remaining = Math.max(0, cooldownEndsAtRef.current - Date.now());
-      setCooldownMs(remaining);
-      if (remaining > 0) startTick();
-    } catch (_) { }
-  }
+  }, [visible, freeReadyAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startTick() {
     clearInterval(tickRef.current);
@@ -129,10 +143,18 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
 
     spinAnim.setValue(currentDeg.current);
     playSound('wheel_spin'); // ← sonido de ruleta girando
+    tapLight();
+
+    // Tic háptico cada vez que la flecha pasa un segmento; los últimos, más marcados
+    spinTickTimers.current.forEach(clearTimeout);
+    const ticks = segmentTickTimes(currentDeg.current, targetDelta);
+    spinTickTimers.current = ticks.map((t, i) =>
+      setTimeout(i >= ticks.length - 3 ? tapLight : tick, t)
+    );
 
     Animated.timing(spinAnim, {
       toValue: newDeg,
-      duration: 4000,
+      duration: SPIN_MS,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(async ({ finished }) => {
@@ -141,8 +163,10 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
       setSpinning(false);
       setPrize(segmentIndex);
       playSound('celebration'); // ← fanfarria al ganar premio
+      tapHeavy();
+      setTimeout(notifySuccess, 120);
 
-      // Give reward
+      // El servidor ya pagó el premio; aquí solo vuelan las monedas
       const seg = SEGMENTS[segmentIndex];
       if (seg.type === 'coins') {
         const t = getCoinPillFallback();
@@ -164,39 +188,35 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
           diamonds: seg.diamonds,
         });
       }
-      try {
-        if (seg.type === 'coins') {
-          await updateCurrency({ userId, coins: seg.coins, diamonds: 0 });
-        } else if (seg.type === 'diamond') {
-          await updateCurrency({ userId, coins: 0, diamonds: seg.diamonds });
-        }
-      } catch (e) {
-        console.log('Wheel reward error:', e);
-      }
     });
+  }
+
+  // Pide el giro al servidor (elige el premio y lleva el cooldown) y anima hasta él
+  async function requestSpin(mode) {
+    if (spinning || requestingRef.current || !userId) return false;
+    requestingRef.current = true;
+    try {
+      const r = await spinWheel({ userId, mode });
+      spin(r.segmentIndex);
+      return true;
+    } catch (e) {
+      Alert.alert('🎡 Ruleta', serverErrorText(e, 'No se pudo girar la ruleta. Intenta de nuevo.'));
+      return false;
+    } finally {
+      requestingRef.current = false;
+    }
   }
 
   async function handleFreeSpin() {
     if (spinning || cooldownMs > 0) return;
-    const idx = Math.floor(Math.random() * NUM_SEGMENTS);
-    spin(idx);
-    // Save cooldown
-    const spunAt = Date.now();
-    cooldownEndsAtRef.current = spunAt + COOLDOWN_MS;
-    await AsyncStorage.setItem(STORAGE_KEY, spunAt.toString());
-    setCooldownMs(COOLDOWN_MS);
-    startTick();
+    if (!(await requestSpin('free'))) return;
     // Notificar cuando la ruleta esté lista de nuevo
     if (await hasPermission()) scheduleWheelReady().catch(() => { });
   }
 
   function handleAdSpin() {
-    if (spinning || adUsedThisSession) return;
-    const idx = Math.floor(Math.random() * NUM_SEGMENTS);
-    const shown = showAd(() => {
-      setAdUsedThisSession(true);
-      spin(idx);
-    });
+    if (spinning || adSpinsLeft <= 0) return;
+    const shown = showAd(() => { requestSpin('ad'); });
     if (!shown) {
       Alert.alert('📺 Anuncio no disponible', 'El anuncio aún no cargó. Inténtalo en un momento.', [{ text: 'OK' }]);
     }
@@ -277,7 +297,7 @@ export default function WheelModal({ visible, onClose, onOpenShop }) {
             </TouchableOpacity>
 
             {/* Ad spin button — visible solo cuando hay cooldown y el anuncio está listo */}
-            {cooldownMs > 0 && !adUsedThisSession && (
+            {cooldownMs > 0 && adSpinsLeft > 0 && (
               <TouchableOpacity
                 style={[styles.adButton, { backgroundColor: adReady ? '#1a7a3c' : '#555', marginBottom: 8 }]}
                 onPress={handleAdSpin}

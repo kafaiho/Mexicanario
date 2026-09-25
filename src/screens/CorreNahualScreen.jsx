@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -12,7 +12,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import HomeButton from "../components/HomeButton";
+import MinigameScoreboard from "../components/MinigameScoreboard";
 import { api } from "../../convex/_generated/api";
+import { isNewRecord, nextNahualObstacle } from "../config/minigameLogic";
 import { useAuth } from "../context/AuthContext";
 import { notifyError, notifySuccess, tapLight } from "../services/haptics";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
@@ -36,19 +39,20 @@ const PLAYER_SIZE   = Math.round(width * 0.14);
 const OBS_SIZE      = Math.round(width * 0.15);
 const JUMP_H        = height * 0.22;
 const JUMP_DUR      = 310;
-const SPEED_INITIAL = 1700;
-const SPEED_MIN     = 650;
-const SPEED_STEP    = 35;
+// Si tocas justo antes de aterrizar, el salto se encola en vez de perderse
+const JUMP_BUFFER_H = JUMP_H * 0.35;
+// Suelo que se desplaza: un nopal cada GROUND_EVERY puntitos
+const GROUND_SEG    = 36;
+const GROUND_EVERY  = 4;
+const GROUND_PERIOD = GROUND_SEG * GROUND_EVERY;
+const GROUND_ITEMS  = Array.from(
+  { length: Math.ceil(width / GROUND_SEG) + GROUND_EVERY * 2 },
+  (_, i) => (i % GROUND_EVERY === 0 ? "🌵" : "·"),
+);
 
 const S_MENU    = "menu";
 const S_PLAYING = "playing";
 const S_OVER    = "over";
-
-const TABS = [
-  { key: "daily",   label: "🔥 Hoy" },
-  { key: "weekly",  label: "📅 Semana" },
-  { key: "alltime", label: "🏆 Total" },
-];
 
 function scoreEmoji(n) {
   if (n >= 25) return "🌵";
@@ -74,31 +78,29 @@ export default function CorreNahualScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [gameState,    setGameState]    = useState(S_MENU);
   const [displayScore, setDisplayScore] = useState(0);
-  const [tab,          setTab]          = useState("daily");
+  const [obstacleIcon, setObstacleIcon] = useState("🌵");
+  const [newRecord,    setNewRecord]    = useState(false);
 
   // Convex
   const submitScore = useUserMutation(api.nahual.submitScore);
-  const leaderboard = useQuery(
-    api.nahual.getLeaderboard,
-    gameState === S_OVER ? { type: tab } : "skip"
-  );
-  const myBest = useQuery(
-    api.nahual.getMyBest,
-    userId && gameState === S_OVER ? { userId } : "skip"
-  );
+  const myBest = useQuery(api.nahual.getMyBest, userId ? { userId } : "skip");
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const scoreRef       = useRef(0);
   const isPlayingRef   = useRef(false);
   const isJumpingRef   = useRef(false);
+  const jumpQueuedRef  = useRef(false);
   const obsAnimRef     = useRef(null);
+  const groundLoopRef  = useRef(null);
   const collisionRaf   = useRef(null);
+  const prevBestRef    = useRef(null);
 
   // ── Animated values ───────────────────────────────────────────────────────
   const charY      = useRef(new Animated.Value(0)).current;
   const obsX       = useRef(new Animated.Value(width + 50)).current;
   const scoreScale = useRef(new Animated.Value(1)).current;
   const shakeX     = useRef(new Animated.Value(0)).current;
+  const groundX    = useRef(new Animated.Value(0)).current;
 
   // Real-time values updated by native listener for 60 FPS collision detection
   const charYVal = useRef(0);
@@ -117,13 +119,18 @@ export default function CorreNahualScreen({ navigation }) {
   const launchObstacle = useCallback(() => {
     obsX.setValue(width + 50);
     obsXVal.current = width + 50;
-    const speed = Math.max(SPEED_MIN, SPEED_INITIAL - scoreRef.current * SPEED_STEP);
-    obsAnimRef.current = Animated.timing(obsX, {
-      toValue: -OBS_SIZE - 30,
-      duration: speed,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    });
+    // Pausa aleatoria + tipo variado: el ritmo ya no es predecible
+    const { duration, delay, icon } = nextNahualObstacle(scoreRef.current);
+    setObstacleIcon(icon);
+    obsAnimRef.current = Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(obsX, {
+        toValue: -OBS_SIZE - 30,
+        duration,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ]);
     obsAnimRef.current.start(({ finished }) => {
       if (finished && isPlayingRef.current) {
         scoreRef.current += 1;
@@ -141,8 +148,14 @@ export default function CorreNahualScreen({ navigation }) {
 
   // ── Salto ─────────────────────────────────────────────────────────────────
   const jump = useCallback(() => {
-    if (!isPlayingRef.current || isJumpingRef.current) return;
+    if (!isPlayingRef.current) return;
+    if (isJumpingRef.current) {
+      // Ya cayendo y cerca del suelo → encola el siguiente salto
+      if (charYVal.current > -JUMP_BUFFER_H) jumpQueuedRef.current = true;
+      return;
+    }
     isJumpingRef.current = true;
+    jumpQueuedRef.current = false;
     tapLight();
     playSound("click");
     Animated.sequence([
@@ -158,13 +171,18 @@ export default function CorreNahualScreen({ navigation }) {
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start(() => { isJumpingRef.current = false; });
+    ]).start(({ finished }) => {
+      isJumpingRef.current = false;
+      if (finished && jumpQueuedRef.current) jump();
+    });
   }, []);
 
   // ── Game over ─────────────────────────────────────────────────────────────
   const triggerGameOver = useCallback(() => {
     isPlayingRef.current = false;
+    jumpQueuedRef.current = false;
     obsAnimRef.current?.stop();
+    groundLoopRef.current?.stop();
     charY.stopAnimation();
     cancelAnimationFrame(collisionRaf.current);
     playSound("wrong");
@@ -180,6 +198,8 @@ export default function CorreNahualScreen({ navigation }) {
     ]).start();
 
     const finalScore = scoreRef.current;
+    const prev = prevBestRef.current;
+    setNewRecord(prev !== null && isNewRecord(finalScore, prev));
     setGameState(S_OVER);
 
     // Subir puntuación al leaderboard
@@ -190,18 +210,31 @@ export default function CorreNahualScreen({ navigation }) {
 
   // ── Iniciar juego ─────────────────────────────────────────────────────────
   const startGame = useCallback(() => {
+    prevBestRef.current = myBest ? myBest.allTime : null;
     scoreRef.current = 0;
     isPlayingRef.current = true;
     isJumpingRef.current = false;
+    jumpQueuedRef.current = false;
     setDisplayScore(0);
+    setNewRecord(false);
     setGameState(S_PLAYING);
     charY.setValue(0);
     charYVal.current = 0;
     obsX.setValue(width + 50);
     obsXVal.current = width + 50;
     shakeX.setValue(0);
+    groundX.setValue(0);
+    groundLoopRef.current = Animated.loop(
+      Animated.timing(groundX, {
+        toValue: -GROUND_PERIOD,
+        duration: GROUND_EVERY * 320,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    groundLoopRef.current.start();
     launchObstacle();
-  }, []);
+  }, [myBest]);
 
   // ── Colisiones (rAF synced con display refresh) ──────────────────────────
   useEffect(() => {
@@ -233,6 +266,7 @@ export default function CorreNahualScreen({ navigation }) {
   useEffect(() => () => {
     isPlayingRef.current = false;
     obsAnimRef.current?.stop();
+    groundLoopRef.current?.stop();
     cancelAnimationFrame(collisionRaf.current);
   }, []);
 
@@ -249,20 +283,23 @@ export default function CorreNahualScreen({ navigation }) {
       <TouchableOpacity
         style={StyleSheet.absoluteFillObject}
         activeOpacity={1}
-        onPress={jump}
+        onPressIn={jump}
       >
         <Animated.View
           style={[StyleSheet.absoluteFillObject, { transform: [{ translateX: shakeX }] }]}
         >
           <View style={styles.ground} />
-          <Text style={styles.groundCactus} numberOfLines={1}>
-            {"🌵 · · · 🌵 · · · 🌵 · · · 🌵 · · · 🌵 · · · 🌵"}
-          </Text>
+          <Animated.View style={[styles.groundRow, { transform: [{ translateX: groundX }] }]}>
+            {GROUND_ITEMS.map((item, i) => (
+              <Text key={i} style={styles.groundItem}>{item}</Text>
+            ))}
+          </Animated.View>
 
           {/* Jugador */}
           <Animated.View style={[
             styles.character,
-            { left: PLAYER_X, top: GROUND_Y - PLAYER_SIZE, transform: [{ translateY: charY }] },
+            // El emoji de corredor mira a la izquierda: lo volteamos hacia los obstáculos
+            { left: PLAYER_X, top: GROUND_Y - PLAYER_SIZE, transform: [{ translateY: charY }, { scaleX: -1 }] },
           ]}>
             <Text style={{ fontSize: PLAYER_SIZE * 0.92, lineHeight: PLAYER_SIZE }}>🏃🏽</Text>
           </Animated.View>
@@ -272,7 +309,7 @@ export default function CorreNahualScreen({ navigation }) {
             styles.obstacle,
             { top: GROUND_Y - OBS_SIZE, transform: [{ translateX: obsX }] },
           ]}>
-            <Text style={{ fontSize: OBS_SIZE * 0.92, lineHeight: OBS_SIZE }}>👹</Text>
+            <Text style={{ fontSize: OBS_SIZE * 0.92, lineHeight: OBS_SIZE }}>{obstacleIcon}</Text>
           </Animated.View>
         </Animated.View>
       </TouchableOpacity>
@@ -285,7 +322,8 @@ export default function CorreNahualScreen({ navigation }) {
           </Animated.View>
           <TouchableOpacity
             style={[styles.exitBtn, { top: insets.top + 12 }]}
-            onPress={() => { isPlayingRef.current = false; obsAnimRef.current?.stop(); navigation.goBack(); }}
+            onPress={() => { isPlayingRef.current = false; obsAnimRef.current?.stop(); groundLoopRef.current?.stop(); navigation.goBack(); }}
+            accessibilityLabel="Salir del juego"
           >
             <Text style={styles.exitBtnText}>✕</Text>
           </TouchableOpacity>
@@ -297,12 +335,12 @@ export default function CorreNahualScreen({ navigation }) {
 
       {/* ── Tarjeta menú ──────────────────────────────────────────── */}
       {gameState === S_MENU && (
-        <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+        <View style={[styles.cardOverlay, { paddingTop: insets.top + 64 }]}>
           <View style={styles.card}>
             <Text style={styles.cardBigEmoji}>👹</Text>
             <Text style={styles.cardTitle}>¡Corre del Nahual!</Text>
             <Text style={styles.cardDesc}>
-              El Nahual viene a atraparte. ¡Salta sobre él antes de que te alcance, cuate!
+              El Nahual te persigue por el desierto. ¡Salta los nopales, las piedras y hasta al mismo Nahual!
             </Text>
 
             <View style={styles.instructRow}>
@@ -312,13 +350,13 @@ export default function CorreNahualScreen({ navigation }) {
               </View>
               <View style={styles.instructDivider} />
               <View style={styles.instructItem}>
-                <Text style={styles.instructEmoji}>👹</Text>
-                <Text style={styles.instructText}>Esquiva{"\n"}al Nahual</Text>
+                <Text style={styles.instructEmoji}>🌵</Text>
+                <Text style={styles.instructText}>Esquiva{"\n"}obstáculos</Text>
               </View>
               <View style={styles.instructDivider} />
               <View style={styles.instructItem}>
-                <Text style={styles.instructEmoji}>🌮</Text>
-                <Text style={styles.instructText}>¡Suma{"\n"}puntos!</Text>
+                <Text style={styles.instructEmoji}>🏆</Text>
+                <Text style={styles.instructText}>Récord{"\n"}{myBest ? myBest.allTime : "–"}</Text>
               </View>
             </View>
 
@@ -334,7 +372,7 @@ export default function CorreNahualScreen({ navigation }) {
 
       {/* ── Game over con leaderboard ─────────────────────────────── */}
       {gameState === S_OVER && (
-        <View style={[styles.cardOverlay, { paddingTop: insets.top + 20 }]}>
+        <View style={[styles.cardOverlay, { paddingTop: insets.top + 64 }]}>
           <View style={styles.card}>
             <ScrollView
               showsVerticalScrollIndicator={false}
@@ -351,64 +389,13 @@ export default function CorreNahualScreen({ navigation }) {
               </View>
               <Text style={styles.resultMsg}>{scoreMsg(displayScore)}</Text>
 
-              {/* Récords personales */}
-              {myBest && (
-                <View style={styles.myBestRow}>
-                  <View style={styles.myBestItem}>
-                    <Text style={styles.myBestVal}>{myBest.daily}</Text>
-                    <Text style={styles.myBestLabel}>🔥 Hoy</Text>
-                  </View>
-                  <View style={styles.myBestItem}>
-                    <Text style={styles.myBestVal}>{myBest.weekly}</Text>
-                    <Text style={styles.myBestLabel}>📅 Semana</Text>
-                  </View>
-                  <View style={styles.myBestItem}>
-                    <Text style={styles.myBestVal}>{myBest.allTime}</Text>
-                    <Text style={styles.myBestLabel}>🏆 Total</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Tabs de leaderboard */}
-              <View style={styles.tabRow}>
-                {TABS.map((t) => (
-                  <TouchableOpacity
-                    key={t.key}
-                    style={[styles.tabBtn, tab === t.key && styles.tabBtnActive]}
-                    onPress={() => setTab(t.key)}
-                  >
-                    <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
-                      {t.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Lista del leaderboard */}
-              <View style={styles.lbList}>
-                {!leaderboard ? (
-                  <Text style={styles.lbLoading}>Cargando...</Text>
-                ) : leaderboard.length === 0 ? (
-                  <Text style={styles.lbEmpty}>¡Sé el primero en el marcador!</Text>
-                ) : (
-                  leaderboard.map((entry) => {
-                    const isMe = entry.userId === userId;
-                    return (
-                      <View
-                        key={entry.userId}
-                        style={[styles.lbRow, isMe && styles.lbRowMe]}
-                      >
-                        <Text style={styles.lbRank}>
-                          {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`}
-                        </Text>
-                        <Text style={styles.lbAvatar}>{entry.avatar}</Text>
-                        <Text style={styles.lbName} numberOfLines={1}>{entry.name}</Text>
-                        <Text style={styles.lbScore}>🌮 {entry.score}</Text>
-                      </View>
-                    );
-                  })
-                )}
-              </View>
+              <MinigameScoreboard
+                game={api.nahual}
+                userId={userId}
+                myBest={myBest}
+                newRecord={newRecord}
+                formatScore={(n) => `🌮 ${n}`}
+              />
 
               {/* Botones */}
               <TouchableOpacity style={styles.startBtn} onPress={startGame}>
@@ -421,6 +408,8 @@ export default function CorreNahualScreen({ navigation }) {
           </View>
         </View>
       )}
+        {/* Casita para volver al inicio, solo fuera de una partida */}
+        {(gameState === S_MENU || gameState === S_OVER) && <HomeButton floating />}
     </ImageBackground>
   );
 }
@@ -438,13 +427,16 @@ const styles = StyleSheet.create({
     backgroundColor: AMBER,
     opacity: 0.85,
   },
-  groundCactus: {
+  groundRow: {
     position: "absolute",
     top: GROUND_Y + 6,
-    left: 0, right: 0,
+    left: 0,
+    flexDirection: "row",
+  },
+  groundItem: {
+    width: GROUND_SEG,
     fontSize: 14,
-    color: "rgba(255,255,255,0.25)",
-    letterSpacing: 2,
+    color: "rgba(255,255,255,0.3)",
     textAlign: "center",
   },
 
@@ -578,61 +570,4 @@ const styles = StyleSheet.create({
   resultLabel: { fontSize: width * 0.038, color: BROWN, fontWeight: "700" },
   resultEmoji: { fontSize: width * 0.09 },
   resultMsg:   { fontSize: width * 0.035, color: AMBER, fontWeight: "700", textAlign: "center", marginBottom: 14 },
-
-  // Récords personales
-  myBestRow: {
-    flexDirection: "row",
-    width: "100%",
-    backgroundColor: WHEAT2,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "rgba(139,69,19,0.3)",
-    marginBottom: 14,
-    overflow: "hidden",
-  },
-  myBestItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
-  myBestVal:  { fontSize: width * 0.062, fontWeight: "900", color: BROWN },
-  myBestLabel:{ fontSize: width * 0.028, color: AMBER, fontWeight: "700", marginTop: 2 },
-
-  // Leaderboard tabs
-  tabRow: {
-    flexDirection: "row",
-    width: "100%",
-    backgroundColor: WHEAT2,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "rgba(139,69,19,0.25)",
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  tabBtn:       { flex: 1, paddingVertical: 9, alignItems: "center" },
-  tabBtnActive: { backgroundColor: AMBER },
-  tabText:      { fontSize: width * 0.03, fontWeight: "700", color: AMBER },
-  tabTextActive:{ color: "#fff" },
-
-  // Lista leaderboard
-  lbList:    { width: "100%", marginBottom: 14 },
-  lbLoading: { color: AMBER, textAlign: "center", fontSize: width * 0.035, paddingVertical: 12 },
-  lbEmpty:   { color: AMBER, textAlign: "center", fontSize: width * 0.033, paddingVertical: 12, fontWeight: "600" },
-  lbRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    marginBottom: 4,
-    backgroundColor: WHEAT2,
-    borderWidth: 1,
-    borderColor: "rgba(139,69,19,0.15)",
-    gap: 8,
-  },
-  lbRowMe: {
-    backgroundColor: "#FFF8DC",
-    borderColor: GOLD,
-    borderWidth: 2,
-  },
-  lbRank:   { width: 32, textAlign: "center", fontSize: width * 0.035, fontWeight: "900", color: BROWN },
-  lbAvatar: { fontSize: width * 0.055 },
-  lbName:   { flex: 1, fontSize: width * 0.033, fontWeight: "700", color: BROWN },
-  lbScore:  { fontSize: width * 0.035, fontWeight: "900", color: AMBER },
 });

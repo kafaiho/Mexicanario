@@ -39,11 +39,13 @@ import { WRONG_PHRASES, comboPhrase } from "../components/PetCompanion/petMood";
 import StageCropped from "../components/PetCompanion/StageCropped";
 import StreakCelebration from "../components/StreakCelebration";
 import { getMilestoneForDay } from "../config/streakRewards";
+import { nextHintTarget, PET_HINT_GLOW_MS, PET_HINT_PHRASES, shouldOfferPetHint } from "../config/petHint";
 import SupportModal from "../components/SupportModal";
 import TermsModal from "../components/TermsModal";
 import RankUpOverlay from "../components/RankUpOverlay";
 import FriendToast from "../components/FriendToast";
-import TopBar from "../components/TopBar";
+import TopBar, { TOP_BAR_HEIGHT } from "../components/TopBar";
+import { getTileMetrics } from "../config/gameplayResponsiveLayout";
 import { getRank, getRankIndex, didRankUp } from "../config/xpRanks";
 import { normalizePetType } from "../config/petTypes";
 import VictoryModal from "../components/VictoryModal";
@@ -59,7 +61,8 @@ import useDevMode from "../hooks/useDevMode";
 import { useInterstitialAd } from "../hooks/useInterstitialAd";
 import { useOnboarding } from "../hooks/useOnboarding";
 import { useRewardedAd } from "../hooks/useRewardedAd";
-import { comboBurst, notifyError, notifySuccess, notifyWarning } from "../services/haptics";
+import { comboBurst, nearMiss, notifyError, notifySuccess, notifyWarning, tension, tick } from "../services/haptics";
+import { computeXpBreakdown, isNearMiss, rollGoldenCoin } from "../config/gameFeedback";
 import { hasPermission, requestPermission, rescheduleAfterPlay } from "../services/notificationService";
 import usePetStore from "../store/usePetStore";
 import { playBGM, playSound, stopBGM } from "../utils/soundManager";
@@ -70,6 +73,7 @@ import { compareWordsFlexibly, normalizeWordForDisplay, stripUntypable } from ".
 import { buildTileRows, censorWordInText, isWordPlayable, rowLetterCount } from "../utils/wordPresentation";
 import { useShop } from "../context/ShopContext";
 import { useUserMutation } from "../hooks/useUserMutation";
+import { serverErrorText } from "../utils/serverError";
 
 
 const SOFT_GAME_SHADOW = {
@@ -258,23 +262,30 @@ const GAZE_PHRASES = [
 const buildCensoredExample = (example, mexicanWord) => censorWordInText(example, mexicanWord);
 
 // Memoized tile — only re-renders when THIS tile's data changes
+// Al acertar, cada ficha se voltea (revealAnim 0 → 1) y a la mitad del giro
+// aparece su cara verde: así la palabra se revela en cascada, letra por letra.
 const LetterTile = React.memo(function LetterTile({
   idx, ch, isFixed, isWrong, isSelected, isCorrect,
-  scaleAnim, boxSize, boxHeight, fontSize, marginH, onSelectBox,
+  scaleAnim, revealAnim, boxSize, boxHeight, fontSize, marginH, onSelectBox,
 }) {
   const handlePress = useCallback(() => {
     onSelectBox?.(idx);
   }, [onSelectBox, idx]);
 
+  const { flip, faceOpacity } = useMemo(() => ({
+    flip: revealAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.12, 1] }),
+    faceOpacity: revealAnim.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [0, 0, 1, 1] }),
+  }), [revealAnim]);
+  const showFace = isCorrect && !isFixed;
+
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }, { scaleY: flip }] }}>
         <View
           style={[
             styles.letterBox,
             { width: boxSize, height: boxHeight, marginHorizontal: marginH },
             isSelected && styles.letterBoxSelected,
-            isCorrect && styles.letterBoxCorrect,
             isFixed && styles.letterBoxFixed,
             isWrong && styles.letterBoxWrong,
           ]}
@@ -283,13 +294,25 @@ const LetterTile = React.memo(function LetterTile({
             style={[
               styles.letterText,
               { fontSize },
-              isCorrect && styles.letterTextCorrect,
               isFixed && styles.letterTextFixed,
               isWrong && styles.letterTextWrong,
             ]}
           >
             {ch}
           </Text>
+          {showFace && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.letterBox,
+                styles.letterBoxCorrect,
+                styles.letterFace,
+                { width: boxSize, height: boxHeight, opacity: faceOpacity },
+              ]}
+            >
+              <Text style={[styles.letterText, { fontSize }, styles.letterTextCorrect]}>{ch}</Text>
+            </Animated.View>
+          )}
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -309,7 +332,7 @@ export default function GameplayScreen({ navigation, route }) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   // ── Dynamic keyboard layout ──
-  const kb = useKeyboardLayout();
+  const kb = useKeyboardLayout({ topBarHeight: TOP_BAR_HEIGHT, insideSafeAreaView: true });
   const layout = kb.layout;
   const compactKeyHitSlop = kb.kbKeyH < 44 || kb.kbKeyW < 44
     ? { top: 4, right: 2, bottom: 4, left: 2 }
@@ -363,7 +386,7 @@ export default function GameplayScreen({ navigation, route }) {
   const victoryRewardRef = useRef(null);   // pill de monedas del modal de victoria (origen del vuelo)
   const victoryDiamondRef = useRef(null);  // pill de diamantes del modal de victoria
   // Reservas del contador del TopBar para el premio de victoria, creadas cuando
-  // updateUserCurrency resuelve (así el pill no sube antes de que lleguen las monedas).
+  // claimLevelReward resuelve (así el pill no sube antes de que lleguen las monedas).
   const victoryHoldRef = useRef(null);
   const victoryFlownRef = useRef(false); // el vuelo de esta victoria ya salió (no reservar tarde)
   const victoryShareRef = useRef(null);
@@ -436,6 +459,7 @@ export default function GameplayScreen({ navigation, route }) {
   // Interstitial ad — shown every 5 completed levels
   const { showAd: showInterstitial } = useInterstitialAd();
   const completedLevelsRef = useRef(0);
+  const wordsSinceGoldenRef = useRef(0); // protección de mala racha de la moneda dorada
 
   // Onboarding — shown only on first launch
   const { step: obStep, active: obActive, advance: obAdvance, skip: obSkip } = useOnboarding("gameplay");
@@ -482,6 +506,7 @@ export default function GameplayScreen({ navigation, route }) {
   const [attempts, setAttempts] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelUpReward, setLevelUpReward] = useState(null);
+  const [xpBreakdown, setXpBreakdown] = useState(null); // { total, parts } para la victoria
   const [mexicanWord, setMexicanWord] = useState("");        // normalized (no accents) — for tile display
   const [originalWord, setOriginalWord] = useState("");      // original with accents — for victory display
   const [regularWord, setRegularWord] = useState("");
@@ -544,10 +569,18 @@ export default function GameplayScreen({ navigation, route }) {
   const [fixedLetters, setFixedLetters] = useState([]); // indices filled by hints (locked)
   const [showSynonym, setShowSynonym] = useState(false); // whether the synonym hint is visible
   const [revealedKeys, setRevealedKeys] = useState(null); // null=inactive, Set<string>=keyboard filter active (🔓 hint)
+  // Pista de la mascota: la tecla que brilla (una vez por palabra, gratis)
+  const [petHintKey, setPetHintKey] = useState(null);
+  const petHintUsedRef = useRef(false);
+  const petHintTimerRef = useRef(null);
+  const petHintPulse = useRef(new Animated.Value(1)).current;
 
   // Auth and game hooks
   const levelInfo = useQuery(api.users.getCurrentLevel, userId ? { userId } : "skip");
-  const updateUserCurrency = useUserMutation(api.users.updateUserCurrency);
+  // Premios y gastos los decide el servidor (convex/rewards.ts): la app ya no suma varos sola
+  const claimLevelReward = useUserMutation(api.rewards.claimLevelReward);
+  const spendCoins = useUserMutation(api.rewards.spendCoins);
+  const claimAdReward = useUserMutation(api.rewards.claimAdReward);
   const completeLevelMutation = useUserMutation(api.levels.completeLevel);
   const addXp = useUserMutation(api.users.addXp);
   const claimShareReward = useUserMutation(api.users.claimShareReward);
@@ -672,6 +705,9 @@ export default function GameplayScreen({ navigation, route }) {
 
   const totalLevels = levelInfo?.totalLevels ?? 50;
 
+  // El desglose de XP pertenece a una sola victoria
+  useEffect(() => { if (!showLevelUp) setXpBreakdown(null); }, [showLevelUp]);
+
   // Mostrar la celebración de racha pendiente en cuanto se cierra la victoria
   useEffect(() => {
     if (showLevelUp || !pendingStreakCelebrationRef.current) return;
@@ -732,7 +768,7 @@ export default function GameplayScreen({ navigation, route }) {
         const src = await measureCenter(victoryDiamondRef, fallback);
         flyDiamondsToPill({ trigger: triggerVictoryDiamond, fromX: src.x, fromY: src.y, diamonds: levelUpReward.diamonds, holdId: holds?.diamonds ?? null });
       }
-    }, 1150);
+    }, levelUpReward?.goldenExtra > 0 ? 2050 : 1150);
     return () => {
       clearTimeout(timer);
       victoryFlownRef.current = true; // la victoria cerró: una respuesta tardía ya no debe reservar
@@ -754,27 +790,27 @@ export default function GameplayScreen({ navigation, route }) {
         .map(() => new Animated.Value(1)),
     []
   );
-  const wordSegments = useMemo(() => {
-    const tileScale = layout.mode === 'tablet' || (layout.isLandscape && layout.safeWidth >= 800)
-      ? 1.4
-      : 1;
+  // Cascada al acertar: 0 = ficha normal, 1 = volteada a verde
+  const revealAnims = useMemo(() => Array(40).fill(0).map(() => new Animated.Value(0)), []);
+  const celebrateTimersRef = useRef([]);
+  const clearCelebrateTimers = () => {
+    celebrateTimersRef.current.forEach(clearTimeout);
+    celebrateTimersRef.current = [];
+  };
+  useEffect(() => {
+    if (isCorrect) return;
+    clearCelebrateTimers();
+    revealAnims.forEach((v) => { v.stopAnimation(); v.setValue(0); });
+  }, [isCorrect]);
+  useEffect(() => clearCelebrateTimers, []);
+  const wordSegments = useMemo(() => (
     // Each row holds one word, or several short words for phrases of 4+ words.
-    return buildTileRows(mexicanWord).map((segs) => {
-      const wordLength = rowLetterCount(segs) + (segs.length - 1);
-      let boxSize = Math.round(38 * tileScale);
-      let boxHeight = Math.round(42 * tileScale);
-      let fontSize = Math.round(20 * tileScale);
-      let marginH = Math.round(2 * tileScale);
-      if (wordLength > 7) {
-        const scale = Math.max(0.65, 7.5 / wordLength);
-        boxSize = Math.floor(38 * tileScale * scale);
-        boxHeight = Math.floor(42 * tileScale * scale);
-        fontSize = Math.floor(20 * tileScale * scale);
-        marginH = Math.max(0.5, Math.floor(2 * tileScale * scale));
-      }
-      return { segs, boxSize, boxHeight, fontSize, marginH };
-    });
-  }, [mexicanWord, layout.mode, layout.isLandscape, layout.safeWidth]);
+    // Tiles keep their device size and shrink only as much as the row needs to fit.
+    buildTileRows(mexicanWord).map((segs) => ({
+      segs,
+      ...getTileMetrics({ letters: rowLetterCount(segs), segments: segs.length, layout }),
+    }))
+  ), [mexicanWord, layout]);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   // Prevents the levelInfo useEffect from calling initGame() while the
@@ -813,6 +849,46 @@ export default function GameplayScreen({ navigation, route }) {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  // ── Pista de la mascota ─────────────────────────────────────────────────
+  // Si pasan 20 s sin teclear o fallas dos veces, la mascota voltea al teclado
+  // y hace brillar la tecla de la letra que sigue. Una vez por palabra y gratis;
+  // no escribe la letra (eso es "Revelar letra"). Ver src/config/petHint.js.
+  useEffect(() => {
+    if (!petState?.hasPet || !mexicanWord || isCorrect || isLoading || showLevelUp || openModal) return undefined;
+    const id = setInterval(() => {
+      if (wrongClearTimerRef.current) return; // espera a que se limpie el intento fallido
+      if (!shouldOfferPetHint({ now: Date.now(), lastInputAt: lastInputTimeRef.current, wrongTries: attempts, used: petHintUsedRef.current })) return;
+      const target = nextHintTarget({ word: mexicanWord, guess, fixedLetters, selectedIndex: selectedBoxIndex });
+      if (!target?.key) return;
+      petHintUsedRef.current = true;
+      setPetHintKey(target.key);
+      triggerMascota("hint", pickRandom(PET_HINT_PHRASES));
+      tick();
+      clearTimeout(petHintTimerRef.current);
+      petHintTimerRef.current = setTimeout(() => setPetHintKey(null), PET_HINT_GLOW_MS);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [petState?.hasPet, mexicanWord, isCorrect, isLoading, showLevelUp, openModal, attempts, guess, fixedLetters, selectedBoxIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Al acertar se apaga el brillo
+  useEffect(() => {
+    if (isCorrect) { clearTimeout(petHintTimerRef.current); setPetHintKey(null); }
+  }, [isCorrect]);
+
+  // El halo de la tecla sugerida late (quieto con movimiento reducido)
+  useEffect(() => {
+    if (!petHintKey || reduceMotionEnabled) { petHintPulse.setValue(1); return undefined; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(petHintPulse, { toValue: 0.25, duration: 520, useNativeDriver: true }),
+      Animated.timing(petHintPulse, { toValue: 1, duration: 520, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [petHintKey, reduceMotionEnabled, petHintPulse]);
+
+  useEffect(() => () => clearTimeout(petHintTimerRef.current), []);
+
+
   const resetGameState = () => {
     setGuess([]);
     setIsCorrect(false);
@@ -840,6 +916,9 @@ export default function GameplayScreen({ navigation, route }) {
     hasRecordedFailRef.current = false;
     usedPowerupRef.current = false;
     lastInputTimeRef.current = Date.now();
+    petHintUsedRef.current = false;
+    clearTimeout(petHintTimerRef.current);
+    setPetHintKey(null);
     setShowRewardedOffer(false);
     setOpenModal(null);
   };
@@ -1038,23 +1117,38 @@ export default function GameplayScreen({ navigation, route }) {
     ]).start();
   };
 
+  // Revela la palabra en cascada: cada ficha se voltea a verde, con un tic
+  // háptico y un "clic" que sube de tono (anticipación → premio). Devuelve la
+  // duración total en ms para que el sonido/vibración de acierto llegue al final.
   const celebrate = () => {
-    if (reduceMotionEnabled) return;
-    // Stagger(20ms) instead of parallel — distributes native animation starts over time,
-    // reducing the JS→native burst that causes jank on Android.
-    // Tiles all turn green simultaneously (isCorrect state); the scale wave is decoration.
-    const anims = Array.from(mexicanWord).reduce((acc, ch, i) => {
-      if (ch !== " ") {
-        acc.push(
+    clearCelebrateTimers();
+    const letters = [];
+    Array.from(mexicanWord).forEach((ch, i) => { if (ch !== " ") letters.push(i); });
+    if (reduceMotionEnabled || letters.length === 0) {
+      letters.forEach((i) => revealAnims[i].setValue(1));
+      return 0;
+    }
+    const step = Math.max(35, Math.min(70, Math.round(700 / letters.length)));
+    const flipMs = 240;
+    letters.forEach((i, k) => {
+      const delay = k * step;
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.parallel([
+          Animated.timing(revealAnims[i], { toValue: 1, duration: flipMs, easing: Easing.out(Easing.quad), useNativeDriver: true }),
           Animated.sequence([
-            Animated.timing(scaleAnims[i], { toValue: 1.15, duration: 80, useNativeDriver: true }),
+            Animated.delay(flipMs / 2),
+            Animated.timing(scaleAnims[i], { toValue: 1.15, duration: 70, useNativeDriver: true }),
             Animated.spring(scaleAnims[i], { toValue: 1.0, friction: 5, tension: 280, useNativeDriver: true }),
-          ])
-        );
-      }
-      return acc;
-    }, []);
-    Animated.stagger(20, anims).start();
+          ]),
+        ]),
+      ]).start();
+      celebrateTimersRef.current.push(setTimeout(() => {
+        tick();
+        playSound("click", Math.min(2, 1 + k * 0.07));
+      }, delay + flipMs / 2));
+    });
+    return (letters.length - 1) * step + flipMs;
   };
 
   // ─── Rewards ─────────────────────────────────────────────────────────────────
@@ -1076,7 +1170,10 @@ export default function GameplayScreen({ navigation, route }) {
       if (isCorrectFlexible) {
         setIsCorrect(true);
         setWrongLetters([]);
-        celebrate();
+        const cascadeMs = celebrate();
+        const afterCascade = (fn) => {
+          celebrateTimersRef.current.push(setTimeout(() => { if (mountedRef.current) fn(); }, cascadeMs));
+        };
         // Diferir TTS para no bloquear el JS thread durante la animación de tiles
         setTimeout(() => Speech.speak(mexicanWord, { language: "es-MX", rate: 0.85 }), 300);
 
@@ -1102,8 +1199,7 @@ export default function GameplayScreen({ navigation, route }) {
 
         // ── Map repaso mode: no combo, no rewards, simple feedback ──
         if (isMapReview) {
-          playSound("correct");
-          notifySuccess();
+          afterCascade(() => { playSound("correct"); notifySuccess(); });
           triggerMascota("celebrating", "¡Repasado!");
           setVictorySnap({
             word: originalWord || mexicanWord,
@@ -1117,15 +1213,14 @@ export default function GameplayScreen({ navigation, route }) {
           setTimeout(() => {
             setShowLevelUp(true);
             playSound("celebration");
-          }, 500);
+          }, Math.max(500, cascadeMs + 300));
           return;
         }
 
         // ── Challenge mode: submit result, no level advance ──
         if (isChallengeMode && challengeIdParam) {
-          playSound("correct");
-          // celebrate() already called above at line 1041 — don't double-call
-          notifySuccess();
+          // celebrate() already called above — don't double-call
+          afterCascade(() => { playSound("correct"); notifySuccess(); });
           triggerMascota("celebrating", "¡Reto completado!");
           // Mínimo 1 s: el servidor rechaza tiempos imposibles
           const elapsedMs = Math.max(1000, Date.now() - (challengeStartTime || Date.now()));
@@ -1156,7 +1251,7 @@ export default function GameplayScreen({ navigation, route }) {
           setTimeout(() => {
             setShowLevelUp(true);
             playSound("celebration");
-          }, 500);
+          }, Math.max(500, cascadeMs + 300));
           return;
         }
 
@@ -1168,12 +1263,12 @@ export default function GameplayScreen({ navigation, route }) {
           // Perfect answer — increase combo
           newCombo = comboCount + 1;
           incrementCombo(); // updates comboCount + maxCombo + shows banner for 1000ms
-          playSound(newCombo >= 3 ? "combo" : "correct");
+          afterCascade(() => playSound(newCombo >= 3 ? "combo" : "correct"));
           if (newCombo >= 3) {
-            comboBurst(newCombo);
+            afterCascade(() => comboBurst(newCombo));
             triggerMascota("combo", comboPhrase(newCombo));
           } else {
-            notifySuccess();
+            afterCascade(notifySuccess);
             const today = new Date().toISOString().slice(0, 10);
             const cheerBubble = mascotaCheerDateRef.current !== today
               ? (mascotaCheerDateRef.current = today,
@@ -1187,11 +1282,9 @@ export default function GameplayScreen({ navigation, route }) {
           // Had wrong attempts — combo grace: lose 1 instead of full reset
           newCombo = Math.max(0, comboCount - 1);
           if (comboCount > 0) {
-            playSound("combo_break");
-            notifyWarning();
+            afterCascade(() => { playSound("combo_break"); notifyWarning(); });
           } else {
-            playSound("correct");
-            notifySuccess();
+            afterCascade(() => { playSound("correct"); notifySuccess(); });
           }
           resetCombo(newCombo); // reduce combo by 1 (grace system)
           const today = new Date().toISOString().slice(0, 10);
@@ -1226,15 +1319,22 @@ export default function GameplayScreen({ navigation, route }) {
         const reward = usedPowerupRef.current
           ? { coins: baseReward.coins, diamonds: 0 }
           : baseReward;
-        const displayReward = (levelInfo?.completedAll && !isReviewMode)
-          ? { coins: 0, diamonds: 0 }
+        // 🌟 Moneda dorada (recompensa variable): x2 a las monedas de la palabra
+        // (no al bono de camino). ~10% con protección de mala racha.
+        const paysNothing = !!(levelInfo?.completedAll && !isReviewMode);
+        const golden = !paysNothing && reward.coins > 0 && rollGoldenCoin(wordsSinceGoldenRef.current);
+        wordsSinceGoldenRef.current = golden ? 0 : wordsSinceGoldenRef.current + 1;
+        const goldenExtra = golden ? reward.coins : 0;
+        const displayReward = paysNothing
+          ? { coins: 0, diamonds: 0, goldenExtra: 0 }
           : (!usedPowerupRef.current && didCompleteZone)
-            ? { ...reward, coins: reward.coins + 100 }
-            : reward;
+            ? { ...reward, coins: reward.coins + goldenExtra + 100, goldenExtra }
+            : { ...reward, coins: reward.coins + goldenExtra, goldenExtra };
 
         // Batch all victory state updates in a single setTimeout — one re-render
         // instead of 5 immediate + 1 delayed. Keeps JS thread free for animations.
-        const victoryDelay = attempts === 0 ? 1350 : 500;
+        const victoryDelay = Math.max(attempts === 0 ? 1350 : 500, cascadeMs + 350);
+        setXpBreakdown(null);
         setTimeout(() => {
           setVictorySnap({ word: snapWord, example: snapExample, region: snapRegion, level: snapLevel, pathId: snapPathId, placeId: snapPlaceId, isLastLevel: snapIsLastLevel });
           setLevelUpReward(displayReward);
@@ -1261,32 +1361,32 @@ export default function GameplayScreen({ navigation, route }) {
               completedLevelsRef.current += 1;
               const totalCoins = displayReward.coins; // includes zone bonus; 0 if powerup used
               if (totalCoins > 0 || displayReward.diamonds > 0) {
-                updateUserCurrency({ userId, coins: totalCoins, diamonds: displayReward.diamonds })
-                  .then(() => {
+                // El servidor paga contra el boleto que dejó completeLevel/resolveWord
+                claimLevelReward({ userId, coins: totalCoins, diamonds: displayReward.diamonds })
+                  .then((paid) => {
                     if (!mountedRef.current || victoryFlownRef.current) return;
                     const bar = topBarRef.current;
+                    const coinsPaid = paid?.coinsGranted ?? 0;
+                    const diamondsPaid = paid?.diamondsGranted ?? 0;
                     victoryHoldRef.current = {
-                      coins: totalCoins > 0 ? (bar?.holdCoins?.(totalCoins, { holdMs: 5000 }) ?? null) : null,
-                      diamonds: displayReward.diamonds > 0 ? (bar?.holdDiamonds?.(displayReward.diamonds, { holdMs: 5000 }) ?? null) : null,
+                      coins: coinsPaid > 0 ? (bar?.holdCoins?.(coinsPaid, { holdMs: 5000 }) ?? null) : null,
+                      diamonds: diamondsPaid > 0 ? (bar?.holdDiamonds?.(diamondsPaid, { holdMs: 5000 }) ?? null) : null,
                     };
                   })
                   .catch(() => { });
               }
               gainPetXp({ userId }).catch(() => { });
-              // XP cultural: base + bonos por combo, racha, sesión y velocidad
-              const isPerfectLevel = !isMapReview && attempts === 0 && !usedPowerupRef.current;
-              let xpAmount = 10; // base
-              if (isPerfectLevel) xpAmount += 15; // perfecto
-              if (newCombo >= 3) xpAmount += Math.min(newCombo * 2, 20); // combo: +6 a +20
-              const streak = user?.playStreak ?? 0;
-              if (streak >= 3) xpAmount += Math.min(streak, 10); // racha: +3 a +10
-              if (completedLevelsRef.current >= 10) xpAmount += 5; // sesión larga: +5
-              if (completedLevelsRef.current >= 20) xpAmount += 5; // sesión muy larga: +10 total
-              // Speed bonus
-              const timeSeconds = (Date.now() - wordStartTime) / 1000;
-              if (timeSeconds <= 10) xpAmount += 5;
-              else if (timeSeconds <= 20) xpAmount += 3;
-              else if (timeSeconds <= 30) xpAmount += 1;
+              // XP cultural: base + bonos por combo, racha, sesión y velocidad.
+              // El desglose se muestra en la victoria (antes estos bonos eran invisibles).
+              const xpBreakdownNow = computeXpBreakdown({
+                isPerfect: !isMapReview && attempts === 0 && !usedPowerupRef.current,
+                combo: newCombo,
+                streak: user?.playStreak ?? 0,
+                completedLevels: completedLevelsRef.current,
+                timeSeconds: (Date.now() - wordStartTime) / 1000,
+              });
+              const xpAmount = xpBreakdownNow.total;
+              if (mountedRef.current) setXpBreakdown(xpBreakdownNow);
               // Track old XP for rank-up detection
               const currentXp = user?.xp ?? 0;
               addXp({ userId, amount: xpAmount })
@@ -1372,8 +1472,14 @@ export default function GameplayScreen({ navigation, route }) {
         setAttempts(nextAttempts);
         shakeRow();
         playSound("wrong");
-        notifyError();
-        triggerMascota("sad", pickRandom(WRONG_PHRASES));
+        // Falló por una sola letra: vibración suave y ánimo en vez de castigo
+        if (isNearMiss(guessString, mexicanWord)) {
+          nearMiss();
+          triggerMascota("sad", "¡Uy, casi! Solo te faltó 1 letra 🔥");
+        } else {
+          notifyError();
+          triggerMascota("sad", pickRandom(WRONG_PHRASES));
+        }
         if (!isMapReview) bondError(); // -3 vínculo por error
         if (nextAttempts === 3 && adReady && !isMapReview) {
           setShowRewardedOffer(true);
@@ -1432,7 +1538,8 @@ export default function GameplayScreen({ navigation, route }) {
       setSelectedBoxIndex(firstEmpty);
       return; // consume this keystroke for the clear, next one starts fresh
     }
-    lastInputTimeRef.current = Date.now(); // reset guide gaze timer
+    lastInputTimeRef.current = Date.now(); // reinicia el temporizador de la pista de la mascota
+    if (key === petHintKey) { clearTimeout(petHintTimerRef.current); setPetHintKey(null); }
     // Dismiss combo banner on first keypress of the next word (non-blocking, keeps comboCount)
     dismissCombo();
     // Haptic + sound + animation handled by JuicyButton
@@ -1504,6 +1611,7 @@ export default function GameplayScreen({ navigation, route }) {
       // handles ALL tiles including the last one. Calling both causes animation conflict.
       const isComplete = newGuess.every((char, i) => i >= mexicanWord.length || char !== "");
       if (isComplete && newGuess.length >= mexicanWord.length) {
+        tension(); // golpe seco: "¿acerté?"
         validateWhenFull(newGuess.join(""));
       } else {
         bounceAtIndex(selectedBoxIndex);
@@ -1555,7 +1663,7 @@ export default function GameplayScreen({ navigation, route }) {
         await usePowerupMutation({ userId, powerupType: "synonyms" });
       } else {
         if (!checkCoins(SYNONYM_COST, "synonym")) return;
-        await updateUserCurrency({ userId, coins: -SYNONYM_COST, diamonds: 0 });
+        await spendCoins({ userId, item: "synonym" });
       }
       setShowSynonym(true);
     } catch (error) {
@@ -1583,7 +1691,7 @@ export default function GameplayScreen({ navigation, route }) {
     if (!hasHintInInventory && !checkCoins(HINT_COST, "reveal")) return;
     usedPowerupRef.current = true;
     if (hasHintInInventory) usePowerupMutation({ userId, powerupType: "hints" }).catch(() => { });
-    else updateUserCurrency({ userId, coins: -HINT_COST, diamonds: 0 }).catch(() => { });
+    else spendCoins({ userId, item: "hint" }).catch(() => { });
     const randomIndex = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
     const correctLetter = mexicanWord[randomIndex];
     // Mascota "elige" la letra — pequeño delay para dar sensación de búsqueda
@@ -1644,7 +1752,7 @@ export default function GameplayScreen({ navigation, route }) {
     setWrongLetters([]);
     setSelectedBoxIndex(nextTypableIndex(0, mexicanWord));
     usedPowerupRef.current = true;
-    updateUserCurrency({ userId, coins: -BORRAR_COST, diamonds: 0 }).catch(() => { });
+    spendCoins({ userId, item: "borrar" }).catch(() => { });
     triggerMascota("celebrating", "🔑 ¡Mira las letras correctas!");
     // Letras únicas de la palabra (mayúsculas, sin espacios)
     const wordLetters = [...new Set([...mexicanWord.toUpperCase()].filter(c => c !== " "))];
@@ -1668,7 +1776,7 @@ export default function GameplayScreen({ navigation, route }) {
       wrongClearTimerRef.current = null;
     }
     usedPowerupRef.current = true;
-    updateUserCurrency({ userId, coins: -VERIFICAR_COST, diamonds: 0 }).catch(() => { });
+    spendCoins({ userId, item: "verificar" }).catch(() => { });
     const allIndices = Array.from({ length: mexicanWord.length }, (_, i) => i).filter(i => mexicanWord[i] !== " ");
     setWrongLetters([]);
     // Mascota rellena la palabra letra a letra (typewriter rápido 80ms)
@@ -1754,16 +1862,20 @@ export default function GameplayScreen({ navigation, route }) {
     devButton: {
       top: layout.boardTopPadding + 8,
     },
+    // Vertical: la pista va arriba, pegada a la barra, y las casillas se centran en
+    // el espacio que queda hasta el teclado (antes todo el bloque flotaba a media
+    // pantalla y dejaba un hueco grande arriba). Horizontal: el bloque se centra.
     contentRegion: {
       flex: 1,
       minWidth: 0,
-      justifyContent: 'center',
+      justifyContent: layout.isLandscape ? 'center' : 'flex-start',
       gap: layout.sectionGap,
     },
     clueRegion: {
       gap: layout.sectionGap,
     },
     answerRegion: {
+      flexGrow: layout.isLandscape ? 0 : 1,
       flexShrink: 1,
       gap: layout.sectionGap,
       justifyContent: 'center',
@@ -1885,6 +1997,7 @@ export default function GameplayScreen({ navigation, route }) {
               reaction={
                 mascotaReaction === 'combo' ? 'combo'
                   : mascotaReaction === 'celebrating' ? 'correct'
+                    : mascotaReaction === 'hint' ? 'hint'
                     : mascotaReaction === 'sad' ? 'wrong'
                       : null
               }
@@ -1955,6 +2068,9 @@ export default function GameplayScreen({ navigation, route }) {
                 </View>
 
                 <View style={dynamicStyles.answerRegion}>
+          {/* En vertical, un tercio del espacio libre va arriba y dos tercios abajo:
+              las casillas quedan cerca de la pista y lejos de la mascota y el teclado. */}
+          {!layout.isLandscape && <View style={styles.answerSpacerAbove} />}
           <View style={styles.categoryRow}>
             {categoryEmojis.map((emoji, i) => (
               <Text key={i} style={styles.categoryEmoji}>{emoji}</Text>
@@ -2003,6 +2119,7 @@ export default function GameplayScreen({ navigation, route }) {
                         isSelected={isSelected}
                         isCorrect={isCorrect}
                         scaleAnim={scaleAnims[idx]}
+                        revealAnim={revealAnims[idx]}
                         boxSize={row.boxSize}
                         boxHeight={row.boxHeight}
                         fontSize={row.fontSize}
@@ -2016,6 +2133,7 @@ export default function GameplayScreen({ navigation, route }) {
               </View>
             ))}
           </Animated.View>
+          {!layout.isLandscape && <View style={styles.answerSpacerBelow} />}
                 </View>
               </View>
 
@@ -2108,13 +2226,14 @@ export default function GameplayScreen({ navigation, route }) {
                   {row.map((key) => {
                     const isSpecial = key === "DELETE_ONE" || key === "CLEAR_ALL";
                     const isDimmed = revealedKeys !== null && !isSpecial && !revealedKeys.has(key);
+                    const isPetHint = !isSpecial && key === petHintKey;
                     const keyStyle = isDimmed
                       ? dynKeyStylesDimmed[key] || dynKeyStylesDimmed._default
                       : dynKeyStylesNormal[key] || dynamicStyles.key;
                     return (
                       <JuicyButton
                         key={key}
-                        style={keyStyle}
+                        style={isPetHint ? [keyStyle, styles.petHintKey] : keyStyle}
                         disabled={isDimmed}
                         onPress={keyHandlers[key]}
                         onPressIn={key === "DELETE_ONE" ? startDeleteRepeat : undefined}
@@ -2124,7 +2243,7 @@ export default function GameplayScreen({ navigation, route }) {
                         accessibilityRole="button"
                         accessibilityLabel={isSpecial ? key === "CLEAR_ALL" ? "Borrar toda la palabra" : "Borrar una letra" : `Letra ${key}`}
                         accessibilityState={{ disabled: isDimmed }}
-                        accessibilityHint={key === "DELETE_ONE" ? "Mantén presionado para borrar varias letras" : undefined}
+                        accessibilityHint={key === "DELETE_ONE" ? "Mantén presionado para borrar varias letras" : isPetHint ? "Tu mascota sugiere esta letra" : undefined}
                         hitSlop={compactKeyHitSlop}
                         reduceMotion={reduceMotionEnabled}
                       >
@@ -2139,7 +2258,12 @@ export default function GameplayScreen({ navigation, route }) {
                             {kb.showSpecialLabels && <Text style={dynamicStyles.specialKeyLabel}>LIMPIAR</Text>}
                           </View>
                         ) : (
-                          <Text style={dynamicStyles.keyText}>{key}</Text>
+                          <>
+                            {isPetHint && (
+                              <Animated.View pointerEvents="none" style={[styles.petHintGlow, { opacity: petHintPulse }]} />
+                            )}
+                            <Text style={dynamicStyles.keyText}>{key}</Text>
+                          </>
                         )}
                       </JuicyButton>
                     );
@@ -2432,7 +2556,12 @@ export default function GameplayScreen({ navigation, route }) {
                     onPress={() => {
                       const shown = showAd(async () => {
                         if (userId) {
-                          await updateUserCurrency({ userId, coins: 40 });
+                          try {
+                            await claimAdReward({ userId });
+                          } catch (e) {
+                            Alert.alert("Anuncios", serverErrorText(e, "No se pudo dar el premio del anuncio."));
+                            return;
+                          }
                         }
                         setOpenModal(null);
                         setPendingAction(null);
@@ -2441,7 +2570,7 @@ export default function GameplayScreen({ navigation, route }) {
                       if (!shown) {
                         // Ad no disponible en Expo Go — dar monedas directamente en dev
                         if (__DEV__ && userId) {
-                          updateUserCurrency({ userId, coins: 40 }).then(async () => {
+                          claimAdReward({ userId }).then(async () => {
                             setOpenModal(null);
                             setPendingAction(null);
                             flyCoinsToPill({ trigger: triggerMainCoin, fromX: coinCenterX, fromY: coinCenterY, coins: 40 });
@@ -2511,9 +2640,11 @@ export default function GameplayScreen({ navigation, route }) {
           totalLevels={totalLevels}
           diamonds={levelUpReward?.diamonds || 0}
           coins={levelUpReward?.coins || 0}
+          goldenExtra={levelUpReward?.goldenExtra || 0}
           isChallengeMode={isChallengeMode}
           challengeResult={challengeResult}
           coinSourceRef={victoryRewardRef}
+          xpBreakdown={xpBreakdown}
           diamondSourceRef={victoryDiamondRef}
           flyOverlay={
             <>
@@ -2539,13 +2670,13 @@ export default function GameplayScreen({ navigation, route }) {
               Tu {petState?.petName || "mascota"} quiere ayudarte 🥺
             </Text>
             <Text style={styles.rewardedOfferSub}>
-              ¡Mira 30 segundos y gana 75 monedas!
+              ¡Mira 30 segundos y gana 40 monedas!
             </Text>
             <TouchableOpacity
               style={styles.rewardedOfferBtn}
               onPress={() => {
                 setShowRewardedOffer(false);
-                showAd(() => updateUserCurrency({ userId, coins: 40, diamonds: 0 }).catch(() => { }));
+                showAd(() => claimAdReward({ userId }).catch(() => { }));
               }}
             >
               <Text style={styles.rewardedOfferBtnText}>Ver video 📺 +40 🪙</Text>
@@ -2661,6 +2792,10 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 
+  // Reparto del espacio libre alrededor de las casillas (solo en vertical)
+  answerSpacerAbove: { flexGrow: 1, flexShrink: 1, minHeight: 0 },
+  answerSpacerBelow: { flexGrow: 2, flexShrink: 1, minHeight: 0 },
+
   // ── Category Emojis ─────────────────────────────────────────────────────────
   categoryRow: {
     flexDirection: "row",
@@ -2773,6 +2908,17 @@ const styles = StyleSheet.create({
   letterTextCorrect: {
     color: "white",
   },
+  // Cara verde encima de la ficha (compensa el borde de 2px del padre)
+  letterFace: {
+    position: "absolute",
+    top: -2,
+    left: -2,
+    margin: 0,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   letterTextFixed: {
     color: "#B7770D",
   },
@@ -2852,6 +2998,9 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2,
   },
+  // Tecla sugerida por la mascota: borde dorado y un halo que late
+  petHintKey: { borderWidth: 3, borderColor: "#FFD34D", shadowColor: "#FFB300", shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  petHintGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 8, backgroundColor: "rgba(255, 211, 77, 0.45)" },
   specialKeyContent: {
     alignItems: 'center',
     justifyContent: 'center',

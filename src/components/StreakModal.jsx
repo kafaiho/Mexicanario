@@ -336,7 +336,8 @@ export default function StreakModal({ visible, onClose, diamondSink = null }) {
                       streakStatus={flameStatusFor(streakData)}
                       reaction={mascotTapKey ? "tap" : null}
                       reactionKey={mascotTapKey}
-                      fallback={<StageCropped petType={petType} stage={stage} size={120} />}
+                      outfit={activeSkin}
+                      fallback={<StageCropped petType={petType} stage={stage} size={120} activeSkin={activeSkin} />}
                     />
                   </Animated.View>
                 </TouchableOpacity>

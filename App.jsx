@@ -6,7 +6,7 @@ import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Image, LogBox, Platform, Pressable, Text, View } from "react-native";
+import { AppState, LogBox, Platform, Pressable, Text, View } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -48,6 +48,7 @@ import AchievementsScreen from "./src/screens/AchievementsScreen";
 import ColeccionScreen from "./src/screens/ColeccionScreen";
 import CorreNahualScreen from "./src/screens/CorreNahualScreen";
 import DueloAlburesScreen from "./src/screens/DueloAlburesScreen";
+import EsquivaChanclaScreen from "./src/screens/EsquivaChanclaScreen";
 import GameplayScreen from "./src/screens/GameplayScreen";
 import JuegosScreen from "./src/screens/JuegosScreen";
 import LeaderboardScreen from "./src/screens/LeaderboardScreen";
@@ -62,7 +63,8 @@ import useEquipSkin from "./src/hooks/useEquipSkin";
 import usePetStore from "./src/store/usePetStore";
 import TaqueroRushScreen from "./src/screens/TaqueroRushScreen";
 import PvPScreen from "./src/screens/PvPScreen";
-import { tapLight } from "./src/services/haptics";
+import { HAPTICS_PREF_KEY, setHapticsEnabled, tapLight } from "./src/services/haptics";
+import TabBarIcon, { TAB_ICONS } from "./src/components/TabBarIcon";
 import { playBGM, playSound, preloadSounds, setMusicEnabled, setSoundEnabled, unloadSounds } from "./src/utils/soundManager";
 
 const Tab = createBottomTabNavigator();
@@ -93,6 +95,7 @@ const JuicyTabButton = React.memo(function JuicyTabButton({ children, onPress, a
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      accessibilityState={accessibilityState}
       style={[{ flex: 1, alignItems: "center", justifyContent: "center" }, style]}
       {...rest}
     >
@@ -135,13 +138,14 @@ function MainTabs({ navigation }) {
     <>
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          tabBarShowLabel: false,
+          tabBarShowLabel: false, // el nombre lo dibuja TabBarIcon
+          tabBarAccessibilityLabel: TAB_ICONS[route.name]?.label,
           tabBarButton: (props) => <JuicyTabButton {...props} />,
           tabBarStyle: {
-            height: Platform.OS === "ios" ? 88 : 64 + insets.bottom,
-            paddingBottom: Platform.OS === "ios" ? 24 : 8 + insets.bottom,
+            height: Platform.OS === "ios" ? 90 : 68 + insets.bottom,
+            paddingBottom: Platform.OS === "ios" ? 26 : 8 + insets.bottom,
             paddingTop: 8,
-            backgroundColor: "#E8C99A",
+            backgroundColor: "#F1DDBE",
             borderTopWidth: 0,
             elevation: 12,
             shadowColor: "#5C2800",
@@ -149,78 +153,14 @@ function MainTabs({ navigation }) {
             shadowOpacity: 0.14,
             shadowRadius: 8,
           },
-          tabBarIcon: ({ focused, size }) => {
-            const ICON_SIZE = size * 1.05;
-            const EMOJI_SIZE = size * 1.0;
-            const activeColor = "#D36B1E";
-            const inactiveColor = "#B38E6A";
-            const badgeSize = size * 0.55;
-
-            // Emoji-based tabs
-            const emojiTabs = {
-              Mascota: "🦎",
-              Logros: "🏅",
-              Juegos: "🎮",
-            };
-
-            // Image-based tabs
-            const imageTabs = {
-              Home: require("./assets/icons/home.png"),
-              "Colección": require("./assets/icons/dictionary.png"),
-              Liga: require("./assets/icons/trophy.png"),
-              Shop: require("./assets/icons/shop.png"),
-              Settings: require("./assets/icons/settings.png"),
-            };
-
-            const emoji = emojiTabs[route.name];
-            const iconSource = imageTabs[route.name];
-
-            return (
-              <View style={{ width: ICON_SIZE + 12, height: ICON_SIZE + 12, alignItems: "center", justifyContent: "center" }}>
-
-                {/* Indicador de estado activo — nodo Mexicanómetro */}
-                {focused && (
-                  <View style={{
-                    position: "absolute",
-                    top: 0,
-                    width: 28,
-                    height: 3,
-                    borderRadius: 2,
-                    backgroundColor: activeColor,
-                  }} />
-                )}
-
-                {emoji ? (
-                  <Text style={{ fontSize: EMOJI_SIZE, opacity: focused ? 1 : 0.65 }}>
-                    {emoji}
-                  </Text>
-                ) : (
-                  <Image
-                    source={iconSource}
-                    style={{
-                      width: ICON_SIZE,
-                      height: ICON_SIZE,
-                      tintColor: focused ? activeColor : inactiveColor,
-                      opacity: focused ? 1 : 0.7,
-                    }}
-                  />
-                )}
-
-                {/* Globo de la tienda: solo si hay monedas gratis o el regalo Plus del mes */}
-                {route.name === "Shop" && shopSignals?.hasSomethingToClaim && (
-                  <View style={{
-                    position: "absolute", top: -2, right: -2,
-                    backgroundColor: "#E74C3C", borderRadius: badgeSize / 2,
-                    width: badgeSize, height: badgeSize,
-                    justifyContent: "center", alignItems: "center",
-                    borderWidth: 1.5, borderColor: "#D4A574",
-                  }}>
-                    <Text style={{ color: "white", fontSize: badgeSize * 0.6, fontWeight: "bold" }}>!</Text>
-                  </View>
-                )}
-              </View>
-            );
-          },
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon
+              routeName={route.name}
+              focused={focused}
+              // Globo de la tienda: solo si hay monedas gratis o el regalo Plus del mes
+              badge={route.name === "Shop" && !!shopSignals?.hasSomethingToClaim}
+            />
+          ),
           headerShown: false,
           // Pestañas ocultas no re-renderizan (p. ej. updates de Convex en Liga)
           freezeOnBlur: true,
@@ -244,6 +184,11 @@ function MainTabs({ navigation }) {
         />
 
         {/* Minigames - Hidden from TabBar but inside the Tab Navigator for bottom bar visibility */}
+        <Tab.Screen
+          name="EsquivaChancla"
+          component={EsquivaChanclaScreen}
+          options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+        />
         <Tab.Screen
           name="DueloAlbures"
           component={DueloAlburesScreen}
@@ -456,7 +401,7 @@ function AppContent() {
     preloadSounds().then(() => {
       soundsLoaded.current = true;
       // Load saved sound preferences before deciding to play music
-      AsyncStorage.multiGet(["pref_music", "pref_sound"]).then((pairs) => {
+      AsyncStorage.multiGet(["pref_music", "pref_sound", HAPTICS_PREF_KEY]).then((pairs) => {
         let savedMusicOn = true;
         pairs.forEach(([key, val]) => {
           if (val === null) return;
@@ -466,6 +411,7 @@ function AppContent() {
             setMusicEnabled(bool); // sets the internal var in soundManager
           }
           if (key === "pref_sound") setSoundEnabled(bool);
+          if (key === HAPTICS_PREF_KEY) setHapticsEnabled(bool);
         });
 
         // Only explicitly call playBGM if user had music enabled

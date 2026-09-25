@@ -85,4 +85,42 @@ assert.equal(
   "the 360 safe-width boundary remains phone mode",
 );
 
-console.log("gameplayResponsiveLayout: five responsive fixtures fit safely");
+// ── El tablero empieza justo debajo de la barra superior ─────────────────────
+const { getTileMetrics } = require("./gameplayResponsiveLayout");
+const iphone = getGameplayResponsiveLayout({
+  width: 390, height: 844, insets: { top: 47, bottom: 34 },
+  topBarHeight: 88, appliedInsets: { top: 47, bottom: 34 },
+});
+assert.equal(iphone.boardTopPadding, 88 - 47 + iphone.sectionGap, "iOS: el notch no se suma dos veces arriba");
+assert.equal(iphone.boardBottomPadding, iphone.outerGap, "iOS: el indicador de inicio no se suma dos veces abajo");
+const android = getGameplayResponsiveLayout({ width: 412, height: 915, insets: {}, topBarHeight: 79 });
+assert.equal(android.boardTopPadding, 79 + android.sectionGap, "Android: el tablero arranca bajo la barra");
+assert.equal(
+  getGameplayResponsiveLayout({ width: 390, height: 844, insets: {} }).boardTopPadding,
+  96,
+  "sin alto de barra se conserva el relleno histórico",
+);
+const landscapeWithBar = getGameplayResponsiveLayout({ width: 1024, height: 768, insets: {}, topBarHeight: 80 });
+assert.ok(landscapeWithBar.boardTopPadding >= 24 && landscapeWithBar.boardTopPadding <= 56, "horizontal conserva su relleno");
+
+// ── Las casillas de cada fila siempre caben en el ancho real ─────────────────
+const tileFixtures = [[320, 568], [360, 740], [390, 844], [412, 915], [448, 998], [768, 1024], [1024, 768], [844, 390]];
+for (const [width, height] of tileFixtures) {
+  const layout = getGameplayResponsiveLayout({ width, height, insets: {} });
+  const base = getTileMetrics({ letters: 3, layout }).boxSize;
+  for (let letters = 1; letters <= 14; letters++) {
+    for (let segments = 1; segments <= 3 && segments <= letters; segments++) {
+      const tile = getTileMetrics({ letters, segments, layout });
+      const rowWidth = letters * (tile.boxSize + tile.marginH * 2) + (segments - 1) * (tile.boxSize / 2);
+      assert.ok(rowWidth <= layout.controlsWidth, `${width}x${height}: ${letters} letras en ${segments} palabras caben`);
+      assert.ok(tile.boxSize <= base, `${width}x${height}: nunca crece más que el tamaño base`);
+      assert.ok(tile.boxHeight > tile.boxSize && tile.fontSize >= 11, `${width}x${height}: proporciones legibles`);
+    }
+  }
+}
+const roomy = getGameplayResponsiveLayout({ width: 412, height: 915, insets: {} });
+const small = getGameplayResponsiveLayout({ width: 320, height: 568, insets: {} });
+assert.ok(getTileMetrics({ letters: 5, layout: roomy }).boxSize > getTileMetrics({ letters: 5, layout: small }).boxSize, "los teléfonos amplios usan casillas más grandes");
+assert.equal(getTileMetrics({ letters: 5, layout: small }).boxSize, 38, "las palabras cortas conservan su tamaño normal");
+
+console.log("gameplayResponsiveLayout: five responsive fixtures fit safely; board and tiles follow the real screen");

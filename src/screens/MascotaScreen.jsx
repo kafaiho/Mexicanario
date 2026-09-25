@@ -57,6 +57,13 @@ const TAP_PHRASES = [
   "¡Eso! ✨", "¡No pares! 🔥", "¡Qué chido!",
 ];
 
+// Frases según cómo la acaricias en 3D (Pet3DView → onInteract)
+const CARESS_PHRASES = {
+  head: ["¡Ay, qué lindo! 🥰", "¡Mi cabecita! 💛", "Mmm, así mero 😌", "¡Otra palmadita!"],
+  rub: ["Mmm, qué rico 😌", "¡Ahí, ahí! 💛", "Me voy a quedar dormidito…", "¡Qué apapacho! 🤗"],
+  tickle: ["¡Jajaja, cosquillas! 😆", "¡Ya, ya, me rindo! 🤣", "¡Jiji, no se vale! 😂", "¡Para, para! 😹"],
+};
+
 // ─── Nahual variants (Mexicanario Plus exclusive) ─────────────────────────────
 const NAHUAL_VARIANTS = [
   {
@@ -503,7 +510,7 @@ export default function MascotaScreen() {
     }
   };
 
-  const handleTapMascot = useCallback(() => {
+  const handleTapMascot = useCallback((kind) => {
     const now = Date.now();
     if (now - lastTapRef.current > 2000) tapCountRef.current = 0;
     lastTapRef.current = now;
@@ -515,10 +522,13 @@ export default function MascotaScreen() {
 
     clearTimeout(bubbleTimer.current);
     // La mitad de las veces habla de cómo se siente (si no está simplemente contenta)
+    // Frotar, palmadita o cosquillas tienen su propia respuesta
     const moodList = MOOD_PHRASES[mood] ?? [];
-    const phrase = moodList.length && Math.random() < 0.5
-      ? pickRandom(moodList)
-      : TAP_PHRASES[Math.floor(Math.random() * TAP_PHRASES.length)];
+    const phrase = CARESS_PHRASES[kind]
+      ? pickRandom(CARESS_PHRASES[kind])
+      : moodList.length && Math.random() < 0.5
+        ? pickRandom(moodList)
+        : TAP_PHRASES[Math.floor(Math.random() * TAP_PHRASES.length)];
     setTapBubble(phrase);
     bubbleTimer.current = setTimeout(() => setTapBubble(""), 2000);
   }, [caricia, mood]);
@@ -648,8 +658,8 @@ export default function MascotaScreen() {
           }
           return (
             <View style={styles.shopSection}>
-              <Text style={styles.shopTitle}>🎭 Skins</Text>
-              <Text style={styles.shopSub}>Toca una skin para equiparla a tu mascota.</Text>
+              <Text style={styles.shopTitle}>🎭 Trajes</Text>
+              <Text style={styles.shopSub}>Toca un traje para ponérselo a tu mascota. Gírala con el dedo para verlo en 3D.</Text>
               <View style={[styles.itemRow, { flexWrap: 'wrap' }]}>
                 {/* Opción "sin skin" */}
                 <TouchableOpacity
@@ -658,7 +668,7 @@ export default function MascotaScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={styles.skinSelectEmoji}>✖️</Text>
-                  <Text style={styles.skinSelectLabel}>Sin skin</Text>
+                  <Text style={styles.skinSelectLabel}>Sin traje</Text>
                   {!activeSkin && <View style={styles.skinEquippedBadge}><Text style={styles.skinEquippedText}>Equipada</Text></View>}
                 </TouchableOpacity>
                 {ownedSkins.map((skinId) => {

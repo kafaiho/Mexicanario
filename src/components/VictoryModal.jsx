@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -12,9 +12,17 @@ import {
 import * as Speech from "expo-speech";
 import { useReducedMotion } from "react-native-reanimated";
 import useCountUp from "../hooks/useCountUp";
+import { notifySuccess, tapHeavy, tick } from "../services/haptics";
+import { playSound } from "../utils/soundManager";
+import ConfettiBurst from "./ConfettiBurst";
 
 const CONFETTI_COUNT = 10;
 const REWARD_DELAY = 450; // ms tras abrir: entran los pills de recompensa
+const RING_DELAY = 350;   // ms tras abrir: el anillo de progreso late y el número sube
+const XP_DELAY = 1400;    // ms tras abrir: se arma el desglose de XP (después del vuelo de monedas)
+const GOLD_REVEAL = REWARD_DELAY + 150 + 600 + 250; // ms: termina de contar la base → cae el "x2"
+const GOLD_EXTRA_MS = 700; // la moneda dorada retrasa lo que viene después
+const XP_STEP = 140;      // ms entre cada bono de XP
 const CONFETTI_COLORS = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#FF922B", "#CC5DE8", "#F06595", "#74C0FC"];
 
 /**
@@ -43,6 +51,8 @@ const CONFETTI_COLORS = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#FF922B", 
  *   onCoinArrived     () => void
  *   coinSourceRef     ref — se asigna al pill de monedas (origen del vuelo al TopBar)
  *   diamondSourceRef  ref — se asigna al pill de diamantes
+ *   xpBreakdown       { total, parts: [{ key, label, amount }] } | null — puede llegar tarde
+ *   goldenExtra       number — monedas extra de la 🌟 moneda dorada (incluidas en `coins`)
  *   isLastLevel       boolean
  */
 export default function VictoryModal({
@@ -71,11 +81,31 @@ export default function VictoryModal({
   challengeResult = null,
   coinSourceRef = null,
   diamondSourceRef = null,
+  xpBreakdown = null,
+  goldenExtra = 0,
 }) {
   const reduceMotion = useReducedMotion();
   // Recompensas: entran una por una y el número cuenta desde 0
   const pillAnims = useMemo(() => [0, 1, 2].map(() => new Animated.Value(0)), []);
-  const coinsShown = useCountUp(coins, { active: visible, delay: REWARD_DELAY + 150, duration: 600, reduceMotion });
+  // 🌟 Moneda dorada: primero cuenta la base, luego cae el sello "x2" y sigue hasta el doble
+  const isGolden = goldenExtra > 0;
+  const [goldRevealed, setGoldRevealed] = useState(false);
+  const goldStamp = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!visible || !isGolden) { setGoldRevealed(false); goldStamp.setValue(0); return undefined; }
+    const t = setTimeout(() => {
+      setGoldRevealed(true);
+      tapHeavy();
+      setTimeout(notifySuccess, 140);
+      playSound("milestone");
+      if (reduceMotion) { goldStamp.setValue(1); return; }
+      Animated.spring(goldStamp, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }).start();
+    }, reduceMotion ? 0 : GOLD_REVEAL);
+    return () => clearTimeout(t);
+  }, [visible, isGolden, reduceMotion]);
+  const baseCoinsShown = useCountUp(coins - goldenExtra, { active: visible, delay: REWARD_DELAY + 150, duration: 600, reduceMotion });
+  const extraCoinsShown = useCountUp(goldenExtra, { active: visible && goldRevealed, delay: 120, duration: 500, reduceMotion });
+  const coinsShown = baseCoinsShown + extraCoinsShown;
   const diamondsShown = useCountUp(diamonds, { active: visible, delay: REWARD_DELAY + 300, duration: 600, reduceMotion });
 
   useEffect(() => {
@@ -91,6 +121,67 @@ export default function VictoryModal({
     anim.start();
     return () => anim.stop();
   }, [visible, reduceMotion]);
+
+  // ── Anillo de progreso: late y el contador sube (n-1 → n) con un tic.
+  //    Completar un camino = golpe + éxito + confeti extra.
+  const ringPop = useRef(new Animated.Value(1)).current;
+  const [ringStepped, setRingStepped] = useState(false);
+  const [zoneBurst, setZoneBurst] = useState(0);
+  useEffect(() => {
+    if (!visible) { setRingStepped(false); return undefined; }
+    const t = setTimeout(() => {
+      setRingStepped(true);
+      if (zoneCompleted) {
+        tapHeavy();
+        setTimeout(notifySuccess, 140);
+        setZoneBurst((k) => k + 1);
+      } else {
+        tick();
+      }
+      if (!reduceMotion) {
+        ringPop.setValue(1);
+        Animated.sequence([
+          Animated.timing(ringPop, { toValue: 1.18, duration: 110, useNativeDriver: true }),
+          Animated.spring(ringPop, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }),
+        ]).start();
+      }
+    }, RING_DELAY);
+    return () => clearTimeout(t);
+  }, [visible, reduceMotion]);
+  const ringLevel = ringStepped || !levelCurrent ? levelCurrent : Math.max(0, levelCurrent - 1);
+
+  // ── XP: cada bono entra con un tic y el total cuenta hacia arriba ──
+  const xpParts = xpBreakdown?.parts ?? [];
+  const xpAnims = useMemo(() => Array.from({ length: 6 }, () => new Animated.Value(0)), []);
+  const [xpStarted, setXpStarted] = useState(false);
+  const openedAtRef = useRef(0);
+  useEffect(() => {
+    if (visible) openedAtRef.current = Date.now();
+    else setXpStarted(false);
+  }, [visible]);
+  useEffect(() => {
+    if (!visible || !xpBreakdown) return undefined;
+    xpAnims.forEach((a) => a.setValue(0));
+    const timers = [];
+    const xpDelay = XP_DELAY + (isGolden ? GOLD_EXTRA_MS : 0);
+    const wait = Math.max(150, xpDelay - (Date.now() - openedAtRef.current));
+    timers.push(setTimeout(() => {
+      setXpStarted(true);
+      if (reduceMotion) { xpAnims.forEach((a) => a.setValue(1)); return; }
+      xpParts.slice(0, xpAnims.length).forEach((_, i) => {
+        timers.push(setTimeout(() => {
+          Animated.spring(xpAnims[i], { toValue: 1, friction: 5, tension: 160, useNativeDriver: true }).start();
+          tick();
+        }, i * XP_STEP));
+      });
+    }, wait));
+    return () => timers.forEach(clearTimeout);
+  }, [visible, xpBreakdown, reduceMotion]);
+  const xpShown = useCountUp(xpBreakdown?.total ?? 0, {
+    active: visible && xpStarted,
+    duration: XP_STEP * Math.max(1, xpParts.length) + 250,
+    reduceMotion,
+  });
 
   const pillStyle = (a) => ({
     opacity: a,
@@ -222,6 +313,7 @@ export default function VictoryModal({
 
           {zoneCompleted && (
             <View style={[s.zoneBanner, { borderColor: zoneCompleted.color }]}>
+              <ConfettiBurst burstKey={zoneBurst} count={28} distance={170} style={s.zoneBurstOrigin} />
               <Text style={s.zoneTitle}>
                 🎊 ¡Completaste el camino {zoneCompleted.name}! {zoneCompleted.emoji}
               </Text>
@@ -301,7 +393,7 @@ export default function VictoryModal({
           )}
 
           {/* Progress ring */}
-          <View style={s.ringWrap}>
+          <Animated.View style={[s.ringWrap, { transform: [{ scale: ringPop }] }]}>
             <View style={s.ringOuter}>
               <View style={[s.half, s.halfLeft]}>
                 <View
@@ -327,8 +419,8 @@ export default function VictoryModal({
                 <Text style={s.ringGift}>🎁</Text>
               </View>
             </View>
-            <Text style={s.ringLabel}>{levelCurrent}/{totalLevels}</Text>
-          </View>
+            <Text style={s.ringLabel}>{ringLevel}/{totalLevels}</Text>
+          </Animated.View>
 
           {/* Rewards row */}
           <View style={s.rewardRow}>
@@ -338,10 +430,24 @@ export default function VictoryModal({
             </Animated.View>
             {coins > 0 && (
               <View ref={coinSourceRef} collapsable={false}>
-                <Animated.View style={[s.rewardPill, s.rewardPillGold, pillStyle(pillAnims[1])]}>
+                <Animated.View style={[s.rewardPill, s.rewardPillGold, goldRevealed && s.rewardPillGolden, pillStyle(pillAnims[1])]}>
                   <Image source={require("../../assets/icons/coin.png")} style={s.rewardIcon} />
                   <Text style={[s.rewardText, s.rewardTextGold]}>+{coinsShown}</Text>
                 </Animated.View>
+                {isGolden && (
+                  <Animated.Text
+                    pointerEvents="none"
+                    style={[s.goldStamp, {
+                      opacity: goldStamp,
+                      transform: [
+                        { scale: goldStamp.interpolate({ inputRange: [0, 1], outputRange: [2.6, 1] }) },
+                        { rotate: "-14deg" },
+                      ],
+                    }]}
+                  >
+                    x2
+                  </Animated.Text>
+                )}
               </View>
             )}
             <View ref={diamondSourceRef} collapsable={false}>
@@ -351,6 +457,31 @@ export default function VictoryModal({
               </Animated.View>
             </View>
           </View>
+
+          {isGolden && (
+            <Animated.Text
+              style={[s.goldLabel, {
+                opacity: goldStamp,
+                transform: [{ translateY: goldStamp.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+              }]}
+            >
+              🌟 ¡Moneda dorada! Monedas x2
+            </Animated.Text>
+          )}
+
+          {/* Desglose de XP — los bonos que antes no se veían */}
+          {xpBreakdown && (
+            <View style={s.xpBlock}>
+              <Text style={s.xpTotal}>+{xpStarted ? xpShown : 0} XP</Text>
+              <View style={s.xpParts}>
+                {xpParts.slice(0, xpAnims.length).map((p, i) => (
+                  <Animated.View key={p.key} style={[s.xpPart, pillStyle(xpAnims[i])]}>
+                    <Text style={s.xpPartText}>{p.label} +{p.amount}</Text>
+                  </Animated.View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Bottom actions */}
@@ -506,6 +637,7 @@ const s = StyleSheet.create({
 
   // Progress ring
   ringWrap: { alignItems: "center", gap: 6 },
+  zoneBurstOrigin: { top: 0, left: "50%" },
   ringOuter: {
     width: 72,
     height: 72,
@@ -560,6 +692,35 @@ const s = StyleSheet.create({
     borderColor: "rgba(248,190,23,0.6)",
   },
   rewardTextGold: { color: "#FFD54F", fontWeight: "900" },
+  rewardPillGolden: {
+    backgroundColor: "rgba(255,215,0,0.32)",
+    borderColor: "#FFD700",
+    borderWidth: 2,
+  },
+  goldStamp: {
+    position: "absolute",
+    top: -14,
+    right: -12,
+    color: "#FFD700",
+    fontSize: 20,
+    fontWeight: "900",
+    textShadowColor: "rgba(184,98,14,0.9)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  goldLabel: { color: "#FFD700", fontSize: 14, fontWeight: "900", textAlign: "center" },
+  xpBlock: { alignItems: "center", gap: 6, marginTop: 4 },
+  xpTotal: { color: "#B388FF", fontSize: 18, fontWeight: "900", letterSpacing: 0.5 },
+  xpParts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 },
+  xpPart: {
+    backgroundColor: "rgba(179,136,255,0.16)",
+    borderColor: "rgba(179,136,255,0.5)",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  xpPartText: { color: "#E1D5FF", fontSize: 11, fontWeight: "800" },
   rewardIcon: { width: 18, height: 18, resizeMode: "contain" },
 
   // Buttons

@@ -1,4 +1,9 @@
 import React, { useEffect, useRef } from "react";
+import { useReducedMotion } from "react-native-reanimated";
+import useCountUp from "../hooks/useCountUp";
+import { notifySuccess, tapHeavy, tapLight, tapMedium } from "../services/haptics";
+import { playSound } from "../utils/soundManager";
+import ConfettiBurst from "./ConfettiBurst";
 import {
   Animated,
   Dimensions,
@@ -55,6 +60,28 @@ export default function PvPResultModal({
     }
   }, [visible]);
 
+  // Ganar = golpe + éxito + confeti; empate = confirmación; perder = toque suave (sin castigo)
+  const reduceMotion = useReducedMotion();
+  const didWin = !!matchState && matchState.winnerId === userId && matchState.status !== "ghost";
+  const didDraw = !!matchState?.isDraw;
+  useEffect(() => {
+    if (!visible || !matchState) return undefined;
+    const t = setTimeout(() => {
+      if (didWin) {
+        tapHeavy();
+        setTimeout(notifySuccess, 140);
+        playSound("celebration");
+      } else if (didDraw) {
+        tapMedium();
+      } else {
+        tapLight();
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [visible, !!matchState]);
+  const eloDelta = matchState?.eloChange ?? 0;
+  const eloCounted = useCountUp(eloDelta, { active: visible && !!matchState, delay: 450, duration: 800, reduceMotion });
+
   if (!matchState || !visible) return null;
 
   const isP1 = matchState.player1?.id === userId;
@@ -88,6 +115,7 @@ export default function PvPResultModal({
           styles.card,
           { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
         ]}>
+          <ConfettiBurst burstKey={visible && didWin ? 1 : 0} count={24} distance={150} style={styles.burstOrigin} />
           {/* Result header */}
           <Text style={styles.resultEmoji}>
             {isGhost ? "👻" : abandoned ? "🚪" : isDraw ? "🤝" : iWon ? "🏆" : "😢"}
@@ -124,12 +152,15 @@ export default function PvPResultModal({
           {/* ELO change */}
           <View style={styles.eloRow}>
             <Text style={styles.eloEmoji}>{myTier.emoji}</Text>
-            <Text style={styles.eloRating}>{myEloAfter}</Text>
+            <Text style={styles.eloRating}>
+              {/* El rating rueda desde el valor anterior hasta el nuevo */}
+              {isDraw ? myEloAfter : iWon ? myEloAfter - eloChange + eloCounted : myEloAfter + eloChange - eloCounted}
+            </Text>
             <Text style={[
               styles.eloChange,
               { color: iWon ? GREEN : isDraw ? GOLD : RED },
             ]}>
-              {iWon ? `+${eloChange}` : isDraw ? "±0" : `-${eloChange}`}
+              {iWon ? `+${eloCounted}` : isDraw ? "±0" : `-${eloCounted}`}
             </Text>
           </View>
           <Text style={[styles.eloTierName, { color: myTier.color }]}>
@@ -177,6 +208,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   resultEmoji: { fontSize: 56, marginBottom: 8 },
+  burstOrigin: { top: 60, left: "50%" },
   resultTitle: {
     fontFamily: FONTS.display,
     fontSize: 28,

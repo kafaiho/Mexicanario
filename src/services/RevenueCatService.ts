@@ -331,11 +331,45 @@ export async function restorePurchases(): Promise<{
 }
 
 // ─── Consumable Purchases ─────────────────────────────────────────────────────
-/**
- * Purchase a consumable product (coins / diamonds packs).
- * Finds the product in the current offering by product ID, then calls
- * purchasePackage and invokes onSuccess with the receipt token.
- */
+// Los paquetes de varos, diamantes y el Pase Mexica son productos únicos
+// ("consumibles") de Google Play / App Store. Se buscan primero en la Offering
+// de RevenueCat y, si no están ahí, directo en la tienda con getProducts; así una
+// Offering incompleta en el dashboard no deja la tienda sin precios ni compras.
+
+type StoreItem = { product: any; pkg: any | null };
+
+async function findStoreItems(itemIds: string[]): Promise<Record<string, StoreItem>> {
+  const found: Record<string, StoreItem> = {};
+  const wanted = itemIds.filter((id) => RC_PRODUCT_IDS[id]);
+  try {
+    const offerings = await Purchases.getOfferings();
+    const packages = [
+      ...(offerings?.current?.availablePackages ?? []),
+      ...Object.values(offerings?.all ?? {}).flatMap((o: any) => o?.availablePackages ?? []),
+    ];
+    for (const itemId of wanted) {
+      const pkg = packages.find((p: any) => p?.product?.identifier === RC_PRODUCT_IDS[itemId]);
+      if (pkg) found[itemId] = { product: pkg.product, pkg };
+    }
+  } catch (e) {
+    if (__DEV__) console.warn("[RevenueCat] getOfferings error:", e);
+  }
+  const missing = wanted.filter((id) => !found[id]);
+  if (missing.length && Purchases.getProducts) {
+    try {
+      const category = Purchases.PRODUCT_CATEGORY?.NON_SUBSCRIPTION ?? "NON_SUBSCRIPTION";
+      const products = await Purchases.getProducts(missing.map((id) => RC_PRODUCT_IDS[id]), category);
+      for (const itemId of missing) {
+        const product = (products ?? []).find((p: any) => p?.identifier === RC_PRODUCT_IDS[itemId]);
+        if (product) found[itemId] = { product, pkg: null };
+      }
+    } catch (e) {
+      if (__DEV__) console.warn("[RevenueCat] getProducts error:", e);
+    }
+  }
+  return found;
+}
+
 /**
  * Precios reales de la tienda (Google Play / App Store) ya formateados en la
  * moneda del jugador, por itemId. Devuelve {} si RevenueCat no está disponible.
@@ -343,12 +377,11 @@ export async function restorePurchases(): Promise<{
 export async function getStorePrices(itemIds: string[]): Promise<Record<string, string>> {
   if (!isConfigured()) return {};
   try {
-    const offerings = await Purchases.getOfferings();
-    const packages = offerings.current?.availablePackages ?? [];
+    await configured;
+    const items = await findStoreItems(itemIds);
     const prices: Record<string, string> = {};
-    for (const itemId of itemIds) {
-      const pkg = packages.find((p: any) => p.product.identifier === RC_PRODUCT_IDS[itemId]);
-      if (pkg?.product?.priceString) prices[itemId] = pkg.product.priceString;
+    for (const [itemId, { product }] of Object.entries(items)) {
+      if (product?.priceString) prices[itemId] = product.priceString;
     }
     return prices;
   } catch {
@@ -356,6 +389,31 @@ export async function getStorePrices(itemIds: string[]): Promise<Record<string, 
   }
 }
 
+/** Mensaje claro para cada error de la tienda (null = el jugador canceló). */
+export function purchaseErrorMessage(e: any): string | null {
+  if (e?.userCancelled || e?.code === "1") return null;
+  switch (String(e?.code ?? "")) {
+    case "20": // PAYMENT_PENDING_ERROR (p. ej. pago en efectivo en OXXO)
+      return "Tu pago quedó pendiente. En cuanto Google Play lo confirme, tus varos llegan solitos a tu cuenta.";
+    case "3":
+      return "Este dispositivo no permite compras. Revisa los controles parentales de Google Play.";
+    case "5":
+      return "Este paquete no está disponible en tu tienda por ahora.";
+    case "6":
+      return "Tienes una compra anterior sin terminar; la estamos acreditando. Intenta de nuevo en un momento.";
+    case "10":
+      return "Sin conexión con la tienda. Revisa tu internet e intenta de nuevo.";
+    case "2":
+      return "La tienda tuvo un problema. Intenta de nuevo en unos minutos; no se te cobró.";
+    default:
+      return e?.message ?? "Error al procesar el pago";
+  }
+}
+
+/**
+ * Compra un consumible (varos, diamantes, Pase Mexica) y llama a onSuccess con
+ * el id de la transacción; el backend la verifica con RevenueCat antes de acreditarla.
+ */
 export async function purchaseProduct(
   itemId: string,
   onSuccess: (transactionId: string) => Promise<void>,
@@ -366,25 +424,27 @@ export async function purchaseProduct(
     return;
   }
 
-  const rcId = RC_PRODUCT_IDS[itemId];
-  if (!rcId) {
+  if (!RC_PRODUCT_IDS[itemId]) {
     onError("Producto no encontrado");
     return;
   }
 
+  let result: any;
   try {
-    const offerings = await Purchases.getOfferings();
-    const packages = offerings.current?.availablePackages ?? [];
-    const pkg = packages.find((p: any) => p.product.identifier === rcId);
-    if (!pkg) {
+    await configured;
+    const item = (await findStoreItems([itemId]))[itemId];
+    if (!item) {
       onError("Producto no disponible en la tienda");
       return;
     }
-
-    const { transaction } = await Purchases.purchasePackage(pkg);
-    // The backend verifies this store transaction with RevenueCat before crediting it.
-    await onSuccess(transaction?.transactionIdentifier ?? "");
+    result = item.pkg
+      ? await Purchases.purchasePackage(item.pkg)
+      : await Purchases.purchaseStoreProduct(item.product);
   } catch (e: any) {
-    if (!e.userCancelled) onError(e.message ?? "Error al procesar el pago");
+    const msg = purchaseErrorMessage(e);
+    if (msg) onError(msg);
+    return;
   }
+  // Ya se cobró: si el servidor falla aquí, claimPendingPurchases lo acredita después.
+  await onSuccess(result?.transaction?.transactionIdentifier ?? "");
 }

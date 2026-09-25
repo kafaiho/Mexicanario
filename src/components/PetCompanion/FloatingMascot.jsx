@@ -142,7 +142,14 @@ function FloatingMascot({
           showFlame={showFlame}
           streakDays={streakDays}
           streakStatus={streakStatus}
+          outfit={activeSkin}
           fallback={staticPet}
+          // Caricias en 3D (cabeza, cuerpo, frotar, cosquillas): la vista ya animó
+          // la reacción; aquí van las partículas y el vínculo de la pantalla
+          onInteract={(kind) => {
+            setBurstKey((k) => k + 1);
+            onTap?.(kind);
+          }}
         />
         <PetMoodIndicator mood={mood} size={size} reduceMotion={!active} />
       </Pressable>

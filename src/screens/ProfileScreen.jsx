@@ -7,9 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
+import TouchableOpacity from "../components/HapticTouchable"; // vibración ligera al tocar
 import { api } from "../../convex/_generated/api";
 import AvatarModal from "../components/AvatarModal";
 import CountryModal from "../components/CountryModal";

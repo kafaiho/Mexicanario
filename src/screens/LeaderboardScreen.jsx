@@ -9,9 +9,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
+import TouchableOpacity from "../components/HapticTouchable"; // vibración ligera al tocar
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import DailyMiniWidget from "../components/DailyMiniWidget";
@@ -19,6 +19,7 @@ import { DIVISIONS } from "../components/LeagueBadge";
 import LeagueCountdown from "../components/LeagueCountdown";
 import LeaguePlayerRow from "../components/LeaguePlayerRow";
 import LeagueResultModal from "../components/LeagueResultModal";
+import MinigameScoreboard from "../components/MinigameScoreboard";
 import TopBar from "../components/TopBar";
 import AdBanner from "../components/AdBanner";
 import { getEloTier } from "../components/EloBadge";
@@ -162,6 +163,12 @@ export default function LeaderboardScreen() {
               <Text style={styles.hdrStatVal}>#{leagueStatus.rank ?? "-"}</Text>
               <Text style={styles.hdrDot}> · </Text>
               <Text style={styles.hdrCxpVal}>{leagueStatus.cxpTotal ?? 0} cXP</Text>
+              {(leagueStatus.leagueWeeklyStreak ?? 0) >= 2 && (
+                <>
+                  <Text style={styles.hdrDot}> · </Text>
+                  <Text style={styles.hdrCxpVal}>🔥 {leagueStatus.leagueWeeklyStreak} semanas</Text>
+                </>
+              )}
             </View>
           ) : (
             <Text style={styles.hdrJoinHint}>¡Únete para competir!</Text>
@@ -326,7 +333,18 @@ function LigaTab({ leagueStatus, userId, joinLeague, friendIds, onAddFriend, bus
   const promoBoundary = leagueStatus.promoBoundaryCxp ?? 0;
   const safeBoundary  = leagueStatus.safeBoundaryCxp ?? 0;
 
-  if (myZone === "demotion") {
+  // El servidor calcula lo que falta con la misma regla (y desempate) del cierre
+  // semanal; los cálculos locales quedan como respaldo para versiones anteriores.
+  const serverToSafety = leagueStatus.cxpToSafety;
+  const serverToPromotion = leagueStatus.cxpToPromotion;
+
+  if (myZone === "demotion" && typeof serverToSafety === "number" && serverToSafety > 0) {
+    nudge = { type: "danger", text: `⚠️ Zona de descenso — faltan ${serverToSafety} cXP para estar seguro` };
+  } else if (myZone !== "promotion" && myZone !== "demotion" && typeof serverToPromotion === "number") {
+    if (serverToPromotion > 0 && serverToPromotion <= 80) {
+      nudge = { type: "info", text: `🔺 ¡Solo ${serverToPromotion} cXP para zona de ascenso!` };
+    }
+  } else if (myZone === "demotion") {
     // Loss aversion: highlight threat of demotion
     const gapToSafe = safeBoundary - myCxp;
     if (gapToSafe > 0) {
@@ -893,18 +911,20 @@ function PvPTab({ userId }) {
 }
 
 // ── Mini-Games Leaderboard Tab ──────────────────────────────────────────────
+// Cada juego usa su ranking de Convex (minigameRanking.ts) y el marcador compartido
+// de los minijuegos: Hoy / Semana / Total, tu récord y tu lugar.
 const GAME_TYPES = [
-  { key: "nahual",   label: "Nahual",   table: "nahualScores" },
-  { key: "taquero",  label: "Taquero",  table: "taqueroScores" },
-  { key: "albures",  label: "Albures",  table: "alburesScores" },
-  { key: "loteria",  label: "Lotería",  table: "loteriaScores" },
+  { key: "nahual",  label: "Nahual",  game: api.nahual,  formatScore: (n) => `🌮 ${n}` },
+  { key: "taquero", label: "Taquero", game: api.taquero, formatScore: (n) => `🌮 ${n}` },
+  { key: "albures", label: "Albures", game: api.albures, formatScore: (n) => `${n} ✅` },
+  { key: "loteria", label: "Lotería", game: api.loteria, formatScore: (n) => `🃏 ${n}` },
+  { key: "chancla", label: "Chancla", game: api.chancla, formatScore: (n) => `⭐ ${n.toLocaleString("es-MX")}` },
 ];
 
 function JuegosTab({ userId }) {
   const [selectedGame, setSelectedGame] = useState("nahual");
+  const selected = GAME_TYPES.find((g) => g.key === selectedGame) ?? GAME_TYPES[0];
 
-  // We use the existing rankings query based on game type
-  // For now, show a placeholder that connects to existing score tables
   return (
     <View>
       {/* Game sub-tabs */}
@@ -922,34 +942,21 @@ function JuegosTab({ userId }) {
         ))}
       </View>
 
-      <MiniGameLeaderboard gameType={selectedGame} userId={userId} />
+      {/* key: al cambiar de juego el marcador vuelve a la pestaña «Hoy» */}
+      <MiniGameLeaderboard key={selected.key} gameType={selected} userId={userId} />
     </View>
   );
 }
 
 function MiniGameLeaderboard({ gameType, userId }) {
-  // Map game type to the correct score table query
-  const scoreQueries = {
-    nahual: api.users.getGlobalLeaderboard,
-    taquero: api.users.getGlobalLeaderboard,
-    albures: api.users.getGlobalLeaderboard,
-    loteria: api.users.getGlobalLeaderboard,
-  };
-
-  // For now, show a coming soon state for mini-game specific leaderboards
-  // This can be expanded with dedicated queries per game type
+  const myBest = useQuery(gameType.game.getMyBest, userId ? { userId } : "skip");
   return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyEmoji}>
-        {gameType === "nahual" ? "🐉" : gameType === "taquero" ? "🌮" : gameType === "albures" ? "🎭" : "🎴"}
-      </Text>
-      <Text style={styles.emptyTitle}>
-        Top {GAME_TYPES.find((g) => g.key === gameType)?.label ?? "Juego"}
-      </Text>
-      <Text style={styles.emptyText}>
-        Los rankings de mini-juegos se actualizan cada 30 minutos.
-      </Text>
-    </View>
+    <MinigameScoreboard
+      game={gameType.game}
+      userId={userId}
+      myBest={myBest}
+      formatScore={gameType.formatScore}
+    />
   );
 }
 

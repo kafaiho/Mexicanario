@@ -144,6 +144,20 @@ export default defineSchema({
     // ── Skins & contenido desbloqueado ───────────────────────────────────────
     purchasedSkins: v.optional(v.array(v.string())),         // IDs de skins compradas con monedas
     activePetSkin: v.optional(v.string()),                   // traje puesto (uno de purchasedSkins)
+    // ── Premios que decide el servidor (convex/rewards.ts) ───────────────────
+    rewardTicket: v.optional(v.object({                      // premio pendiente del último nivel/repaso superado
+      kind: v.union(v.literal("level"), v.literal("review")),
+      level: v.number(),
+      diamonds: v.number(),
+      issuedAt: v.number(),
+    })),
+    adRewardDay: v.optional(v.string()),                     // "YYYY-MM-DD" (CST) de adRewardCount
+    adRewardCount: v.optional(v.number()),                   // anuncios con premio cobrados ese día
+    lastAdRewardAt: v.optional(v.number()),
+    wheelFreeSpunAt: v.optional(v.number()),                 // último giro gratis de la ruleta
+    wheelAdDay: v.optional(v.string()),
+    wheelAdCount: v.optional(v.number()),                    // giros con anuncio ese día
+    claimedAchievements: v.optional(v.array(v.string())),    // logros ya cobrados
     adultContentUnlocked: v.optional(v.array(v.string())),   // IDs de paquetes de contenido adulto desbloqueados
     // ── Código de creador/referido ───────────────────────────────────────────
     creatorCode: v.optional(v.string()),         // código aplicado (e.g., "ALANA")
@@ -376,6 +390,20 @@ export default defineSchema({
 
   // ── Lotería Exprés scores ─────────────────────────────────────────────────────
   loteriaScores: defineTable({
+    userId: v.id("users"),
+    allTimeBest: v.number(),
+    dailyBest: v.number(),
+    dailyDate: v.string(),
+    weeklyBest: v.number(),
+    weeklyStr: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_alltime", ["allTimeBest"])
+    .index("by_daily", ["dailyDate", "dailyBest"])
+    .index("by_weekly", ["weeklyStr", "weeklyBest"]),
+
+  // ── Esquiva la Chancla scores ─────────────────────────────────────────────────
+  chanclaScores: defineTable({
     userId: v.id("users"),
     allTimeBest: v.number(),
     dailyBest: v.number(),

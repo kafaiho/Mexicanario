@@ -165,7 +165,7 @@ export const claimFreeCoins = userMutation({
     const now = Date.now();
     const lastFree = (user as any).freeCoinsClaimedAt ?? 0;
     if (now - lastFree < FREE_COINS_COOLDOWN_MS) {
-      throw new Error("Cooldown activo — vuelve en 24h");
+      throw new ConvexError("Tus varos gratis ya los reclamaste; vuelve en 24 horas.");
     }
 
     await ctx.db.patch(args.userId, {
@@ -271,6 +271,22 @@ async function fetchRevenueCatSubscriber(userId: string): Promise<any> {
   return body.subscriber ?? {};
 }
 
+// Compras de este día en adelante que el cliente no alcanzó a acreditar (se cerró
+// la app, se cayó la red, pago pendiente en OXXO) se recuperan desde RevenueCat.
+// Las anteriores se acreditaban con otro identificador: no se tocan para no pagarlas dos veces.
+export const RECOVER_PURCHASES_SINCE = Date.UTC(2026, 8, 25);
+
+const purchaseToken = (tx: any) => String(tx.store_transaction_id ?? tx.id);
+
+/** Transacciones recuperables de un producto, la más reciente primero. */
+export function recoverableTransactions(subscriber: any, rcProductId: string): any[] {
+  return (subscriber?.non_subscriptions?.[rcProductId] ?? [])
+    .filter((tx: any) => (Date.parse(tx?.purchase_date ?? "") || 0) >= RECOVER_PURCHASES_SINCE && (tx?.store_transaction_id || tx?.id))
+    .sort((a: any, b: any) => Date.parse(b.purchase_date) - Date.parse(a.purchase_date));
+}
+
+type GrantResult = { success: boolean; coins: number; diamonds: number; coinsGranted: number; diamondsGranted: number; alreadyApplied?: boolean };
+
 /** Credits a store purchase after verifying its transaction with RevenueCat. */
 export const applyIAPPurchase = userAction({
   args: {
@@ -278,7 +294,7 @@ export const applyIAPPurchase = userAction({
     itemId: v.string(),
     transactionId: v.string(), // store transaction id from Purchases.purchasePackage
   },
-  handler: async (ctx, args): Promise<{ success: boolean; coins: number; diamonds: number; coinsGranted: number; diamondsGranted: number; alreadyApplied?: boolean }> => {
+  handler: async (ctx, args): Promise<GrantResult> => {
     const item = IAP_ITEMS[args.itemId];
     if (!item) throw new ConvexError("IAP item no encontrado: " + args.itemId);
     const subscriber = await fetchRevenueCatSubscriber(args.userId);
@@ -286,104 +302,164 @@ export const applyIAPPurchase = userAction({
       ...(subscriber.non_subscriptions?.[item.rcProductId] ?? []),
       ...(subscriber.subscriptions?.[item.rcProductId] ? [subscriber.subscriptions[item.rcProductId]] : []),
     ];
-    const tx = transactions.find((t) => t?.store_transaction_id === args.transactionId || t?.id === args.transactionId);
-    if (!tx) throw new ConvexError("PURCHASE_NOT_VERIFIED");
+    const exact = args.transactionId
+      ? transactions.find((t) => t?.store_transaction_id === args.transactionId || t?.id === args.transactionId)
+      : undefined;
+    // Si el id del teléfono no coincide (Google Play entrega distintos ids según la
+    // versión del SDK), vale cualquier compra verificada de ese producto aún sin acreditar.
+    const tokens = [...new Set([
+      ...(exact ? [purchaseToken(exact)] : []),
+      ...recoverableTransactions(subscriber, item.rcProductId).map(purchaseToken),
+    ])];
+    if (!tokens.length) throw new ConvexError("PURCHASE_NOT_VERIFIED");
     return await ctx.runMutation(internal.shop.grantIAPPurchase, {
       userId: args.userId,
       itemId: args.itemId,
-      receiptToken: String(tx.store_transaction_id ?? tx.id),
+      receiptTokens: tokens,
     });
   },
 });
 
+/**
+ * Acredita las compras verificadas en RevenueCat que todavía no llegaron a la
+ * cuenta. La tienda lo llama al abrirse y después de una compra con error.
+ */
+export const claimPendingIAPPurchases = userAction({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args): Promise<{ granted: string[]; coinsGranted: number; diamondsGranted: number }> => {
+    let subscriber: any;
+    try {
+      subscriber = await fetchRevenueCatSubscriber(args.userId);
+    } catch {
+      return { granted: [], coinsGranted: 0, diamondsGranted: 0 }; // sin pagos configurados o RevenueCat caído
+    }
+    const pending: { itemId: string; receiptToken: string }[] = [];
+    for (const [itemId, item] of Object.entries(IAP_ITEMS)) {
+      for (const tx of recoverableTransactions(subscriber, item.rcProductId)) {
+        pending.push({ itemId, receiptToken: purchaseToken(tx) });
+      }
+    }
+    if (!pending.length) return { granted: [], coinsGranted: 0, diamondsGranted: 0 };
+    return await ctx.runMutation(internal.shop.grantPendingIAPPurchases, { userId: args.userId, pending });
+  },
+});
+
+async function grantOne(ctx: any, userId: any, itemId: string, receiptToken: string): Promise<GrantResult | null> {
+  const user = await ctx.db.get(userId);
+  if (!user) throw new Error("User not found");
+  const item = IAP_ITEMS[itemId];
+  if (!item) throw new Error("IAP item no encontrado: " + itemId);
+
+  // A verified transaction is credited once, no matter how often it is sent.
+  const already = await ctx.db
+    .query("purchases")
+    .withIndex("by_receiptToken", (q: any) => q.eq("receiptToken", receiptToken))
+    .first();
+  if (already) return null;
+
+  const now = Date.now();
+  const patch: Record<string, number> = {};
+
+  // ── Bonus por código de creador (5% extra en varos) ──────────────────────
+  let bonusCoins = 0;
+  const creatorCode = (user as any).creatorCode as string | undefined;
+  if (creatorCode && item.coins) {
+    const codeDoc = await ctx.db
+      .query("referralCodes")
+      .withIndex("by_code", (q: any) => q.eq("code", creatorCode))
+      .first();
+    if (codeDoc && codeDoc.active) {
+      bonusCoins = Math.floor(item.coins * (codeDoc.discountPct / 100));
+      // Registrar compra atribuida al creador
+      await ctx.db.patch(codeDoc._id, {
+        totalPurchases: codeDoc.totalPurchases + 1,
+      });
+    }
+  }
+
+  if (item.coins) patch.coins = user.coins + item.coins + bonusCoins;
+  if (item.diamonds) patch.diamonds = user.diamonds + item.diamonds;
+
+  await ctx.db.patch(userId, patch as any);
+
+  await ctx.db.insert("purchases", {
+    userId,
+    itemId,
+    type: "iap",
+    amount: (item.coins ?? 0) + bonusCoins + (item.diamonds ?? 0),
+    purchasedAt: now,
+    receiptToken,
+  });
+
+  // If this is the season pass, create/update the pass record
+  if (itemId === "pass_mexica") {
+    // Expires at midnight of the first day of next month
+    const d = new Date(now);
+    const expiresAt = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+    const passId = `pass_mexica_${d.getFullYear()}_${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+    // Remove any existing non-expired passes
+    const existing = await ctx.db
+      .query("seasonPass")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .collect();
+    for (const p of existing) {
+      await ctx.db.delete(p._id);
+    }
+
+    await ctx.db.insert("seasonPass", {
+      userId,
+      passId,
+      activatedAt: now,
+      expiresAt,
+      rewardsClaimed: true, // coins+diamonds already added above
+    });
+  }
+
+  return {
+    success: true,
+    coins: patch.coins ?? user.coins,
+    diamonds: patch.diamonds ?? user.diamonds,
+    coinsGranted: item.coins ? item.coins + bonusCoins : 0,
+    diamondsGranted: item.diamonds ?? 0,
+  };
+}
+
+/** Acredita la primera transacción de la lista que aún no se haya acreditado. */
 export const grantIAPPurchase = internalMutation({
   args: {
     userId: v.id("users"),
     itemId: v.string(),
-    receiptToken: v.string(),
+    receiptTokens: v.array(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<GrantResult> => {
+    for (const token of args.receiptTokens) {
+      const r = await grantOne(ctx, args.userId, args.itemId, token);
+      if (r) return r;
+    }
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
+    return { success: true, alreadyApplied: true, coins: user.coins, diamonds: user.diamonds, coinsGranted: 0, diamondsGranted: 0 };
+  },
+});
 
-    const item = IAP_ITEMS[args.itemId];
-    if (!item) throw new Error("IAP item no encontrado: " + args.itemId);
-
-    // A verified transaction is credited once, no matter how often it is sent.
-    const already = await ctx.db
-      .query("purchases")
-      .withIndex("by_receiptToken", (q) => q.eq("receiptToken", args.receiptToken))
-      .first();
-    if (already) {
-      return { success: true, alreadyApplied: true, coins: user.coins, diamonds: user.diamonds, coinsGranted: 0, diamondsGranted: 0 };
+export const grantPendingIAPPurchases = internalMutation({
+  args: {
+    userId: v.id("users"),
+    pending: v.array(v.object({ itemId: v.string(), receiptToken: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    const granted: string[] = [];
+    let coinsGranted = 0;
+    let diamondsGranted = 0;
+    for (const { itemId, receiptToken } of args.pending) {
+      const r = await grantOne(ctx, args.userId, itemId, receiptToken);
+      if (!r) continue;
+      granted.push(itemId);
+      coinsGranted += r.coinsGranted;
+      diamondsGranted += r.diamondsGranted;
     }
-
-    const now = Date.now();
-    const patch: Record<string, number> = {};
-
-    // ── Bonus por código de creador (5% extra en varos) ──────────────────────
-    let bonusCoins = 0;
-    const creatorCode = (user as any).creatorCode as string | undefined;
-    if (creatorCode && item.coins) {
-      const codeDoc = await ctx.db
-        .query("referralCodes")
-        .withIndex("by_code", (q: any) => q.eq("code", creatorCode))
-        .first();
-      if (codeDoc && codeDoc.active) {
-        bonusCoins = Math.floor(item.coins * (codeDoc.discountPct / 100));
-        // Registrar compra atribuida al creador
-        await ctx.db.patch(codeDoc._id, {
-          totalPurchases: codeDoc.totalPurchases + 1,
-        });
-      }
-    }
-
-    if (item.coins) patch.coins = user.coins + item.coins + bonusCoins;
-    if (item.diamonds) patch.diamonds = user.diamonds + item.diamonds;
-
-    await ctx.db.patch(args.userId, patch as any);
-
-    await ctx.db.insert("purchases", {
-      userId: args.userId,
-      itemId: args.itemId,
-      type: "iap",
-      amount: (item.coins ?? 0) + bonusCoins + (item.diamonds ?? 0),
-      purchasedAt: now,
-      receiptToken: args.receiptToken,
-    });
-
-    // If this is the season pass, create/update the pass record
-    if (args.itemId === "pass_mexica") {
-      // Expires at midnight of the first day of next month
-      const d = new Date(now);
-      const expiresAt = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
-      const passId = `pass_mexica_${d.getFullYear()}_${String(d.getMonth() + 1).padStart(2, "0")}`;
-
-      // Remove any existing non-expired passes
-      const existing = await ctx.db
-        .query("seasonPass")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .collect();
-      for (const p of existing) {
-        await ctx.db.delete(p._id);
-      }
-
-      await ctx.db.insert("seasonPass", {
-        userId: args.userId,
-        passId,
-        activatedAt: now,
-        expiresAt,
-        rewardsClaimed: true, // coins+diamonds already added above
-      });
-    }
-
-    return {
-      success: true,
-      coins: patch.coins ?? user.coins,
-      diamonds: patch.diamonds ?? user.diamonds,
-      coinsGranted: item.coins ? item.coins + bonusCoins : 0,
-      diamondsGranted: item.diamonds ?? 0,
-    };
+    return { granted, coinsGranted, diamondsGranted };
   },
 });
 

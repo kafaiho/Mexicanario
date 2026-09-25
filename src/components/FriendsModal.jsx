@@ -11,9 +11,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import TouchableOpacity from "./HapticTouchable"; // vibración ligera al tocar
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "../context/AuthContext";
 import FriendCompareCard from "./FriendCompareCard";
